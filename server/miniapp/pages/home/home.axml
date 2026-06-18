@@ -1,0 +1,11 @@
+<view class="page">
+  <view a:if="{{loading}}" class="center">
+    <text class="tip">正在登录并加载恒慧管…</text>
+  </view>
+  <view a:elif="{{error}}" class="center">
+    <text class="err">{{error}}</text>
+    <button type="primary" onTap="onRetry">重试</button>
+    <text class="hint">请确认后端已启动，且 config.js 中 API 地址正确</text>
+  </view>
+  <web-view a:else src="{{h5Url}}"></web-view>
+</view>

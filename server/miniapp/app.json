@@ -1,0 +1,11 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/unauthorized/unauthorized"
+  ],
+  "window": {
+    "defaultTitle": "恒慧管",
+    "titleBarColor": "#4338CA",
+    "pullRefresh": false
+  }
+}

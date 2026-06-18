@@ -1,0 +1,9 @@
+node_modules/
+data/*.db
+data/*.json
+data/*.json.tmp
+data/backups/
+data/uploads/
+.env
+*.log
+miniapp/config.js

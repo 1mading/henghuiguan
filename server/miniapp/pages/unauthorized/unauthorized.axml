@@ -1,0 +1,5 @@
+<view class="page">
+  <view class="icon">🔒</view>
+  <text class="title">暂无使用权限</text>
+  <text class="msg">{{msg}}</text>
+</view>

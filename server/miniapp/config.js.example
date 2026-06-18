@@ -1,0 +1,12 @@
+/**
+ * 复制本文件为 config.js 并填写（config.js 已加入 .gitignore）
+ */
+module.exports = {
+  API_BASE_URL: 'https://你的域名/api',
+  H5_BASE_URL: 'https://你的域名',
+  DINGTALK_CORP_ID: '',
+  SKIP_LOGIN_CHECK: false,
+  DEV_MOCK_USER_ID: 'U018',
+  DEV_MOCK_DINGTALK_USER_ID: 'dt_u018_wangyuanbin',
+  DEBUG_HTTP: false,
+};

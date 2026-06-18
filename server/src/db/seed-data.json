@@ -1,0 +1,371 @@
+{
+  "users": [
+    {
+      "id": "U001",
+      "name": "魏海波",
+      "dept": "信息中心",
+      "role": "gm",
+      "position": "信息中心总经理",
+      "leaderId": "",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "084918593839104986"
+    },
+    {
+      "id": "U002",
+      "name": "李浩",
+      "dept": "信息中心",
+      "role": "manager",
+      "position": "部门管理执行人员",
+      "leaderId": "U001",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "763409435"
+    },
+    {
+      "id": "U003",
+      "name": "陈华",
+      "dept": "信息中心",
+      "role": "manager",
+      "position": "部门管理执行人员",
+      "leaderId": "U001",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "215997906"
+    },
+    {
+      "id": "U004",
+      "name": "明秀丽",
+      "dept": "信息中心",
+      "role": "manager",
+      "position": "部门管理执行人员",
+      "leaderId": "U001",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "385496097"
+    },
+    {
+      "id": "U005",
+      "name": "刘易",
+      "dept": "规划建设部",
+      "role": "manager",
+      "position": "部门经理",
+      "leaderId": "U001",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "3534416912677627"
+    },
+    {
+      "id": "U006",
+      "name": "黄艳",
+      "dept": "实施交付部",
+      "role": "manager",
+      "position": "部门经理",
+      "leaderId": "U001",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "21043656561293359"
+    },
+    {
+      "id": "U007",
+      "name": "吴志伟",
+      "dept": "研发集成部",
+      "role": "manager",
+      "position": "部门经理",
+      "leaderId": "U001",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "093551554921496156"
+    },
+    {
+      "id": "U008",
+      "name": "张俊官",
+      "dept": "网络运维部",
+      "role": "manager",
+      "position": "部门经理",
+      "leaderId": "U001",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "081324474424058926"
+    },
+    {
+      "id": "U009",
+      "name": "钱广",
+      "dept": "AI创新部",
+      "role": "manager",
+      "position": "部门经理",
+      "leaderId": "U001",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "0164024035201204206"
+    },
+    {
+      "id": "U010",
+      "name": "陈璇",
+      "dept": "项目管控部",
+      "role": "manager",
+      "position": "部门经理",
+      "leaderId": "U001",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "24623338601222463"
+    },
+    {
+      "id": "U011",
+      "name": "吕腾飞",
+      "dept": "规划建设部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U005",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "010338552721752309"
+    },
+    {
+      "id": "U012",
+      "name": "薛钧益",
+      "dept": "规划建设部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U005",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "979368583"
+    },
+    {
+      "id": "U013",
+      "name": "谢易琳",
+      "dept": "规划建设部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U005",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "581487488"
+    },
+    {
+      "id": "U014",
+      "name": "江寒赟",
+      "dept": "规划建设部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U005",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "777234315"
+    },
+    {
+      "id": "U015",
+      "name": "殷酉荣",
+      "dept": "实施交付部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U006",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "3042226827686193"
+    },
+    {
+      "id": "U016",
+      "name": "章志红",
+      "dept": "实施交付部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U006",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "112655254031022219"
+    },
+    {
+      "id": "U017",
+      "name": "陈吴越",
+      "dept": "实施交付部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U006",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "086520641637676062"
+    },
+    {
+      "id": "U018",
+      "name": "王元斌",
+      "dept": "实施交付部",
+      "role": "admin",
+      "position": "执行人员/管理员",
+      "leaderId": "U006",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "669701617",
+      "userId": "U018"
+    },
+    {
+      "id": "U019",
+      "name": "朱贵乔",
+      "dept": "实施交付部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U006",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "136334158"
+    },
+    {
+      "id": "U020",
+      "name": "叶栋",
+      "dept": "实施交付部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U006",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "361543173"
+    },
+    {
+      "id": "U021",
+      "name": "刘硕",
+      "dept": "实施交付部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U006",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "868189020"
+    },
+    {
+      "id": "U022",
+      "name": "魏宗斌",
+      "dept": "实施交付部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U006",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "262793598"
+    },
+    {
+      "id": "U023",
+      "name": "苗治国",
+      "dept": "实施交付部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U006",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "958962376"
+    },
+    {
+      "id": "U024",
+      "name": "张书铖",
+      "dept": "研发集成部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U007",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "216703090124062544"
+    },
+    {
+      "id": "U025",
+      "name": "钱月",
+      "dept": "研发集成部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U007",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "135329713"
+    },
+    {
+      "id": "U026",
+      "name": "马明晶",
+      "dept": "研发集成部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U007",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "085040485938826388"
+    },
+    {
+      "id": "U027",
+      "name": "张政",
+      "dept": "研发集成部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U007",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "686062681"
+    },
+    {
+      "id": "U028",
+      "name": "任双",
+      "dept": "研发集成部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U007",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "538187641"
+    },
+    {
+      "id": "U029",
+      "name": "季橙成",
+      "dept": "网络运维部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U008",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "180206100123351674"
+    },
+    {
+      "id": "U030",
+      "name": "李天硕",
+      "dept": "网络运维部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U008",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "980952307"
+    },
+    {
+      "id": "U031",
+      "name": "朱磊",
+      "dept": "网络运维部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U008",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "49642046"
+    },
+    {
+      "id": "U032",
+      "name": "孙坤毫",
+      "dept": "网络运维部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U008",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "733909115"
+    },
+    {
+      "id": "U033",
+      "name": "周骋骋",
+      "dept": "网络运维部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U008",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "454227911"
+    },
+    {
+      "id": "U034",
+      "name": "李明海",
+      "dept": "网络运维部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U008",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "82849151"
+    },
+    {
+      "id": "U035",
+      "name": "刘俊豪",
+      "dept": "AI创新部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U009",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "484147694"
+    },
+    {
+      "id": "U036",
+      "name": "陈运来",
+      "dept": "AI创新部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U009",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "204240620"
+    }
+  ],
+  "projects": [],
+  "tasks": [],
+  "taskDependencies": [],
+  "changeLogs": [],
+  "transferLogs": [],
+  "pushLogs": []
+}
