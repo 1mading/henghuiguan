@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const config = require('./config');
 const apiRoutes = require('./routes');
 const { seedIfEmpty } = require('./db/seed');
@@ -41,7 +42,17 @@ app.use('/api', apiRoutes);
 
 if (config.staticDir) {
   const htmlPath = path.join(config.staticDir, '恒慧管.html');
-  const serveApp = (_req, res) => res.sendFile(htmlPath);
+  const serveApp = (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    try {
+      const stat = fs.statSync(htmlPath);
+      res.setHeader('ETag', `"hhg-${stat.mtimeMs}"`);
+      res.setHeader('Last-Modified', stat.mtime.toUTCString());
+    } catch (_) { /* ignore */ }
+    res.sendFile(htmlPath);
+  };
 
   // 无 .html 后缀的访问入口（钉钉首页推荐 /app）
   app.get('/', serveApp);

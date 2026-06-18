@@ -1,0 +1,4 @@
+#!/bin/sh
+# Git 提交前自动检查敏感信息
+node scripts/check-secrets.js --staged
+exit $?

@@ -59,7 +59,7 @@ function buildH5Url(session) {
   var base = String(config.H5_BASE_URL || '').replace(/\/+$/, '');
   var userid = session.dingTalkUserId || (session.user && session.user.dingTalkUserId) || '';
   if (!userid) throw new Error('缺少 dingTalkUserId');
-  return base + '/app?userid=' + encodeURIComponent(userid);
+  return base + '/app?userid=' + encodeURIComponent(userid) + '&v=1.1.0';
 }
 
 module.exports = { ensureLogin, buildH5Url };

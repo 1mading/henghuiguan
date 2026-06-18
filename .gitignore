@@ -1,13 +1,35 @@
-# 敏感配置（勿提交）
+# ========== 敏感配置（禁止提交）==========
 server/.env
+.env
+.env.*
+!.env.example
+!**/.env.example
 server/miniapp/config.js
 
-# 运行时数据
+# ========== 运行时 / 业务数据（禁止提交）==========
 server/data/
+server/src/db/seed-data.json
+server/src/db/seed-data.local.json
+
+# ========== 依赖与构建 ==========
 server/node_modules/
+node_modules/
 
-# 本地工具缓存
+# ========== 上传文件与备份 ==========
+server/data/uploads/
+**/data/backups/
+*.json.tmp
+
+# ========== 本地工具与 IDE ==========
 .claude/
-
-# 日志
+.cursor/plans/
 *.log
+.DS_Store
+Thumbs.db
+
+# ========== 密钥轮换备份（若生成）==========
+server/.env.bak
+server/.env.backup
+*.pem
+*.key
+*.p12

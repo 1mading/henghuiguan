@@ -6327,15 +6327,28 @@
     }
 
     // ========== 任务依赖 UI ==========
+    function renderDependencySchemeHint(compact) {
+      return `
+        <div style="padding:${compact ? '10px 12px' : '12px 14px'};background:linear-gradient(135deg,#EFF6FF,#F5F3FF);border:1px solid #BFDBFE;border-radius:8px;margin-bottom:${compact ? '10px' : '12px'};font-size:12px;color:#374151;line-height:1.65;">
+          <div style="font-weight:600;color:#1D4ED8;margin-bottom:6px;"><i class="fas fa-info-circle" style="margin-right:4px;"></i>跨项目依赖说明</div>
+          <div>· <strong>前置依赖</strong>：需等待其他任务（可跨项目）完成后，本任务才可继续</div>
+          <div>· <strong>阻塞期间</strong>：任务显示「阻塞中」，<strong>不计入</strong>工时饱和度，不算逾期/临期</div>
+          <div>· <strong>标识</strong>：🔗 前置 · ⏸ 阻塞中 · ▶ 可继续 · 🚧 阻塞后续 · 🌐 跨项目</div>
+          <div style="margin-top:6px;color:#2563EB;">配置入口：打开<strong>任务详情</strong> →「依赖关系」→「添加前置依赖」</div>
+        </div>
+      `;
+    }
+
     function renderProjectDependencyPanel(projectId) {
       const rows = getProjectDependencyRows(projectId);
-      if (!rows.length) return '';
       return `
-        <div class="panel" style="margin-bottom:20px;">
-          <div class="panel-header">
+        <div class="panel" style="margin-bottom:20px;border-color:#BFDBFE;">
+          <div class="panel-header" style="background:#F8FAFC;">
             <span class="panel-title"><i class="fas fa-link" style="color:#2563EB;"></i>跨项目 / 任务依赖</span>
           </div>
-          <div class="panel-body" style="padding:0;">
+          <div class="panel-body" style="padding:${rows.length ? '12px 12px 0' : '16px'};">
+            ${renderDependencySchemeHint(false)}
+            ${rows.length ? `
             <div class="log-table-wrap">
               <table class="log-table">
                 <thead>
@@ -6354,7 +6367,7 @@
                     const isOutgoing = pred.projectId === projectId;
                     const local = isOutgoing ? pred : succ;
                     const remote = isOutgoing ? succ : pred;
-                    const blocked = isOutgoing ? isTaskBlocked(succ) : isTaskBlocked(succ);
+                    const blocked = isTaskBlocked(succ);
                     return `
                       <tr style="cursor:pointer;" onclick="viewTask('${local.id}')">
                         <td>${escapeHtml(local.title)}${renderDependencyBadges(local, true)}</td>
@@ -6370,24 +6383,30 @@
                 </tbody>
               </table>
             </div>
+            ` : `
+              <div style="text-align:center;padding:24px 12px;color:#9CA3AF;font-size:13px;">
+                <i class="fas fa-link" style="font-size:24px;margin-bottom:8px;opacity:0.4;display:block;"></i>
+                暂无跨项目依赖。请在<strong>任务详情</strong>中点击「添加前置依赖」配置（可关联其他项目的任务）。
+              </div>
+            `}
           </div>
         </div>
       `;
     }
 
     function renderTaskDependencyPanel(task) {
-      if (!task) return '';
+      if (!task || !canViewTask(task)) return '';
       const preds = getTaskPredecessorDeps(task.id);
       const succs = getTaskSuccessorDeps(task.id);
       const canManage = canManageTaskDependency(task);
-      if (!preds.length && !succs.length && !canManage) return '';
       return `
-        <div style="margin-bottom:16px;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;">
-          <div style="padding:10px 12px;background:#F8FAFC;border-bottom:1px solid #E5E7EB;display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-size:13px;font-weight:600;color:#1F2937;"><i class="fas fa-link" style="color:#2563EB;margin-right:6px;"></i>依赖关系</span>
-            ${canManage ? `<button class="btn btn-ghost btn-sm" onclick="showAddDependencyModal('${task.id}')"><i class="fas fa-plus"></i> 添加前置依赖</button>` : ''}
+        <div id="task-dep-panel" style="margin-bottom:16px;border:2px solid #BFDBFE;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(37,99,235,0.08);">
+          <div style="padding:10px 12px;background:linear-gradient(90deg,#EFF6FF,#F8FAFC);border-bottom:1px solid #BFDBFE;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:13px;font-weight:600;color:#1D4ED8;"><i class="fas fa-link" style="margin-right:6px;"></i>依赖关系（跨项目）</span>
+            ${canManage ? `<button class="btn btn-primary btn-sm" onclick="showAddDependencyModal('${task.id}')"><i class="fas fa-plus"></i> 添加前置依赖</button>` : ''}
           </div>
           <div style="padding:12px;">
+            ${renderDependencySchemeHint(true)}
             <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:8px;">前置依赖（需先完成）</div>
             ${preds.length ? preds.map(dep => {
               const pred = getDependencyTask(dep.predecessorTaskId);
@@ -6717,6 +6736,8 @@
 
               <p style="color:#6B7280;margin-bottom:16px;">${task.desc || '暂无描述'}</p>
 
+              ${renderTaskDependencyPanel(task)}
+
               ${renderEntityFiles(task.attachments, {
                 entityType: 'task',
                 entityId: task.id,
@@ -6999,6 +7020,10 @@
                   <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">根据实际开始/结束日期自动计算</div>
                 </div>
               </div>
+              ${isEdit ? renderTaskDependencyPanel(tasks.find(t => t.id === state.form.id) || task) : `
+              <div style="padding:10px 12px;background:#EFF6FF;border-radius:8px;margin-bottom:12px;font-size:12px;color:#2563EB;">
+                <i class="fas fa-link" style="margin-right:4px;"></i>保存任务后，可在任务详情中配置<strong>跨项目前置依赖</strong>（前置完成后才可继续，阻塞期间不计饱和度）。
+              </div>`}
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                 <div class="form-group">
                   <label class="form-label">进度 (%)</label>
