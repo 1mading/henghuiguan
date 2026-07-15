@@ -8,6 +8,7 @@ const filesRoutes = require('./files');
 const displayRoutes = require('./display');
 
 const systemUpdatesRoutes = require('./systemUpdates');
+const notificationsRoutes = require('./notifications');
 
 const router = express.Router();
 
@@ -22,6 +23,7 @@ router.get('/health', (_req, res) => {
 
 router.use(configRoutes);
 router.use(systemUpdatesRoutes);
+router.use(notificationsRoutes);
 router.use(workCalendarRoutes);
 router.use(filesRoutes);
 router.use(displayRoutes);

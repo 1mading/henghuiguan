@@ -12,6 +12,7 @@ const DEFAULT_STORE = {
   changeLogs: [],
   transferLogs: [],
   pushLogs: [],
+  notifications: [],
   workCalendar: null,
   systemUpdates: [],
 };
@@ -210,10 +211,189 @@ function insertPushLog(entry) {
   persistStore();
 }
 
+const MAX_NOTIFICATIONS = 2000;
+
+function ensureNotificationsArray() {
+  const s = getStore();
+  if (!Array.isArray(s.notifications)) s.notifications = [];
+  return s.notifications;
+}
+
+/** 写入应用内通知（每人一条），返回写入的条目 */
+function insertNotifications(entries) {
+  if (!Array.isArray(entries) || !entries.length) return [];
+  const list = ensureNotificationsArray();
+  const written = [];
+  for (const entry of entries) {
+    if (!entry || !entry.userId) continue;
+    const row = {
+      id: entry.id,
+      userId: entry.userId,
+      userName: entry.userName || '',
+      eventType: entry.eventType || '',
+      title: entry.title || '【恒慧管】通知',
+      content: entry.content || '',
+      taskId: entry.taskId || null,
+      projectId: entry.projectId || null,
+      read: false,
+      createdAt: entry.createdAt || new Date().toISOString(),
+      time: entry.time || new Date().toLocaleString('zh-CN'),
+      pushLogId: entry.pushLogId || null,
+      operator: entry.operator || '',
+    };
+    list.unshift(row);
+    written.push(row);
+  }
+  if (list.length > MAX_NOTIFICATIONS) {
+    list.splice(MAX_NOTIFICATIONS);
+  }
+  persistStore();
+  return written;
+}
+
+function getNotificationsForUser(userId, { limit = 50, unreadOnly = false } = {}) {
+  if (!userId) return [];
+  let rows = ensureNotificationsArray().filter(n => n.userId === userId);
+  if (unreadOnly) rows = rows.filter(n => !n.read);
+  return rows.slice(0, Math.max(1, Math.min(Number(limit) || 50, 100)));
+}
+
+function countUnreadNotifications(userId) {
+  if (!userId) return 0;
+  return ensureNotificationsArray().filter(n => n.userId === userId && !n.read).length;
+}
+
+function markNotificationsRead(userId, { ids = null, all = false } = {}) {
+  if (!userId) return { updated: 0 };
+  const list = ensureNotificationsArray();
+  let updated = 0;
+  const idSet = Array.isArray(ids) && ids.length ? new Set(ids.map(String)) : null;
+  for (const n of list) {
+    if (n.userId !== userId || n.read) continue;
+    if (all || (idSet && idSet.has(String(n.id)))) {
+      n.read = true;
+      updated++;
+    }
+  }
+  if (updated) persistStore();
+  return { updated };
+}
+
 function setUsers(users) {
   const cleaned = (users || []).filter(u => !String(u.id || '').startsWith('DT-'));
   getStore().users = cleaned;
   return persistStore();
+}
+
+function swapPersonName(value, oldName, newName) {
+  return value === oldName ? newName : value;
+}
+
+function swapPersonNameList(list, oldName, newName) {
+  if (!Array.isArray(list)) return { list, count: 0 };
+  let count = 0;
+  const next = list.map(item => {
+    if (typeof item === 'string') {
+      if (item === oldName) {
+        count++;
+        return newName;
+      }
+      return item;
+    }
+    if (item && typeof item === 'object') {
+      const copy = { ...item };
+      let touched = false;
+      for (const key of ['name', 'userName', 'assignee', 'from', 'to', 'operator']) {
+        if (copy[key] === oldName) {
+          copy[key] = newName;
+          touched = true;
+        }
+      }
+      if (touched) count++;
+      return copy;
+    }
+    return item;
+  });
+  return { list: next, count };
+}
+
+/**
+ * 将业务数据中的人员显示名从 oldName 全部替换为 newName（任务/项目/日志等）
+ * 不落盘；调用方随后 persistStore / setUsers。
+ */
+function renamePersonAcrossStore(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) {
+    return { renamedRefs: 0 };
+  }
+  const s = getStore();
+  let renamedRefs = 0;
+
+  s.projects = (s.projects || []).map(p => {
+    const next = { ...p };
+    if (next.manager === oldName) { next.manager = newName; renamedRefs++; }
+    if (next.creator === oldName) { next.creator = newName; renamedRefs++; }
+    const team = swapPersonNameList(next.teamMembers, oldName, newName);
+    next.teamMembers = team.list;
+    renamedRefs += team.count;
+    return normalizeProjectRecord(next);
+  });
+
+  s.tasks = (s.tasks || []).map(t => {
+    const next = { ...t };
+    if (next.assignee === oldName) { next.assignee = newName; renamedRefs++; }
+    if (next.creator === oldName) { next.creator = newName; renamedRefs++; }
+    for (const key of ['informCollaborators', 'assistCollaborators', 'collaborators']) {
+      const r = swapPersonNameList(next[key], oldName, newName);
+      next[key] = r.list;
+      renamedRefs += r.count;
+    }
+    const entries = swapPersonNameList(next.collaboratorEntries, oldName, newName);
+    next.collaboratorEntries = entries.list;
+    renamedRefs += entries.count;
+    return next;
+  });
+
+  s.changeLogs = (s.changeLogs || []).map(log => {
+    const next = { ...log };
+    if (next.operator === oldName) { next.operator = newName; renamedRefs++; }
+    return next;
+  });
+
+  s.transferLogs = (s.transferLogs || []).map(log => {
+    const next = { ...log };
+    if (next.from === oldName) { next.from = newName; renamedRefs++; }
+    if (next.to === oldName) { next.to = newName; renamedRefs++; }
+    if (next.operator === oldName) { next.operator = newName; renamedRefs++; }
+    return next;
+  });
+
+  s.pushLogs = (s.pushLogs || []).map(log => {
+    const next = { ...log };
+    if (typeof next.recipients === 'string' && next.recipients.includes(oldName)) {
+      next.recipients = next.recipients
+        .split(/[、,，]/)
+        .map(part => (part.trim() === oldName ? newName : part.trim()))
+        .filter(Boolean)
+        .join('、');
+      renamedRefs++;
+    }
+    return next;
+  });
+
+  return { renamedRefs };
+}
+
+/** 按用户新旧姓名列表批量替换引用 */
+function applyPersonRenames(renames) {
+  const list = Array.isArray(renames) ? renames.filter(r => r && r.from && r.to && r.from !== r.to) : [];
+  let renamedRefs = 0;
+  const applied = [];
+  for (const r of list) {
+    const result = renamePersonAcrossStore(r.from, r.to);
+    renamedRefs += result.renamedRefs;
+    applied.push({ from: r.from, to: r.to, refs: result.renamedRefs });
+  }
+  return { renamedRefs, applied };
 }
 
 function mergeTasksById(existing, incoming, predicate) {
@@ -323,6 +503,8 @@ module.exports = {
   findUserByDingTalkId,
   upsertUser,
   setUsers,
+  renamePersonAcrossStore,
+  applyPersonRenames,
   getAllProjects,
   getAllTasks,
   getAllTaskDependencies,
@@ -330,6 +512,10 @@ module.exports = {
   getAllTransferLogs,
   getAllPushLogs,
   getAllSystemUpdates,
+  insertNotifications,
+  getNotificationsForUser,
+  countUnreadNotifications,
+  markNotificationsRead,
   replaceAllData,
   mergeTasksById,
   mergeProjectsById,

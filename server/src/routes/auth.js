@@ -23,6 +23,12 @@ async function loginWithDingTalkUserId(dingTalkUserId) {
       message: `未找到钉钉用户 ${dingTalkUserId}，请总经理同步通讯录或联系管理员`,
     };
   }
+  if (user.active === false) {
+    return {
+      success: false,
+      message: `账号「${user.name}」已停用，请联系总经理在人员档案中恢复或重新同步钉钉名册`,
+    };
+  }
   return authResponse(user);
 }
 

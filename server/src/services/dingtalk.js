@@ -1,5 +1,5 @@
 const config = require('../config');
-const { getAllUsers, setUsers, findUserByDingTalkId, upsertUser } = require('../db/database');
+const { getAllUsers, setUsers, findUserByDingTalkId, upsertUser, applyPersonRenames } = require('../db/database');
 
 let cachedAccessToken = null;
 let tokenExpiresAt = 0;
@@ -52,7 +52,38 @@ function formatDingTalkApiError(path, data) {
 }
 
 function nameCore(name) {
-  return String(name || '').trim().split(/\s+/)[0];
+  const first = String(name || '').trim().split(/\s+/)[0];
+  if (!first) return '';
+  const dash = first.indexOf('-');
+  return dash > 0 ? first.slice(0, dash) : first;
+}
+
+/**
+ * 本地名与钉钉最新名模糊匹配时，采用钉钉最新显示名；
+ * 调用方需同步把任务/项目里的旧名引用改成新名。
+ */
+function resolveSyncedDisplayName(localName, dingName) {
+  if (!dingName) return localName || '';
+  if (!localName) return dingName;
+  if (localName === dingName) return localName;
+  if (namesMatch(localName, dingName)) return dingName;
+  return dingName;
+}
+
+function collectNameRenames(previousUsers, nextUsers) {
+  const prevById = new Map((previousUsers || []).map(u => [u.id, u]));
+  const renames = [];
+  for (const u of nextUsers || []) {
+    const prev = prevById.get(u.id);
+    if (prev?.name && u?.name && prev.name !== u.name) {
+      renames.push({
+        id: u.id,
+        from: prev.name,
+        to: u.name,
+      });
+    }
+  }
+  return renames;
 }
 
 function findUserIndexForSync(nextUsers, dingUserId, name) {
@@ -991,8 +1022,11 @@ async function ensureUserForDingTalkLogin(dingTalkUserId) {
       const linked = {
         ...byName,
         ...profileFieldsFromDetail(detail, dingTalkUserId),
-        name,
+        name: resolveSyncedDisplayName(byName.name, name),
       };
+      if (byName.name && linked.name && byName.name !== linked.name) {
+        applyPersonRenames([{ from: byName.name, to: linked.name }]);
+      }
       upsertUser(linked);
       return linked;
     }
@@ -1037,15 +1071,21 @@ function namesMatch(localName, dingName) {
 }
 
 function mergeDingTalkIntoUser(nextUsers, idx, dingUserId, detail, basic, deptNameById) {
-  const name = detail.name || basic.name || dingUserId;
-  const dept = resolveDeptName(detail.dept_id_list, deptNameById);
+  const dingName = detail.name || basic?.name || '';
   if (idx >= 0) {
-    const prev = nextUsers[idx].dingTalkUserId;
+    const prev = nextUsers[idx];
+    const nextName = dingName && namesMatch(prev.name, dingName)
+      ? resolveSyncedDisplayName(prev.name, dingName)
+      : prev.name;
+    const prevUid = prev.dingTalkUserId;
     nextUsers[idx] = {
-      ...nextUsers[idx],
+      ...prev,
       dingTalkUserId: dingUserId,
+      name: nextName,
+      ...profileFieldsFromDetail({ ...basic, ...detail }, dingUserId),
     };
-    return { updated: prev !== dingUserId ? 1 : 0, created: 0, bound: !!dingUserId };
+    const changed = prevUid !== dingUserId || prev.name !== nextName;
+    return { updated: changed ? 1 : 0, created: 0, bound: !!dingUserId };
   }
   // 不同步钉钉陌生人：仅绑定已有本地档案
   return { updated: 0, created: 0, bound: false, skipped: 1 };
@@ -1072,12 +1112,274 @@ async function resolveDetailForSync(accessToken, dingUserId, basic) {
   }
 }
 
+function nextLocalUserId(users) {
+  let max = 0;
+  for (const u of users) {
+    const m = String(u.id || '').match(/^U(\d+)$/i);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return 'U' + String(max + 1).padStart(3, '0');
+}
+
+function isPrivilegedStaffRole(role) {
+  return role === 'gm' || role === 'admin' || role === 'manager';
+}
+
+function findLocalForDingReplace(dingUserId, dingName, nextUsers, claimedLocalIds) {
+  const byUserId = nextUsers.find(
+    u => u.dingTalkUserId && u.dingTalkUserId === dingUserId && !claimedLocalIds.has(u.id)
+  );
+  if (byUserId) return { local: byUserId, how: 'userid' };
+
+  if (!dingName) return { local: null, how: 'none' };
+  const nameHits = nextUsers.filter(
+    u => !claimedLocalIds.has(u.id) && namesMatch(u.name, dingName)
+  );
+  if (nameHits.length === 1) return { local: nameHits[0], how: 'name' };
+  if (nameHits.length > 1) {
+    return {
+      local: null,
+      how: 'ambiguous',
+      ambiguousLocals: nameHits.map(u => ({ id: u.id, name: u.name, dept: u.dept })),
+    };
+  }
+  return { local: null, how: 'none' };
+}
+
+function applyDingTalkProfileToLocal(local, dingUserId, detail, basic, deptNameById) {
+  const dingName = detail.name || basic?.name || local.name;
+  const name = resolveSyncedDisplayName(local.name, dingName);
+  const dept = resolveDeptName(detail.dept_id_list || basic?.dept_id_list, deptNameById);
+  const position = detail.title || basic?.title || local.position || '执行人员';
+  const profile = profileFieldsFromDetail({ ...basic, ...detail }, dingUserId);
+  return {
+    ...local,
+    name,
+    dept: dept === '未分配部门' && local.dept ? local.dept : dept,
+    position,
+    active: true,
+    role: isPrivilegedStaffRole(local.role) ? local.role : (local.role || 'staff'),
+    standardWeekHours: local.standardWeekHours || 60,
+    ...profile,
+  };
+}
+
+/**
+ * 按勾选部门从钉钉名册替换本地人员档案：新建 / 更新 / 软停用
+ * @param {object} options
+ * @param {string[]} options.deptNames
+ * @param {boolean} [options.dryRun]
+ */
+async function replaceUsersFromDingTalk(options = {}) {
+  if (!isConfigured()) {
+    return { success: false, message: '钉钉未配置，无法同步通讯录' };
+  }
+
+  const deptNames = Array.isArray(options.deptNames) ? options.deptNames.filter(Boolean) : [];
+  if (!deptNames.length) {
+    return { success: false, message: '请至少勾选一个部门' };
+  }
+  const dryRun = !!options.dryRun;
+
+  const accessToken = await getAccessToken();
+  const { departments, deptNameById } = await loadDingTalkPool(accessToken);
+  const pool = await collectDingTalkUsers(accessToken, departments, deptNameById, deptNames);
+  if (!pool.userIdSet.size) {
+    return {
+      success: false,
+      message: '所选部门未拉取到钉钉成员，请检查部门名称是否与钉钉一致，或开放平台授权范围是否包含这些部门',
+    };
+  }
+
+  const dingIds = [...pool.userIdSet];
+  const detailsById = {};
+  await runConcurrent(dingIds, 6, async (dingUserId) => {
+    const basic = pool.basicById[dingUserId] || {};
+    detailsById[dingUserId] = await resolveDetailForSync(accessToken, dingUserId, basic);
+  });
+
+  const previousUsers = getAllUsers().map(u => ({ ...u }));
+  const nextUsers = previousUsers.map(u => ({ ...u }));
+  const claimedLocalIds = new Set();
+  const coveredLocalIds = new Set();
+  const toCreate = [];
+  const toUpdate = [];
+  const toDeactivate = [];
+  const toRename = [];
+  const ambiguous = [];
+  let skippedInactive = 0;
+
+  for (const dingUserId of dingIds) {
+    const detail = detailsById[dingUserId] || pool.basicById[dingUserId] || {};
+    const basic = pool.basicById[dingUserId] || detail;
+    if (detail.active === false || basic.active === false) {
+      skippedInactive++;
+      continue;
+    }
+    const dingName = detail.name || basic.name || '';
+    const match = findLocalForDingReplace(dingUserId, dingName, nextUsers, claimedLocalIds);
+
+    if (match.how === 'ambiguous') {
+      ambiguous.push({
+        dingTalkUserId: dingUserId,
+        name: dingName,
+        locals: match.ambiguousLocals,
+      });
+      continue;
+    }
+
+    if (match.local) {
+      const idx = nextUsers.findIndex(u => u.id === match.local.id);
+      if (idx < 0) continue;
+      const oldName = nextUsers[idx].name;
+      const merged = applyDingTalkProfileToLocal(nextUsers[idx], dingUserId, detail, basic, deptNameById);
+      nextUsers[idx] = merged;
+      claimedLocalIds.add(merged.id);
+      coveredLocalIds.add(merged.id);
+      if (oldName && merged.name && oldName !== merged.name) {
+        toRename.push({ id: merged.id, from: oldName, to: merged.name });
+      }
+      toUpdate.push({
+        id: merged.id,
+        name: merged.name,
+        dept: merged.dept,
+        role: merged.role,
+        dingTalkUserId: merged.dingTalkUserId,
+        how: match.how,
+        renamedFrom: oldName !== merged.name ? oldName : undefined,
+      });
+      continue;
+    }
+
+    const created = {
+      id: nextLocalUserId(nextUsers),
+      name: dingName || dingUserId,
+      dept: resolveDeptName(detail.dept_id_list || basic.dept_id_list, deptNameById),
+      role: 'staff',
+      position: detail.title || basic.title || '执行人员',
+      leaderId: '',
+      standardWeekHours: 60,
+      active: true,
+      ...profileFieldsFromDetail({ ...basic, ...detail }, dingUserId),
+    };
+    nextUsers.push(created);
+    claimedLocalIds.add(created.id);
+    coveredLocalIds.add(created.id);
+    toCreate.push({
+      id: created.id,
+      name: created.name,
+      dept: created.dept,
+      role: created.role,
+      dingTalkUserId: created.dingTalkUserId,
+    });
+  }
+
+  for (const local of nextUsers) {
+    if (coveredLocalIds.has(local.id)) continue;
+    if (local.active === false) continue;
+    const inScope = deptNames.some(d => deptNameMatchesFilter(local.dept, [d]));
+    if (!inScope) continue;
+    toDeactivate.push({
+      id: local.id,
+      name: local.name,
+      dept: local.dept,
+      role: local.role,
+      dingTalkUserId: local.dingTalkUserId || '',
+    });
+    const idx = nextUsers.findIndex(u => u.id === local.id);
+    if (idx >= 0) nextUsers[idx] = { ...nextUsers[idx], active: false };
+  }
+
+  const renames = toRename.length ? toRename : collectNameRenames(previousUsers, nextUsers);
+  const summary = {
+    create: toCreate,
+    update: toUpdate,
+    deactivate: toDeactivate,
+    rename: renames,
+    ambiguous,
+    skippedInactive,
+    dingTalkPulled: dingIds.length,
+    depts: deptNames,
+  };
+
+  if (dryRun) {
+    return {
+      success: true,
+      dryRun: true,
+      preview: summary,
+      created: toCreate.length,
+      updated: toUpdate.length,
+      deactivated: toDeactivate.length,
+      renamed: renames.length,
+      ambiguous: ambiguous.length,
+      message:
+        `预览（部门：${deptNames.join('、')}）：将新增 ${toCreate.length}、更新 ${toUpdate.length}、改名 ${renames.length}、停用 ${toDeactivate.length}` +
+        (ambiguous.length ? `，重名待处理 ${ambiguous.length}` : '') +
+        `；钉钉拉取 ${dingIds.length} 人` +
+        (skippedInactive ? `，跳过离职 ${skippedInactive}` : ''),
+    };
+  }
+
+  // 移除历史误同步自动创建的 DT- 陌生人
+  for (let i = nextUsers.length - 1; i >= 0; i--) {
+    if (String(nextUsers[i].id || '').startsWith('DT-')) nextUsers.splice(i, 1);
+  }
+
+  const renameResult = applyPersonRenames(renames);
+  const persisted = setUsers(nextUsers);
+  let htmlPersisted = false;
+  if (persisted) {
+    try {
+      const { persistUsersToHtml } = require('../utils/persistHtmlUsers');
+      htmlPersisted = persistUsersToHtml(nextUsers);
+    } catch (e) {
+      console.error('[replace-sync] 写入 HTML 失败:', e.message);
+    }
+  }
+
+  const persistHint = persisted
+    ? (htmlPersisted ? '' : '（JSON 已保存，HTML 写入失败请检查文件是否被占用）')
+    : '（警告：未能写入磁盘，刷新后可能丢失，请关闭占用 data 文件的程序后重试）';
+
+  return {
+    success: true,
+    dryRun: false,
+    persisted,
+    htmlPersisted,
+    preview: {
+      ...summary,
+      renameApplied: renameResult.applied,
+      renamedRefs: renameResult.renamedRefs,
+    },
+    created: toCreate.length,
+    updated: toUpdate.length,
+    deactivated: toDeactivate.length,
+    renamed: renames.length,
+    renamedRefs: renameResult.renamedRefs,
+    ambiguous: ambiguous.length,
+    bound: toUpdate.length + toCreate.length,
+    skipped: ambiguous.length + skippedInactive,
+    total: dingIds.length,
+    mode: 'replace',
+    scanMode: 'dept',
+    message:
+      `名册替换完成（部门：${deptNames.join('、')}）：新增 ${toCreate.length}、更新 ${toUpdate.length}、改名 ${renames.length}` +
+      (renameResult.renamedRefs ? `（引用 ${renameResult.renamedRefs} 处）` : '') +
+      `、停用 ${toDeactivate.length}` +
+      (ambiguous.length ? `，重名跳过 ${ambiguous.length}` : '') +
+      `；钉钉拉取 ${dingIds.length} 人${persistHint}`,
+    allUsers: nextUsers,
+    updatedUsers: [...toUpdate, ...toCreate].map(row => nextUsers.find(u => u.id === row.id)).filter(Boolean),
+  };
+}
+
 /**
  * 从钉钉拉取通讯录，写入 users
  * @param {object} options
- * @param {'all'|'departments'|'selected'} options.mode
- * @param {string[]} [options.deptNames] 按部门名过滤（departments / selected）
+ * @param {'all'|'departments'|'selected'|'replace'} options.mode
+ * @param {string[]} [options.deptNames] 按部门名过滤（departments / selected / replace）
  * @param {string[]} [options.localUserIds] 仅同步这些本地人员 id（selected）
+ * @param {boolean} [options.dryRun] 仅 replace 模式：预览不落盘
  */
 async function syncUsersFromDingTalk(options = {}) {
   if (!isConfigured()) {
@@ -1085,6 +1387,10 @@ async function syncUsersFromDingTalk(options = {}) {
   }
 
   const mode = options.mode || 'all';
+  if (mode === 'replace') {
+    return replaceUsersFromDingTalk(options);
+  }
+
   const deptNames = Array.isArray(options.deptNames) ? options.deptNames.filter(Boolean) : [];
   const localUserIds = Array.isArray(options.localUserIds) ? options.localUserIds.filter(Boolean) : [];
 
@@ -1273,6 +1579,8 @@ async function syncUsersFromDingTalk(options = {}) {
     if (String(nextUsers[i].id || '').startsWith('DT-')) nextUsers.splice(i, 1);
   }
 
+  const renames = collectNameRenames(existing, nextUsers);
+  const renameResult = applyPersonRenames(renames);
   const persisted = setUsers(nextUsers);
   let htmlPersisted = false;
   if (persisted) {
@@ -1293,16 +1601,23 @@ async function syncUsersFromDingTalk(options = {}) {
     ? (htmlPersisted ? '' : '（JSON 已保存，HTML 写入失败请检查文件是否被占用）')
     : '（警告：未能写入磁盘，刷新后可能丢失，请关闭占用 data 文件的程序后重试）';
 
+  const renameHint = renames.length
+    ? `，改名 ${renames.length} 人（引用 ${renameResult.renamedRefs} 处）`
+    : '';
+
   return {
     success: true,
     persisted,
     htmlPersisted,
-    message: `通讯录同步完成（${scope}，${scanMode}）：绑定 ${bound} 人，新更新 ${updated} 人，新增 ${created} 人，跳过 ${skipped} 人，钉钉拉取 ${userIdSet.size} 个账号${persistHint}`,
+    message: `通讯录同步完成（${scope}，${scanMode}）：绑定 ${bound} 人，新更新 ${updated} 人，新增 ${created} 人，跳过 ${skipped} 人，钉钉拉取 ${userIdSet.size} 个账号${renameHint}${persistHint}`,
     synced: bound,
     bound,
     updated,
     created,
     skipped,
+    renamed: renames.length,
+    renamedRefs: renameResult.renamedRefs,
+    renames: renameResult.applied,
     total: userIdSet.size,
     mode,
     scanMode,
@@ -1398,6 +1713,7 @@ module.exports = {
   getUserIdByAuthCode,
   sendWorkNotification,
   syncUsersFromDingTalk,
+  replaceUsersFromDingTalk,
   ensureUserForDingTalkLogin,
   diagnoseDingTalkSync,
   normalizeDingTalkDocUrl,

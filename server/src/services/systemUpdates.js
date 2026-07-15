@@ -79,10 +79,10 @@ function mergeReleaseFile(entry) {
   return true;
 }
 
-/** 启动时合并 server/releases/*.json 到数据库（只增/覆盖同版本，不删除） */
+/** 启动时合并 server/releases/*.json 到数据库（只增/覆盖同版本，不删除；跳过 _ 前缀待发文件） */
 function mergeReleasesFromDisk() {
   if (!fs.existsSync(RELEASES_DIR)) return 0;
-  const files = fs.readdirSync(RELEASES_DIR).filter(f => f.endsWith('.json'));
+  const files = fs.readdirSync(RELEASES_DIR).filter(f => f.endsWith('.json') && !f.startsWith('_'));
   let count = 0;
   for (const file of files) {
     try {

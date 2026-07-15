@@ -8,6 +8,7 @@
     "start:prod": "node src/index.js",
     "dev": "node --watch src/index.js",
     "seed": "node src/db/seed.js",
+    "record-change": "node scripts/record-change.js",
     "publish-release": "node scripts/publish-release.js",
     "rotate-secrets": "node scripts/rotate-secrets.js"
   },

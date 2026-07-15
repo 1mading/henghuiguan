@@ -4,6 +4,7 @@ const { isFullAccess } = require('../utils/roles');
 const { requireAuth } = require('../middleware/auth');
 const { insertPushLog, getAllPushLogs } = require('../db/database');
 const { sendWorkNotification, syncUsersFromDingTalk, diagnoseDingTalkSync } = require('../services/dingtalk');
+const { createInboxFromPush } = require('../services/appNotifications');
 
 const router = express.Router();
 
@@ -40,29 +41,57 @@ router.post('/dingtalk/push/work-notification', requireAuth, async (req, res) =>
   const title = message?.title || '【恒慧管】通知';
   const content = message?.content || '';
 
-  const dingTalkUserIds = recipients
-    .map(r => r.dingTalkUserId)
-    .filter(Boolean);
-
-  if (!dingTalkUserIds.length) {
+  const inboxRecipients = (recipients || []).filter(r => r.userId || r.id);
+  if (!inboxRecipients.length) {
     return res.status(400).json({
       success: false,
-      message: '接收人未绑定钉钉 userid，请先在人员档案同步通讯录',
+      message: '无有效接收人',
     });
   }
+
+  const dingTalkUserIds = inboxRecipients
+    .map(r => r.dingTalkUserId)
+    .filter(Boolean);
 
   const logEntry = {
     id: `P-${uuidv4().slice(0, 8)}`,
     eventType,
     title,
     content,
-    recipients: recipients.map(r => r.userName || r.name).join('、'),
+    recipients: inboxRecipients.map(r => r.userName || r.name).join('、'),
     status: 'pending',
     time: new Date().toLocaleString('zh-CN'),
     payload,
     taskId: payload?.taskId || null,
     operator: body.operator,
   };
+
+  const inboxItems = createInboxFromPush({
+    eventType,
+    title,
+    content,
+    recipients: inboxRecipients,
+    payload,
+    operator: body.operator,
+    pushLogId: logEntry.id,
+  });
+
+  if (body.appInboxOnly || !dingTalkUserIds.length) {
+    logEntry.status = 'inbox_only';
+    logEntry.error = body.appInboxOnly
+      ? '仅写入应用内通知'
+      : '接收人未绑定钉钉 userid，仅写入应用内通知';
+    insertPushLog(logEntry);
+    return res.json({
+      success: true,
+      dingTalkSkipped: true,
+      inboxCount: inboxItems.length,
+      logId: logEntry.id,
+      message: body.appInboxOnly
+        ? '已写入应用内通知'
+        : '已写入应用内通知（未绑定 userid，未发钉钉）',
+    });
+  }
 
   try {
     const result = await sendWorkNotification({
@@ -73,12 +102,22 @@ router.post('/dingtalk/push/work-notification', requireAuth, async (req, res) =>
     logEntry.status = result.mock ? 'queued' : 'sent';
     logEntry.response = result;
     insertPushLog(logEntry);
-    res.json({ success: true, ...result, logId: logEntry.id });
+    res.json({
+      success: true,
+      ...result,
+      inboxCount: inboxItems.length,
+      logId: logEntry.id,
+    });
   } catch (e) {
     logEntry.status = 'failed';
     logEntry.error = e.message;
     insertPushLog(logEntry);
-    res.status(500).json({ success: false, message: e.message, logId: logEntry.id });
+    res.status(500).json({
+      success: false,
+      message: e.message,
+      inboxCount: inboxItems.length,
+      logId: logEntry.id,
+    });
   }
 });
 
@@ -87,19 +126,47 @@ router.post('/dingtalk/push/batch', requireAuth, async (req, res) => {
   const results = [];
   for (const item of items) {
     try {
-      const dingTalkUserIds = (item.recipients || [])
-        .map(r => r.dingTalkUserId)
-        .filter(Boolean);
-      if (!dingTalkUserIds.length) {
-        results.push({ success: false, eventType: item.eventType, message: '接收人未绑定 userid' });
+      const recipients = item.recipients || [];
+      const inboxRecipients = recipients.filter(r => r.userId || r.id);
+      const title = item.message?.title || '【恒慧管】通知';
+      const content = item.message?.content || '';
+
+      if (!inboxRecipients.length) {
+        results.push({ success: false, eventType: item.eventType, message: '无有效接收人' });
         continue;
       }
+
+      const inboxItems = createInboxFromPush({
+        eventType: item.eventType,
+        title,
+        content,
+        recipients: inboxRecipients,
+        payload: item.payload,
+        operator: item.operator || req.body?.operator,
+      });
+
+      const dingTalkUserIds = inboxRecipients.map(r => r.dingTalkUserId).filter(Boolean);
+      if (!dingTalkUserIds.length) {
+        results.push({
+          success: true,
+          eventType: item.eventType,
+          dingTalkSkipped: true,
+          inboxCount: inboxItems.length,
+        });
+        continue;
+      }
+
       const result = await sendWorkNotification({
         dingTalkUserIds,
-        title: item.message?.title || '【恒慧管】通知',
-        content: item.message?.content || '',
+        title,
+        content,
       });
-      results.push({ success: true, eventType: item.eventType, ...result });
+      results.push({
+        success: true,
+        eventType: item.eventType,
+        ...result,
+        inboxCount: inboxItems.length,
+      });
     } catch (e) {
       results.push({ success: false, eventType: item.eventType, message: e.message });
     }
