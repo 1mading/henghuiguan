@@ -25,6 +25,10 @@ const {
   listWikiChildNodes,
   resolveWikiOperatorForWorkspace,
 } = require('../services/dingtalk');
+const {
+  genDocId,
+  syncTaskAttachmentToProjectDocuments,
+} = require('../utils/projectDocuments');
 
 const router = express.Router();
 
@@ -32,10 +36,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: config.maxUploadBytes },
 });
-
-function genDocId(prefix) {
-  return prefix + '-' + Date.now().toString(36).slice(-4).toUpperCase();
-}
 
 function isWikiAttachment(meta) {
   return meta?.source === 'dingtalk_wiki';
@@ -60,6 +60,56 @@ function wikiAlreadyLinked(items, nodeId) {
   return (items || []).some(item =>
     item?.source === 'dingtalk_wiki' && item.nodeId === nodeId
   );
+}
+
+function countStoredFileReferences(store, fileId) {
+  if (!fileId) return 0;
+  let count = 0;
+  for (const project of store.projects || []) {
+    for (const doc of project.documents || []) {
+      if (doc.fileId === fileId) count += 1;
+    }
+  }
+  for (const task of store.tasks || []) {
+    for (const att of task.attachments || []) {
+      if (att.fileId === fileId) count += 1;
+    }
+    for (const comment of task.comments || []) {
+      for (const att of comment.attachments || []) {
+        if (att.fileId === fileId) count += 1;
+      }
+    }
+    for (const att of task.commentPendingFiles || []) {
+      if (att.fileId === fileId) count += 1;
+    }
+  }
+  return count;
+}
+
+function removeAttachmentFromEntity(store, entityType, entityId, refId) {
+  if (entityType === 'project') {
+    const project = store.projects.find(p => p.id === entityId);
+    if (!project) return null;
+    const meta = (project.documents || []).find(doc => matchAttachmentRef(doc, refId));
+    if (!meta) return null;
+    project.documents = (project.documents || []).filter(doc => !matchAttachmentRef(doc, refId));
+    return { entityType: 'project', project, task: null, meta };
+  }
+  if (entityType === 'task') {
+    const task = store.tasks.find(t => t.id === entityId);
+    if (!task) return null;
+    const meta = (task.attachments || []).find(att => matchAttachmentRef(att, refId));
+    if (!meta) return null;
+    task.attachments = (task.attachments || []).filter(att => !matchAttachmentRef(att, refId));
+    const project = store.projects.find(p => p.id === task.projectId) || null;
+    return { entityType: 'task', project, task, meta };
+  }
+  return null;
+}
+
+function matchAttachmentRef(meta, refId) {
+  if (!meta || !refId) return false;
+  return meta.fileId === refId || meta.id === refId;
 }
 
 function attachWikiDocToEntity(store, req, entityType, entityId, node, docUrl) {
@@ -102,6 +152,7 @@ function attachWikiDocToEntity(store, req, entityType, entityId, node, docUrl) {
     if (!Array.isArray(task.attachments)) task.attachments = [];
     task.attachments.push(item);
     const project = store.projects.find(p => p.id === task.projectId);
+    if (project) syncTaskAttachmentToProjectDocuments(project, task, item);
     appendChangeLog(store, {
       id: genDocId('L'),
       taskId: task.id,
@@ -200,6 +251,7 @@ router.post('/files/upload', requireAuth, upload.single('file'), (req, res) => {
         if (!Array.isArray(task.attachments)) task.attachments = [];
         task.attachments.push(item);
         const project = store.projects.find(p => p.id === task.projectId);
+        if (project) syncTaskAttachmentToProjectDocuments(project, task, item);
         appendChangeLog(store, {
           id: genDocId('L'),
           taskId: task.id,
@@ -253,10 +305,15 @@ router.get('/files/wiki/workspaces', requireAuth, async (req, res) => {
     if (!isConfigured()) {
       return res.status(503).json({ success: false, message: '钉钉未配置' });
     }
-    const { workspaces, scannedUsers, failedUsers } = await listWikiWorkspacesForStaffArchive();
+    const { workspaces, personalWorkspaces, teamWorkspaces, mineError, bindError, scannedUsers, failedUsers } =
+      await listWikiWorkspacesForStaffArchive(req.user);
     res.json({
       success: true,
       workspaces,
+      personalWorkspaces,
+      teamWorkspaces,
+      mineError,
+      bindError,
       staffArchiveMode: true,
       scannedUsers,
       failedUsers,
@@ -322,7 +379,17 @@ router.get('/files/:fileId', requireAuth, (req, res) => {
 
 router.delete('/files/:fileId', requireAuth, (req, res) => {
   const store = getDb();
-  const found = findAttachmentMeta(store, req.params.fileId);
+  const refId = req.params.fileId;
+  const scopedEntityType = String(req.query.entityType || '').trim();
+  const scopedEntityId = String(req.query.entityId || '').trim();
+
+  let found = null;
+  if (scopedEntityType && scopedEntityId) {
+    found = removeAttachmentFromEntity(store, scopedEntityType, scopedEntityId, refId);
+  } else {
+    found = findAttachmentMeta(store, refId);
+  }
+
   if (!found) {
     return res.status(404).json({ success: false, message: '文件不存在' });
   }
@@ -337,10 +404,19 @@ router.delete('/files/:fileId', requireAuth, (req, res) => {
     return res.status(403).json({ success: false, message: '无权删除' });
   }
 
+  if (!scopedEntityType || !scopedEntityId) {
+    if (found.entityType === 'project') {
+      found.project.documents = (found.project.documents || []).filter(d =>
+        !matchAttachmentRef(d, refId)
+      );
+    } else {
+      found.task.attachments = (found.task.attachments || []).filter(a =>
+        !matchAttachmentRef(a, refId)
+      );
+    }
+  }
+
   if (found.entityType === 'project') {
-    found.project.documents = (found.project.documents || []).filter(d =>
-      d.fileId !== req.params.fileId && d.id !== req.params.fileId
-    );
     appendChangeLog(store, {
       id: genDocId('L'),
       taskId: `PROJECT-${found.project.id}`,
@@ -352,9 +428,6 @@ router.delete('/files/:fileId', requireAuth, (req, res) => {
       project: found.project.name,
     });
   } else {
-    found.task.attachments = (found.task.attachments || []).filter(a =>
-      a.fileId !== req.params.fileId && a.id !== req.params.fileId
-    );
     appendChangeLog(store, {
       id: genDocId('L'),
       taskId: found.task.id,
@@ -368,7 +441,10 @@ router.delete('/files/:fileId', requireAuth, (req, res) => {
   }
 
   if (!isWikiAttachment(found.meta) && found.meta.fileId) {
-    deleteStoredFile(found.meta.fileId);
+    const remainingRefs = countStoredFileReferences(store, found.meta.fileId);
+    if (remainingRefs === 0) {
+      deleteStoredFile(found.meta.fileId);
+    }
   }
   persistStore();
   res.json({ success: true, message: '已删除' });

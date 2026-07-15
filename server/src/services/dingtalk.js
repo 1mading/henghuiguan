@@ -379,6 +379,9 @@ function formatWikiApiError(status, data) {
   const base = `钉钉文档 API 失败: ${msg}${code ? ` (${code})` : ''}`;
 
   if (status === 403 || String(msg).includes('permission') || String(msg).includes('权限')) {
+    if (String(msg).includes('Wiki.Read') || String(msg).includes('mineWorkspaces')) {
+      return base + '。请确认开放平台已开通「知识库读」权限（Wiki.Read），用于加载「我的文档」。';
+    }
     return base + '。请确认：1) 开放平台已开通「知识库节点读」权限；2) 您对目标文档有查看权限。';
   }
   if (status === 404 || String(msg).includes('nodeNotExist') || String(msg).includes('不存在')) {
@@ -510,6 +513,102 @@ async function listWikiWorkspaces(operatorUnionId, options = {}) {
   return filterWikiWorkspacesByKeywords(all, keywords);
 }
 
+/** 钉钉「我的文档」知识库（个人文档，需 Wiki.Read 权限） */
+async function getMineWikiWorkspace(operatorUnionId) {
+  const data = await dingTalkWikiGet('/v2.0/wiki/mineWorkspaces', { operatorId: operatorUnionId });
+  const ws = data?.workspace;
+  if (!ws?.workspaceId) return null;
+  return mapWorkspaceForClient({
+    ...ws,
+    type: ws.type || 'PERSONAL',
+    name: ws.name || '我的文档',
+  });
+}
+
+/** 团队知识库 + 我的文档（去重合并） */
+async function listWikiWorkspacesForOperator(operatorUnionId, options = {}) {
+  const wsMap = new Map();
+  for (const ws of await listWikiWorkspaces(operatorUnionId, options)) {
+    wsMap.set(ws.workspaceId, ws);
+  }
+  try {
+    const mine = await getMineWikiWorkspace(operatorUnionId);
+    if (mine && !wsMap.has(mine.workspaceId)) {
+      wsMap.set(mine.workspaceId, mine);
+    }
+  } catch {
+    // mineWorkspaces 可能因权限未开通而失败，忽略
+  }
+  return [...wsMap.values()].sort((a, b) => {
+    if (a.type === 'PERSONAL' && b.type !== 'PERSONAL') return -1;
+    if (b.type === 'PERSONAL' && a.type !== 'PERSONAL') return 1;
+    return a.name.localeCompare(b.name, 'zh-CN');
+  });
+}
+
+function sortWikiWorkspacesForUser(workspaces, currentUser) {
+  const list = [...(workspaces || [])];
+  if (!currentUser?.name) {
+    return list.sort((a, b) => {
+      if (a.type === 'PERSONAL' && b.type !== 'PERSONAL') return -1;
+      if (b.type === 'PERSONAL' && a.type !== 'PERSONAL') return 1;
+      return a.name.localeCompare(b.name, 'zh-CN');
+    });
+  }
+  return list.sort((a, b) => {
+    const aMine = a.type === 'PERSONAL' && a.accessibleVia === currentUser.name;
+    const bMine = b.type === 'PERSONAL' && b.accessibleVia === currentUser.name;
+    if (aMine && !bMine) return -1;
+    if (bMine && !aMine) return 1;
+    if (a.type === 'PERSONAL' && b.type !== 'PERSONAL') return -1;
+    if (b.type === 'PERSONAL' && a.type !== 'PERSONAL') return 1;
+    return a.name.localeCompare(b.name, 'zh-CN');
+  });
+}
+
+function registerWorkspaceInStaffIndex(index, ws, unionId, user) {
+  if (!ws?.workspaceId || !index) return;
+  index.operatorByWorkspaceId.set(ws.workspaceId, {
+    unionId,
+    userName: user.name,
+    userId: user.id,
+  });
+  if (!index.workspaces.some(w => w.workspaceId === ws.workspaceId)) {
+    index.workspaces.push({
+      ...ws,
+      accessibleVia: user.name,
+    });
+  }
+}
+
+async function ensureCurrentUserWorkspacesMerged(currentUser) {
+  if (!currentUser || (!currentUser.dingTalkUserId && !currentUser.dingTalkUnionId)) return;
+  try {
+    const unionId = await resolveOperatorUnionId(currentUser);
+    const list = await listWikiWorkspacesForOperator(unionId, { keywords: [] });
+    const index = await refreshStaffWikiWorkspaceIndex();
+    for (const ws of list) {
+      if (!index.operatorByWorkspaceId.has(ws.workspaceId)) {
+        registerWorkspaceInStaffIndex(index, ws, unionId, currentUser);
+      } else if (ws.type === 'PERSONAL') {
+        index.operatorByWorkspaceId.set(ws.workspaceId, {
+          unionId,
+          userName: currentUser.name,
+          userId: currentUser.id,
+        });
+        const existing = index.workspaces.find(w => w.workspaceId === ws.workspaceId);
+        if (existing) {
+          existing.accessibleVia = currentUser.name;
+          existing.type = ws.type || existing.type;
+        }
+      }
+    }
+    index.workspaces = sortWikiWorkspacesForUser(index.workspaces, currentUser);
+  } catch {
+    // 当前用户 unionId 不可用时忽略，仍可使用人员档案汇总结果
+  }
+}
+
 const STAFF_WIKI_CACHE_MS = 5 * 60 * 1000;
 let staffWikiCache = {
   expiresAt: 0,
@@ -534,8 +633,9 @@ async function refreshStaffWikiWorkspaceIndex(force = false) {
     try {
       const unionId = await resolveOperatorUnionId(user);
       scannedUsers++;
-      const list = await listWikiWorkspaces(unionId, { keywords: [] });
+      const list = await listWikiWorkspacesForOperator(unionId, { keywords: [] });
       for (const ws of list) {
+        if (String(ws.type || '').toUpperCase() === 'PERSONAL') continue;
         if (!operatorByWorkspaceId.has(ws.workspaceId)) {
           operatorByWorkspaceId.set(ws.workspaceId, {
             unionId,
@@ -564,16 +664,95 @@ async function refreshStaffWikiWorkspaceIndex(force = false) {
   return staffWikiCache;
 }
 
-async function listWikiWorkspacesForStaffArchive() {
+async function listWikiWorkspacesForStaffArchive(currentUser) {
+  const personalWorkspaces = [];
+  const teamWorkspaces = [];
+  let mineError = null;
+  let bindError = null;
+
   const index = await refreshStaffWikiWorkspaceIndex();
+
+  if (currentUser) {
+    try {
+      const unionId = await resolveOperatorUnionId(currentUser);
+
+      try {
+        const mine = await getMineWikiWorkspace(unionId);
+        if (mine) {
+          const item = {
+            ...mine,
+            name: mine.name || '我的文档',
+            type: 'PERSONAL',
+            accessibleVia: currentUser.name,
+            isOwn: true,
+          };
+          personalWorkspaces.push(item);
+          registerWorkspaceInStaffIndex(index, item, unionId, currentUser);
+        } else {
+          mineError = '未获取到「我的文档」，请确认钉钉账号中已有个人文档';
+        }
+      } catch (e) {
+        mineError = e.message || '加载「我的文档」失败';
+      }
+
+      const ownTeamList = await listWikiWorkspaces(unionId, { keywords: [] });
+      for (const ws of ownTeamList) {
+        if (String(ws.type || '').toUpperCase() === 'PERSONAL') {
+          if (!personalWorkspaces.some(p => p.workspaceId === ws.workspaceId)) {
+            const item = { ...ws, name: ws.name || '我的文档', accessibleVia: currentUser.name, isOwn: true };
+            personalWorkspaces.push(item);
+            registerWorkspaceInStaffIndex(index, item, unionId, currentUser);
+          }
+          continue;
+        }
+        if (!teamWorkspaces.some(t => t.workspaceId === ws.workspaceId)) {
+          const item = { ...ws, accessibleVia: currentUser.name, isOwn: true };
+          teamWorkspaces.push(item);
+          registerWorkspaceInStaffIndex(index, item, unionId, currentUser);
+        }
+      }
+    } catch (e) {
+      bindError = e.message || '当前账号未绑定钉钉 userid/unionId';
+    }
+  }
+
+  for (const ws of index.workspaces) {
+    if (String(ws.type || '').toUpperCase() === 'PERSONAL') continue;
+    if (!teamWorkspaces.some(t => t.workspaceId === ws.workspaceId)) {
+      teamWorkspaces.push({
+        ...ws,
+        isOwn: ws.accessibleVia === currentUser?.name,
+      });
+    }
+  }
+
+  personalWorkspaces.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+  teamWorkspaces.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+
   return {
-    workspaces: index.workspaces,
+    personalWorkspaces,
+    teamWorkspaces,
+    workspaces: [...personalWorkspaces, ...teamWorkspaces],
+    mineError,
+    bindError,
     scannedUsers: index.scannedUsers,
     failedUsers: index.failedUsers,
   };
 }
 
 async function resolveWikiOperatorForWorkspace(workspaceId, fallbackUser) {
+  if (fallbackUser) {
+    try {
+      await ensureCurrentUserWorkspacesMerged(fallbackUser);
+      const unionId = await resolveOperatorUnionId(fallbackUser);
+      const list = await listWikiWorkspacesForOperator(unionId, { keywords: [] });
+      if (!workspaceId || list.some(ws => ws.workspaceId === workspaceId)) {
+        return unionId;
+      }
+    } catch {
+      // try staff index below
+    }
+  }
   if (!workspaceId) {
     if (!fallbackUser) throw new Error('缺少知识库信息');
     return resolveOperatorUnionId(fallbackUser);
@@ -588,15 +767,43 @@ async function resolveWikiOperatorForWorkspace(workspaceId, fallbackUser) {
       // fall through
     }
   }
-  throw new Error('该知识库不在人员档案任一成员的可见范围内');
+  throw new Error('该知识库不在可见范围内，请确认已绑定钉钉 unionId 或重新同步通讯录');
 }
 
-async function assertWikiWorkspaceInStaffArchive(workspaceId) {
-  if (!workspaceId) return;
-  const index = await refreshStaffWikiWorkspaceIndex();
-  if (!index.operatorByWorkspaceId.has(workspaceId)) {
-    throw new Error('该文档所属知识库不在人员档案任一成员的可见范围内');
+async function assertWikiWorkspaceAccessible(workspaceId, currentUser, options = {}) {
+  if (!workspaceId) {
+    if (options.operatorUnionIdUsed && currentUser) {
+      const unionId = await resolveOperatorUnionId(currentUser).catch(() => null);
+      if (unionId && unionId === options.operatorUnionIdUsed) return;
+    }
+    return;
   }
+  if (currentUser) await ensureCurrentUserWorkspacesMerged(currentUser);
+  const index = await refreshStaffWikiWorkspaceIndex();
+  if (index.operatorByWorkspaceId.has(workspaceId)) return;
+
+  if (currentUser && options.operatorUnionIdUsed) {
+    const unionId = await resolveOperatorUnionId(currentUser).catch(() => null);
+    if (unionId && unionId === options.operatorUnionIdUsed) {
+      try {
+        const mine = await getMineWikiWorkspace(unionId);
+        if (mine?.workspaceId === workspaceId) {
+          registerWorkspaceInStaffIndex(index, mine, unionId, currentUser);
+          return;
+        }
+      } catch {
+        // fall through
+      }
+      index.operatorByWorkspaceId.set(workspaceId, {
+        unionId,
+        userName: currentUser.name,
+        userId: currentUser.id,
+      });
+      return;
+    }
+  }
+
+  throw new Error('该文档不在可见范围内。请在左侧选择「我的文档」或团队知识库后再添加');
 }
 
 async function resolveWikiOperatorForNode(nodeId, workspaceId, currentUser) {
@@ -668,9 +875,9 @@ async function resolveWikiNodeForAttach(body, currentUser) {
     const operatorUnionId = await resolveWikiOperatorForNode(nodeId, workspaceId, currentUser);
     const node = await getWikiNodeById(nodeId, operatorUnionId);
     if (!node) {
-      throw new Error('无法获取文档信息，请确认人员档案中有人对该文档有访问权限');
+      throw new Error('无法获取文档信息，请确认您或人员档案中其他成员对该文档有访问权限');
     }
-    await assertWikiWorkspaceInStaffArchive(node.workspaceId);
+    await assertWikiWorkspaceAccessible(node.workspaceId, currentUser, { operatorUnionIdUsed: operatorUnionId });
     if (workspaceId && node.workspaceId && node.workspaceId !== workspaceId) {
       throw new Error('文档与所选知识库不匹配');
     }
@@ -681,14 +888,16 @@ async function resolveWikiNodeForAttach(body, currentUser) {
   }
 
   if (!docUrl) {
-    throw new Error('请从知识库选择文档，或粘贴钉钉文档链接');
+    throw new Error('请从左侧选择「我的文档」或团队知识库，再选择具体文档');
   }
   if (!isDingTalkDocUrl(docUrl)) {
     throw new Error('链接格式不正确，请粘贴 alidocs.dingtalk.com 或 ding-doc.dingtalk.com 的文档链接');
   }
 
+  await ensureCurrentUserWorkspacesMerged(currentUser);
   const index = await refreshStaffWikiWorkspaceIndex();
   let node = null;
+  let resolvedOperatorUnionId = null;
   let lastError = null;
   const tryOperators = [];
   try {
@@ -701,19 +910,25 @@ async function resolveWikiNodeForAttach(body, currentUser) {
   }
   for (const operatorUnionId of tryOperators) {
     try {
-      node = await resolveWikiNodeByUrl(docUrl, operatorUnionId);
-      if (node) break;
+      const hit = await resolveWikiNodeByUrl(docUrl, operatorUnionId);
+      if (hit) {
+        node = hit;
+        resolvedOperatorUnionId = operatorUnionId;
+        break;
+      }
     } catch (e) {
       lastError = e;
     }
   }
   if (!node) {
-    throw lastError || new Error('无法解析该文档链接，请确认人员档案中有人对该文档有访问权限');
+    throw lastError || new Error('无法解析该文档，请从左侧目录中选择具体文档');
   }
   if (String(node.type || '').toUpperCase() === 'FOLDER') {
     throw new Error('暂不支持添加文件夹，请选择具体文档');
   }
-  await assertWikiWorkspaceInStaffArchive(node.workspaceId);
+  await assertWikiWorkspaceAccessible(node.workspaceId, currentUser, {
+    operatorUnionIdUsed: resolvedOperatorUnionId,
+  });
   return { node: mapWikiNodeForClient(node), docUrl };
 }
 

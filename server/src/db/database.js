@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const { backupJsonFile } = require('../utils/backup');
+const { mergeProjectDocuments } = require('../utils/projectDocuments');
 
 const DEFAULT_STORE = {
   users: [],
@@ -27,6 +28,27 @@ function getStorePath() {
   return storePath;
 }
 
+function sanitizeProjectTeamMembers(manager, teamMembers) {
+  return [...new Set((teamMembers || []).filter(n => n && n !== manager))];
+}
+
+function normalizeProjectRecord(project) {
+  if (!project) return project;
+  if (project.archived === true || project.status === 'archived') {
+    project.archived = true;
+    project.status = 'archived';
+  } else if (project.archived == null) {
+    project.archived = false;
+  }
+  if (!Array.isArray(project.teamMembers)) project.teamMembers = [];
+  project.teamMembers = sanitizeProjectTeamMembers(project.manager, project.teamMembers);
+  return project;
+}
+
+function normalizeAllProjects(projects) {
+  (projects || []).forEach(normalizeProjectRecord);
+}
+
 function loadStoreFromDisk() {
   const file = getStorePath();
   const dir = path.dirname(file);
@@ -41,6 +63,7 @@ function loadStoreFromDisk() {
   try {
     const raw = fs.readFileSync(file, 'utf8');
     store = { ...structuredClone(DEFAULT_STORE), ...JSON.parse(raw) };
+    normalizeAllProjects(store.projects);
   } catch (e) {
     console.warn('[db] 读取失败，使用空库', e.message);
     store = structuredClone(DEFAULT_STORE);
@@ -150,7 +173,10 @@ function getAllSystemUpdates() {
 function replaceAllData(payload) {
   const s = getStore();
   if (Array.isArray(payload.users)) s.users = payload.users;
-  if (Array.isArray(payload.projects)) s.projects = payload.projects;
+  if (Array.isArray(payload.projects)) {
+    s.projects = payload.projects;
+    normalizeAllProjects(s.projects);
+  }
   if (Array.isArray(payload.tasks)) s.tasks = payload.tasks;
   if (Array.isArray(payload.taskDependencies)) s.taskDependencies = payload.taskDependencies;
   if (Array.isArray(payload.changeLogs)) s.changeLogs = payload.changeLogs;
@@ -195,7 +221,15 @@ function mergeTasksById(existing, incoming, predicate) {
   for (const t of incoming) {
     if (predicate && !predicate(t)) continue;
     pruneTaskCommentPendingFiles(t);
-    map.set(t.id, t);
+    const prev = map.get(t.id);
+    if (prev && (prev.status === 'abolished' || prev.status === 'archived' || t.status === 'abolished' || t.status === 'archived')) {
+      const status = (prev.status === 'abolished' || t.status === 'abolished')
+        ? 'abolished'
+        : 'archived';
+      map.set(t.id, { ...prev, ...t, status, createdAt: prev.createdAt || t.createdAt });
+    } else {
+      map.set(t.id, prev ? { ...prev, ...t, createdAt: prev.createdAt || t.createdAt } : t);
+    }
   }
   for (const t of map.values()) pruneTaskCommentPendingFiles(t);
   return [...map.values()];
@@ -214,7 +248,16 @@ function mergeProjectsById(existing, incoming, predicate) {
   const map = new Map(existing.map(p => [p.id, p]));
   for (const p of incoming) {
     if (predicate && !predicate(p)) continue;
-    map.set(p.id, p);
+    const prev = map.get(p.id);
+    if (prev) {
+      map.set(p.id, {
+        ...prev,
+        ...p,
+        documents: mergeProjectDocuments(prev.documents, p.documents),
+      });
+    } else {
+      map.set(p.id, p);
+    }
   }
   return [...map.values()];
 }

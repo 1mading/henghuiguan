@@ -5,6 +5,7 @@ const dataRoutes = require('./data');
 const configRoutes = require('./config');
 const workCalendarRoutes = require('./workCalendar');
 const filesRoutes = require('./files');
+const displayRoutes = require('./display');
 
 const systemUpdatesRoutes = require('./systemUpdates');
 
@@ -23,6 +24,7 @@ router.use(configRoutes);
 router.use(systemUpdatesRoutes);
 router.use(workCalendarRoutes);
 router.use(filesRoutes);
+router.use(displayRoutes);
 router.use(authRoutes);
 router.use(dingtalkRoutes);
 router.use(dataRoutes);

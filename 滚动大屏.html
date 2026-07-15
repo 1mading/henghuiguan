@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>恒慧管 · 项目任务滚动大屏</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: radial-gradient(ellipse at 20% 20%, #1e3a5f 0%, #0f172a 45%, #020617 100%);
+      color: #e2e8f0;
+    }
+
+    .screen {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 20px 24px 16px;
+      gap: 16px;
+    }
+
+    /* ===== 顶栏 ===== */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      border-radius: 16px;
+      backdrop-filter: blur(12px);
+      flex-shrink: 0;
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .logo {
+      width: 48px; height: 48px;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; color: #fff;
+      box-shadow: 0 4px 20px rgba(245, 158, 11, 0.35);
+    }
+    .title-block h1 {
+      font-size: 28px; font-weight: 700;
+      background: linear-gradient(90deg, #fbbf24, #f59e0b, #fff);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      letter-spacing: 2px;
+    }
+    .title-block p { font-size: 13px; color: #94a3b8; margin-top: 2px; }
+    .header-right { text-align: right; }
+    .clock { font-size: 36px; font-weight: 700; font-variant-numeric: tabular-nums; color: #f8fafc; }
+    .clock-sub { font-size: 13px; color: #64748b; margin-top: 4px; }
+
+    /* ===== 统计条 ===== */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .stat-card {
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      text-align: center;
+    }
+    .stat-card .num {
+      font-size: 32px; font-weight: 800; font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+    .stat-card .lbl { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+    .stat-card.c-projects .num { color: #38bdf8; }
+    .stat-card.c-tasks .num { color: #a78bfa; }
+    .stat-card.c-doing .num { color: #60a5fa; }
+    .stat-card.c-todo .num { color: #94a3b8; }
+    .stat-card.c-done .num { color: #34d399; }
+    .stat-card.c-overdue .num { color: #f87171; }
+    .stat-card.c-blocked .num { color: #fbbf24; }
+
+    /* ===== 主内容双栏 ===== */
+    .main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1.4fr;
+      gap: 16px;
+      min-height: 0;
+    }
+    .panel {
+      display: flex;
+      flex-direction: column;
+      background: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .panel-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px;
+      background: rgba(30, 41, 59, 0.8);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+      flex-shrink: 0;
+    }
+    .panel-head h2 { font-size: 18px; font-weight: 600; }
+    .panel-head h2 i { margin-right: 8px; }
+    .panel-head .count {
+      font-size: 13px; color: #64748b;
+      padding: 4px 12px; background: rgba(51, 65, 85, 0.6); border-radius: 20px;
+    }
+    .panel-head.projects h2 i { color: #38bdf8; }
+    .panel-head.tasks h2 i { color: #a78bfa; }
+
+    .scroll-viewport {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      mask-image: linear-gradient(to bottom, transparent 0%, #000 3%, #000 97%, transparent 100%);
+    }
+    .scroll-track {
+      animation: scrollUp var(--scroll-duration, 120s) linear infinite;
+    }
+    .scroll-track:hover { animation-play-state: paused; }
+
+    @keyframes scrollUp {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(-50%); }
+    }
+
+    /* ===== 项目卡片 ===== */
+    .project-card {
+      margin: 10px 16px;
+      padding: 16px 18px;
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid rgba(148, 163, 184, 0.1);
+      border-radius: 12px;
+      border-left: 4px solid #38bdf8;
+    }
+    .project-card.status-active { border-left-color: #3b82f6; }
+    .project-card.status-done { border-left-color: #10b981; opacity: 0.85; }
+    .project-card.status-planning { border-left-color: #64748b; }
+    .project-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+    .project-name { font-size: 17px; font-weight: 600; color: #f1f5f9; }
+    .project-status {
+      font-size: 11px; padding: 3px 10px; border-radius: 20px; white-space: nowrap;
+      background: rgba(59, 130, 246, 0.2); color: #93c5fd;
+    }
+    .project-meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: #94a3b8; margin-bottom: 10px; }
+    .project-meta span i { margin-right: 4px; width: 14px; text-align: center; }
+    .progress-row { display: flex; align-items: center; gap: 10px; }
+    .progress-bar {
+      flex: 1; height: 6px; background: rgba(51, 65, 85, 0.8); border-radius: 3px; overflow: hidden;
+    }
+    .progress-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #38bdf8, #6366f1); transition: width 0.6s; }
+    .progress-pct { font-size: 13px; font-weight: 700; color: #38bdf8; min-width: 42px; text-align: right; }
+    .project-tags { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .ptag { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: rgba(51, 65, 85, 0.6); color: #cbd5e1; }
+
+    /* ===== 任务行 ===== */
+    .task-row {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr 0.7fr 0.7fr 0.6fr 0.6fr;
+      gap: 8px;
+      align-items: center;
+      padding: 12px 20px;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+      font-size: 13px;
+    }
+    .task-row:nth-child(even) { background: rgba(30, 41, 59, 0.35); }
+    .task-title { font-weight: 500; color: #f1f5f9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .task-project { color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .task-assignee { color: #cbd5e1; }
+    .task-date { color: #94a3b8; font-variant-numeric: tabular-nums; font-size: 12px; }
+    .badge {
+      display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 4px;
+      font-weight: 600; text-align: center; white-space: nowrap;
+    }
+    .badge-todo { background: rgba(100, 116, 139, 0.3); color: #cbd5e1; }
+    .badge-doing { background: rgba(59, 130, 246, 0.25); color: #93c5fd; }
+    .badge-done { background: rgba(16, 185, 129, 0.25); color: #6ee7b7; }
+    .badge-overdue { background: rgba(239, 68, 68, 0.25); color: #fca5a5; }
+    .badge-blocked { background: rgba(245, 158, 11, 0.25); color: #fcd34d; }
+    .badge-paused { background: rgba(100, 116, 139, 0.25); color: #94a3b8; }
+    .priority-urgent { color: #f87171; }
+    .priority-important { color: #fbbf24; }
+    .priority-normal { color: #64748b; }
+
+    .task-header {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr 0.7fr 0.7fr 0.6fr 0.6fr;
+      gap: 8px;
+      padding: 10px 20px;
+      background: rgba(30, 41, 59, 0.9);
+      font-size: 12px; font-weight: 600; color: #64748b;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+      flex-shrink: 0;
+    }
+
+    /* ===== 底栏 ===== */
+    .footer {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 16px; font-size: 12px; color: #475569;
+      flex-shrink: 0;
+    }
+    .footer .refresh-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: #34d399; margin-right: 6px; animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* ===== 加载 / 错误 ===== */
+    .overlay {
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(2, 6, 23, 0.92);
+    }
+    .overlay.hidden { display: none; }
+    .overlay-box {
+      text-align: center; max-width: 480px; padding: 40px;
+      background: rgba(30, 41, 59, 0.9); border-radius: 20px;
+      border: 1px solid rgba(148, 163, 184, 0.15);
+    }
+    .overlay-box i { font-size: 48px; color: #f59e0b; margin-bottom: 16px; }
+    .overlay-box h2 { font-size: 20px; margin-bottom: 12px; }
+    .overlay-box p { font-size: 14px; color: #94a3b8; line-height: 1.7; }
+    .overlay-box code {
+      display: block; margin-top: 16px; padding: 12px;
+      background: rgba(15, 23, 42, 0.8); border-radius: 8px;
+      font-size: 12px; color: #38bdf8; word-break: break-all;
+    }
+    .spinner {
+      width: 48px; height: 48px; border: 4px solid rgba(148, 163, 184, 0.2);
+      border-top-color: #f59e0b; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 0 auto 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="loadingOverlay" class="overlay">
+    <div class="overlay-box">
+      <div class="spinner"></div>
+      <h2>正在加载数据…</h2>
+      <p>从恒慧管服务端拉取项目与末级任务</p>
+    </div>
+  </div>
+  <div id="errorOverlay" class="overlay hidden">
+    <div class="overlay-box">
+      <i class="fas fa-exclamation-triangle"></i>
+      <h2 id="errorTitle">无法加载</h2>
+      <p id="errorMsg"></p>
+      <code id="errorHint"></code>
+    </div>
+  </div>
+
+  <div class="screen" id="screen" style="visibility:hidden;">
+    <header class="header">
+      <div class="header-left">
+        <div class="logo"><i class="fas fa-shield-alt"></i></div>
+        <div class="title-block">
+          <h1>恒慧管 · 项目任务滚动大屏</h1>
+          <p>全公司项目概览 · 末级任务实时展示</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="clock" id="clock">--:--:--</div>
+        <div class="clock-sub" id="dateStr">----年--月--日 星期-</div>
+      </div>
+    </header>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="main">
+      <section class="panel">
+        <div class="panel-head projects">
+          <h2><i class="fas fa-folder-open"></i>全部项目</h2>
+          <span class="count" id="projectCount">0 个项目</span>
+        </div>
+        <div class="scroll-viewport" id="projectViewport">
+          <div class="scroll-track" id="projectTrack"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head tasks">
+          <h2><i class="fas fa-tasks"></i>末级任务</h2>
+          <span class="count" id="taskCount">0 个任务</span>
+        </div>
+        <div class="task-header">
+          <span>任务名称</span><span>所属项目</span><span>负责人</span><span>截止日期</span><span>状态</span><span>优先级</span>
+        </div>
+        <div class="scroll-viewport" id="taskViewport">
+          <div class="scroll-track" id="taskTrack"></div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="footer">
+      <span><span class="refresh-dot"></span><span id="refreshInfo">每 60 秒自动刷新</span></span>
+      <span id="serverTime">服务端时间：--</span>
+    </footer>
+  </div>
+
+  <script>
+    const REFRESH_MS = 60 * 1000;
+    const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+    /** 双击本地 HTML 时的默认服务端（可通过 URL ?server= 覆盖） */
+    const DEFAULT_SERVER = 'http://192.168.222.26:3000';
+
+    let API_BASE = '/api';
+    let authHeaders = {};
+    let refreshTimer = null;
+
+    function $(id) { return document.getElementById(id); }
+
+    function showError(title, msg, hint) {
+      $('loadingOverlay').classList.add('hidden');
+      $('errorOverlay').classList.remove('hidden');
+      $('errorTitle').textContent = title;
+      $('errorMsg').textContent = msg;
+      $('errorHint').textContent = hint || '';
+    }
+
+    function resolveApiBase() {
+      const params = new URLSearchParams(location.search);
+      const serverParam = (params.get('server') || localStorage.getItem('wall_server') || '').trim();
+
+      if (location.protocol === 'http:' || location.protocol === 'https:') {
+        return location.origin + '/api';
+      }
+
+      if (location.protocol === 'file:') {
+        if (serverParam) {
+          const base = serverParam.replace(/\/+$/, '');
+          localStorage.setItem('wall_server', base);
+          return base + '/api';
+        }
+        return null;
+      }
+
+      if (serverParam) {
+        return serverParam.replace(/\/+$/, '') + '/api';
+      }
+      return '/api';
+    }
+
+    function getWallAccessExamples() {
+      const params = new URLSearchParams(location.search);
+      const server = (params.get('server') || localStorage.getItem('wall_server') || DEFAULT_SERVER).replace(/\/+$/, '');
+      const origin = (location.protocol === 'http:' || location.protocol === 'https:')
+        ? location.origin
+        : server;
+      return [
+        '推荐（通过服务器访问）：',
+        origin + '/wall?key=<API_KEY>',
+        '',
+        '若必须打开本地 HTML 文件：',
+        'file://.../滚动大屏.html?server=' + server + '&key=<API_KEY>',
+        '',
+        'API_KEY 见 server/.env 中的 API_KEY',
+      ].join('\n');
+    }
+
+    function parseParams() {
+      const p = new URLSearchParams(location.search);
+      const keyFromUrl = p.get('key') || '';
+      if (keyFromUrl) localStorage.setItem('wall_api_key', keyFromUrl);
+      return {
+        key: keyFromUrl || localStorage.getItem('wall_api_key') || '',
+        userid: p.get('userid') || p.get('userId') || p.get('dingTalkUserId') || '',
+      };
+    }
+
+    async function resolveAuth() {
+      API_BASE = resolveApiBase();
+      if (!API_BASE) {
+        throw new Error('请勿直接双击打开 HTML 文件。请通过恒慧管服务器地址访问大屏页面。');
+      }
+
+      const { key, userid } = parseParams();
+      if (key) {
+        authHeaders = { 'X-Api-Key': key };
+        return;
+      }
+      const cached = sessionStorage.getItem('wall_token');
+      if (cached) {
+        authHeaders = { Authorization: 'Bearer ' + cached };
+        return;
+      }
+      if (userid) {
+        const res = await fetch(API_BASE + '/dingtalk/auth/login-by-userid', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dingTalkUserId: userid }),
+        });
+        const data = await res.json();
+        if (!data.success || !data.token) {
+          throw new Error(data.message || '钉钉 userid 登录失败');
+        }
+        sessionStorage.setItem('wall_token', data.token);
+        authHeaders = { Authorization: 'Bearer ' + data.token };
+        return;
+      }
+      throw new Error('缺少访问凭证：请在 URL 中添加 ?key=API密钥');
+    }
+
+    function badgeClass(status) {
+      const map = {
+        todo: 'badge-todo', doing: 'badge-doing', done: 'badge-done',
+        overdue: 'badge-overdue', blocked: 'badge-blocked', paused: 'badge-paused',
+      };
+      return map[status] || 'badge-todo';
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function renderStats(stats) {
+      const items = [
+        { cls: 'c-projects', num: stats.projectCount, lbl: '项目总数' },
+        { cls: 'c-tasks', num: stats.leafTaskCount, lbl: '末级任务' },
+        { cls: 'c-doing', num: stats.doing, lbl: '进行中' },
+        { cls: 'c-todo', num: stats.todo, lbl: '待开始' },
+        { cls: 'c-done', num: stats.done, lbl: '已完成' },
+        { cls: 'c-overdue', num: stats.overdue, lbl: '已延期' },
+        { cls: 'c-blocked', num: stats.blocked, lbl: '阻塞中' },
+      ];
+      $('stats').innerHTML = items.map(it => `
+        <div class="stat-card ${it.cls}">
+          <div class="num">${it.num}</div>
+          <div class="lbl">${it.lbl}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderProjects(projects) {
+      $('projectCount').textContent = projects.length + ' 个项目';
+      if (!projects.length) {
+        $('projectTrack').innerHTML = '<div style="padding:40px;text-align:center;color:#64748b;">暂无项目</div>';
+        return;
+      }
+      const cards = projects.map(p => `
+        <div class="project-card status-${p.status || 'planning'}">
+          <div class="project-top">
+            <div class="project-name">${escapeHtml(p.name)}</div>
+            <span class="project-status">${escapeHtml(p.statusLabel)}</span>
+          </div>
+          <div class="project-meta">
+            <span><i class="fas fa-building"></i>${escapeHtml(p.dept)}</span>
+            <span><i class="fas fa-user"></i>${escapeHtml(p.manager)}</span>
+            <span><i class="fas fa-calendar"></i>${escapeHtml(p.startDate || '-')} ~ ${escapeHtml(p.endDate || '-')}</span>
+          </div>
+          <div class="progress-row">
+            <div class="progress-bar"><div class="progress-fill" style="width:${p.leafProgress}%"></div></div>
+            <span class="progress-pct">${p.leafProgress}%</span>
+          </div>
+          <div class="project-tags">
+            <span class="ptag">末级 ${p.leafCount}</span>
+            <span class="ptag">完成 ${p.doneCount}</span>
+            <span class="ptag">进行 ${p.doingCount}</span>
+            ${p.overdueCount ? `<span class="ptag" style="color:#f87171;">延期 ${p.overdueCount}</span>` : ''}
+            ${p.blockedCount ? `<span class="ptag" style="color:#fbbf24;">阻塞 ${p.blockedCount}</span>` : ''}
+          </div>
+        </div>
+      `).join('');
+      const track = $('projectTrack');
+      track.innerHTML = cards + cards;
+      const duration = Math.max(60, projects.length * 6);
+      track.style.setProperty('--scroll-duration', duration + 's');
+    }
+
+    function renderTasks(tasks) {
+      $('taskCount').textContent = tasks.length + ' 个末级任务';
+      if (!tasks.length) {
+        $('taskTrack').innerHTML = '<div style="padding:40px;text-align:center;color:#64748b;">暂无末级任务</div>';
+        return;
+      }
+      const rows = tasks.map(t => `
+        <div class="task-row">
+          <div class="task-title" title="${escapeHtml(t.title)}">${escapeHtml(t.title)}</div>
+          <div class="task-project" title="${escapeHtml(t.projectName)}">${escapeHtml(t.projectName)}</div>
+          <div class="task-assignee">${escapeHtml(t.assignee)}</div>
+          <div class="task-date">${escapeHtml(t.dueDate || '-')}</div>
+          <div><span class="badge ${badgeClass(t.displayStatus)}">${escapeHtml(t.statusLabel)}</span></div>
+          <div class="priority-${t.priority}">${escapeHtml(t.priorityLabel)}</div>
+        </div>
+      `).join('');
+      const track = $('taskTrack');
+      track.innerHTML = rows + rows;
+      const duration = Math.max(80, tasks.length * 2.5);
+      track.style.setProperty('--scroll-duration', duration + 's');
+    }
+
+    async function fetchData() {
+      const res = await fetch(API_BASE + '/display/wall', { headers: authHeaders });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || '加载失败');
+      return data;
+    }
+
+    async function loadAndRender() {
+      const data = await fetchData();
+      renderStats(data.stats);
+      renderProjects(data.projects);
+      renderTasks(data.leafTasks);
+      $('serverTime').textContent = '服务端时间：' + new Date(data.serverTime).toLocaleString('zh-CN');
+      $('loadingOverlay').classList.add('hidden');
+      $('errorOverlay').classList.add('hidden');
+      $('screen').style.visibility = 'visible';
+    }
+
+    function updateClock() {
+      const now = new Date();
+      $('clock').textContent = now.toLocaleTimeString('zh-CN', { hour12: false });
+      $('dateStr').textContent = now.toLocaleDateString('zh-CN', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      }) + ' 星期' + WEEKDAYS[now.getDay()];
+    }
+
+    async function bootstrap() {
+      updateClock();
+      setInterval(updateClock, 1000);
+
+      try {
+        await resolveAuth();
+        await loadAndRender();
+        refreshTimer = setInterval(async () => {
+          try {
+            await loadAndRender();
+            $('refreshInfo').textContent = '已更新 · 每 60 秒自动刷新';
+          } catch (e) {
+            console.warn('[大屏] 刷新失败', e);
+            $('refreshInfo').textContent = '刷新失败，60 秒后重试';
+          }
+        }, REFRESH_MS);
+      } catch (e) {
+        showError(
+          location.protocol === 'file:' ? '请通过服务器访问' : '无法连接服务端',
+          e.message || String(e),
+          getWallAccessExamples()
+        );
+      }
+    }
+
+    bootstrap();
+  </script>
+</body>
+</html>

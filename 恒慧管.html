@@ -442,6 +442,7 @@
     .status-todo { background: #F3F4F6; color: #6B7280; }
     .status-doing { background: #DBEAFE; color: #2563EB; }
     .status-done { background: #D1FAE5; color: #059669; }
+    .status-abolished { background: #F3F4F6; color: #9CA3AF; }
     .status-overdue { background: #FEE2E2; color: #DC2626; }
     .status-blocked { background: #FEF3C7; color: #D97706; }
     .dep-badges { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; vertical-align: middle; }
@@ -453,6 +454,46 @@
     .dep-badge.dep-cross { background: #E2E8F0; color: #64748B; }
     .dep-badge.dep-warn { background: #FEE2E2; color: #DC2626; }
     .task-dep-blocked-row { background: #FFFBEB !important; border-color: #FDE68A !important; }
+
+    /* ========== 协办人多选下拉 ========== */
+    .collab-ms { position: relative; }
+    .collab-ms-trigger {
+      width: 100%; min-height: 38px; padding: 8px 32px 8px 12px;
+      border: 1px solid #E5E7EB; border-radius: 8px; background: #fff;
+      text-align: left; cursor: pointer; font-size: 13px; color: #374151;
+      position: relative; line-height: 1.4;
+    }
+    .collab-ms-trigger:hover:not(:disabled) { border-color: #CBD5E1; }
+    .collab-ms-trigger.open { border-color: #2563EB; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+    .collab-ms-trigger:disabled { background: #F3F4F6; cursor: not-allowed; color: #9CA3AF; }
+    .collab-ms-trigger .chevron {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      color: #9CA3AF; font-size: 11px; transition: transform 0.2s;
+    }
+    .collab-ms-trigger.open .chevron { transform: translateY(-50%) rotate(180deg); }
+    .collab-ms-backdrop { position: fixed; inset: 0; z-index: 119; background: transparent; }
+    .collab-ms-panel {
+      position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+      max-height: 240px; overflow-y: auto;
+      background: #fff; border: 1px solid #E5E7EB; border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(15,23,42,0.14); z-index: 120; padding: 6px;
+    }
+    .collab-ms-option {
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      border-radius: 6px; cursor: pointer; font-size: 13px; user-select: none;
+    }
+    .collab-ms-option:hover { background: #F9FAFB; }
+    .collab-ms-option.selected { background: #EFF6FF; }
+    .collab-ms-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .collab-ms-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; padding: 2px 8px; background: #EFF6FF; color: #2563EB; border-radius: 4px;
+    }
+    .collab-ms-tag button {
+      border: none; background: none; color: #93C5FD; cursor: pointer; padding: 0; font-size: 12px; line-height: 1;
+    }
+    .collab-ms-tag button:hover { color: #DC2626; }
+
     .status-dueSoon { background: #FEF3C7; color: #D97706; }
     .status-paused { background: #E5E7EB; color: #6B7280; }
     .status-rejected { background: #FEF3C7; color: #D97706; }
@@ -527,10 +568,11 @@
       return !!(user && user.id);
     }
 
-    /** 是否与项目相关（负责人/创建人，或参与其下任务） */
+    /** 是否与项目相关（负责人/创建人/团队成员，或参与其下任务） */
     function isRelatedToProject(project) {
       if (!project) return false;
       if (project.manager === currentUser.name || project.creator === currentUser.name) return true;
+      if (Array.isArray(project.teamMembers) && project.teamMembers.includes(currentUser.name)) return true;
       return getMyRelatedTasks().some(t => t.projectId === project.id);
     }
 
@@ -541,7 +583,7 @@
 
     /** 当前用户可查看的已归档项目 */
     function getViewableArchivedProjects() {
-      return projects.filter(p => p.archived);
+      return projects.filter(p => isProjectArchived(p));
     }
 
     function canViewProject(project) {
@@ -623,17 +665,18 @@
         a.dept.localeCompare(b.dept, 'zh-CN') || a.name.localeCompare(b.name, 'zh-CN'));
     }
 
-    /** 任务负责人：本部门全员 + 信息中心全员（总经理/管理员可选全员） */
+    /** 任务负责人：可选人员档案中的任意人员 */
     function getTaskAssigneeCandidates() {
-      if (isFullAccess(currentUser.role)) return sortUsersForSelect(users);
-      return sortUsersForSelect(uniqueUsersById(
-        users.filter(u => u.dept === currentUser.dept || u.dept === INFO_CENTER_DEPT)
-      ));
+      return sortUsersForSelect(uniqueUsersById(getStaffDirectoryUsers()));
     }
 
-    /** 任务协办人：始终可选全员（不受页签、部门、角色限制） */
+    function getStaffDirectoryUsers() {
+      return allStaffUsers.length ? allStaffUsers : users;
+    }
+
+    /** 任务协办人：可选人员档案中的任意人员 */
     function getTaskCollaboratorCandidates() {
-      return sortUsersForSelect(users);
+      return getTaskAssigneeCandidates();
     }
 
     /** 项目负责人：信息中心全员 + 本部门全员（含执行人员）+ 各部门经理/总经理/管理员 */
@@ -651,6 +694,103 @@
           isFullAccess(u.role)
         )
       ));
+    }
+
+    function sanitizeProjectTeamMembers(manager, teamMembers) {
+      return [...new Set((teamMembers || []).filter(n => n && n !== manager))];
+    }
+
+    function getProjectTeamMembersForm() {
+      if (!Array.isArray(state.form.teamMembers)) state.form.teamMembers = [];
+      return state.form.teamMembers;
+    }
+
+    function getProjectTeamCandidates(managerName) {
+      return getTaskAssigneeCandidates().filter(u => u.name !== managerName);
+    }
+
+    function toggleProjectTeamDropdown() {
+      const formKey = 'projectTeamMembers';
+      if (state.collabDropdownOpen === formKey) state.collabDropdownOpen = null;
+      else state.collabDropdownOpen = formKey;
+      refreshProjectTeamMultiSelect();
+    }
+
+    function toggleProjectTeamMember(name) {
+      const list = getProjectTeamMembersForm();
+      const idx = list.indexOf(name);
+      if (idx >= 0) list.splice(idx, 1);
+      else list.push(name);
+      state.collabDropdownOpen = 'projectTeamMembers';
+      refreshProjectTeamMultiSelect();
+    }
+
+    function removeProjectTeamMember(name) {
+      state.form.teamMembers = getProjectTeamMembersForm().filter(n => n !== name);
+      refreshProjectTeamMultiSelect();
+    }
+
+    function refreshProjectTeamMultiSelect() {
+      const host = document.querySelector('[data-project-team-ms-host]');
+      if (!host) {
+        render();
+        return;
+      }
+      const scrollPos = captureUiScrollPositions();
+      host.innerHTML = renderProjectTeamMultiSelect(
+        getProjectTeamMembersForm(),
+        state.form.manager || currentUser.name,
+        false
+      );
+      restoreUiScrollPositions(scrollPos);
+    }
+
+    function renderProjectTeamMultiSelect(selectedNames, managerName, disabled) {
+      const formKey = 'projectTeamMembers';
+      const selected = selectedNames || [];
+      const selectedSet = new Set(selected);
+      const isOpen = state.collabDropdownOpen === formKey;
+      const candidates = getProjectTeamCandidates(managerName || currentUser.name);
+
+      const triggerLabel = selected.length === 0
+        ? '请选择（可多选）'
+        : (selected.length <= 2 ? selected.join('、') : `已选 ${selected.length} 人`);
+
+      if (!candidates.length) {
+        return '<div style="padding:10px;color:#9CA3AF;font-size:12px;border:1px solid #E5E7EB;border-radius:8px;">无可选人员</div>';
+      }
+
+      return `
+        <div class="collab-ms">
+          ${isOpen ? '<div class="collab-ms-backdrop" onclick="closeCollabDropdown()"></div>' : ''}
+          <button type="button" class="collab-ms-trigger${isOpen ? ' open' : ''}" ${disabled ? 'disabled' : ''}
+            onclick="event.stopPropagation();toggleProjectTeamDropdown()">
+            <span style="color:${selected.length ? '#374151' : '#9CA3AF'};">${escapeHtml(triggerLabel)}</span>
+            <i class="fas fa-chevron-down chevron"></i>
+          </button>
+          ${isOpen ? `
+            <div class="collab-ms-panel" onclick="event.stopPropagation()">
+              ${candidates.map(u => `
+                <label class="collab-ms-option${selectedSet.has(u.name) ? ' selected' : ''}">
+                  <input type="checkbox" ${selectedSet.has(u.name) ? 'checked' : ''}
+                    onchange='toggleProjectTeamMember(${JSON.stringify(u.name)})'>
+                  <span>${formatUserOptionLabel(u)}</span>
+                </label>
+              `).join('')}
+            </div>
+          ` : ''}
+          ${selected.length ? `
+            <div class="collab-ms-tags">
+              ${selected.map(name => `
+                <span class="collab-ms-tag">
+                  ${escapeHtml(name)}
+                  ${disabled ? '' : `<button type="button" title="移除" onclick='removeProjectTeamMember(${JSON.stringify(name)})'>&times;</button>`}
+                </span>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `;
     }
 
     function formatUserOptionLabel(u) {
@@ -737,55 +877,182 @@
         || null;
     }
 
-    function upsertCollaboratorEntry(task, type, userName, opts = {}) {
+    function normalizeCollaboratorNames(raw, assignee) {
+      const list = Array.isArray(raw)
+        ? raw
+        : (typeof raw === 'string' && raw.trim()
+          ? raw.split(/[,，、;；|/\s]+/).map(s => s.trim())
+          : []);
+      return [...new Set(list.filter(n => n && n !== assignee))];
+    }
+
+    function getTaskFormCollaboratorNames(task, type, form = state.form) {
+      const pluralKey = type === COLLAB_TYPE_INFORM ? 'informCollaborators' : 'assistCollaborators';
+      const legacyKey = type === COLLAB_TYPE_INFORM ? 'informCollaborator' : 'assistCollaborator';
+      if (Array.isArray(form?.[pluralKey])) return form[pluralKey].slice();
+      if (form?.[legacyKey]) return [form[legacyKey]];
+      return getCollaboratorEntries(task, { type, excludeRejected: true }).map(e => e.userName);
+    }
+
+    function initTaskFormCollaborators(task) {
       ensureCollaboratorEntries(task);
-      if (!userName || userName === task.assignee) {
-        task.collaboratorEntries = (task.collaboratorEntries || []).filter(e => e.type !== type);
-        syncCollaboratorsArray(task);
-        return null;
+      return {
+        ...task,
+        informCollaborators: getCollaboratorEntries(task, { type: COLLAB_TYPE_INFORM, excludeRejected: true }).map(e => e.userName),
+        assistCollaborators: getCollaboratorEntries(task, { type: COLLAB_TYPE_ASSIST, excludeRejected: true }).map(e => e.userName),
+      };
+    }
+
+    function toggleCollabDropdown(formKey) {
+      if (state.collabDropdownOpen === formKey) state.collabDropdownOpen = null;
+      else state.collabDropdownOpen = formKey;
+      refreshCollaboratorMultiSelects();
+    }
+
+    function closeCollabDropdown() {
+      if (!state.collabDropdownOpen) return;
+      state.collabDropdownOpen = null;
+      refreshCollaboratorMultiSelects();
+    }
+
+    function toggleFormCollaborator(formKey, name) {
+      if (!Array.isArray(state.form[formKey])) state.form[formKey] = [];
+      const idx = state.form[formKey].indexOf(name);
+      if (idx >= 0) state.form[formKey].splice(idx, 1);
+      else state.form[formKey].push(name);
+      state.collabDropdownOpen = formKey;
+      refreshCollaboratorMultiSelects();
+    }
+
+    function removeFormCollaborator(formKey, name) {
+      if (!Array.isArray(state.form[formKey])) return;
+      state.form[formKey] = state.form[formKey].filter(n => n !== name);
+      refreshCollaboratorMultiSelects();
+    }
+
+    function getCollaboratorMultiSelectContext() {
+      const task = tasks.find(t => t.id === state.form.id) || state.form;
+      const assigneeName = task.assignee || state.form.assignee || currentUser.name;
+      const canEdit = !state.form.id || canOperateTask(tasks.find(t => t.id === state.form.id) || task);
+      return {
+        task,
+        assigneeName,
+        disabled: !canEdit,
+        informNames: getTaskFormCollaboratorNames(task, COLLAB_TYPE_INFORM),
+        assistNames: getTaskFormCollaboratorNames(task, COLLAB_TYPE_ASSIST),
+      };
+    }
+
+    /** 仅刷新协办人多选区域，避免整页 render 导致弹窗滚回顶部 */
+    function refreshCollaboratorMultiSelects() {
+      const modalBody = document.querySelector('.modal-overlay .modal-body');
+      const informHost = modalBody?.querySelector('[data-collab-ms-host="inform"]');
+      const assistHost = modalBody?.querySelector('[data-collab-ms-host="assist"]');
+      if (!informHost && !assistHost) {
+        render();
+        return;
       }
-      const otherName = getCollaboratorEntries(task, {
-        type: type === COLLAB_TYPE_INFORM ? COLLAB_TYPE_ASSIST : COLLAB_TYPE_INFORM,
-        excludeRejected: true,
-      })[0]?.userName;
-      if (otherName === userName) {
-        throw new Error('同一人不能同时担任告知性与辅助性协办人');
+      const scrollPos = captureUiScrollPositions();
+      const ctx = getCollaboratorMultiSelectContext();
+      if (informHost) {
+        informHost.innerHTML = renderCollaboratorMultiSelect(
+          COLLAB_TYPE_INFORM, ctx.informNames, ctx.assigneeName, ctx.assistNames, ctx.disabled
+        );
       }
-      let entry = (task.collaboratorEntries || []).find(e => e.type === type);
-      const isNewAssist = type === COLLAB_TYPE_ASSIST && (!entry || entry.userName !== userName);
-      if (!entry) {
-        entry = {
+      if (assistHost) {
+        assistHost.innerHTML = renderCollaboratorMultiSelect(
+          COLLAB_TYPE_ASSIST, ctx.assistNames, ctx.assigneeName, ctx.informNames, ctx.disabled
+        );
+      }
+      restoreUiScrollPositions(scrollPos);
+    }
+
+    function renderCollaboratorMultiSelect(type, selectedNames, assigneeName, excludeNames, disabled) {
+      const formKey = type === COLLAB_TYPE_INFORM ? 'informCollaborators' : 'assistCollaborators';
+      const selected = selectedNames || [];
+      const selectedSet = new Set(selected);
+      const exclude = new Set(excludeNames || []);
+      const isOpen = state.collabDropdownOpen === formKey;
+      const candidates = getTaskCollaboratorCandidates()
+        .filter(u => u.name !== assigneeName && !exclude.has(u.name));
+
+      const triggerLabel = selected.length === 0
+        ? '请选择（可多选）'
+        : (selected.length <= 2 ? selected.join('、') : `已选 ${selected.length} 人`);
+
+      if (!candidates.length) {
+        return '<div style="padding:10px;color:#9CA3AF;font-size:12px;border:1px solid #E5E7EB;border-radius:8px;">无可选人员</div>';
+      }
+
+      return `
+        <div class="collab-ms">
+          ${isOpen ? '<div class="collab-ms-backdrop" onclick="closeCollabDropdown()"></div>' : ''}
+          <button type="button" class="collab-ms-trigger${isOpen ? ' open' : ''}" ${disabled ? 'disabled' : ''}
+            onclick="event.stopPropagation();toggleCollabDropdown('${formKey}')">
+            <span style="color:${selected.length ? '#374151' : '#9CA3AF'};">${escapeHtml(triggerLabel)}</span>
+            <i class="fas fa-chevron-down chevron"></i>
+          </button>
+          ${isOpen ? `
+            <div class="collab-ms-panel" onclick="event.stopPropagation()">
+              ${candidates.map(u => `
+                <label class="collab-ms-option${selectedSet.has(u.name) ? ' selected' : ''}">
+                  <input type="checkbox" ${selectedSet.has(u.name) ? 'checked' : ''}
+                    onchange='toggleFormCollaborator("${formKey}", ${JSON.stringify(u.name)})'>
+                  <span>${formatUserOptionLabel(u)}</span>
+                </label>
+              `).join('')}
+            </div>
+          ` : ''}
+          ${selected.length ? `
+            <div class="collab-ms-tags">
+              ${selected.map(name => `
+                <span class="collab-ms-tag">
+                  ${escapeHtml(name)}
+                  ${disabled ? '' : `<button type="button" title="移除" onclick='removeFormCollaborator("${formKey}", ${JSON.stringify(name)})'>&times;</button>`}
+                </span>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function syncCollaboratorsByType(task, type, userNames, opts = {}) {
+      ensureCollaboratorEntries(task);
+      const names = normalizeCollaboratorNames(userNames, task.assignee);
+      const otherType = type === COLLAB_TYPE_INFORM ? COLLAB_TYPE_ASSIST : COLLAB_TYPE_INFORM;
+      for (const name of names) {
+        if (getCollaboratorEntries(task, { type: otherType, userName: name, excludeRejected: true }).length > 0) {
+          throw new Error(`「${name}」已担任${collabTypeLabel(otherType)}协办，不能同时选为${collabTypeLabel(type)}协办`);
+        }
+      }
+
+      const prevOfType = (task.collaboratorEntries || []).filter(e => e.type === type);
+      const prevNames = new Set(prevOfType.map(e => e.userName));
+      const nameSet = new Set(names);
+
+      task.collaboratorEntries = (task.collaboratorEntries || []).filter(e => e.type !== type || nameSet.has(e.userName));
+
+      for (const name of names) {
+        if ((task.collaboratorEntries || []).some(e => e.type === type && e.userName === name)) continue;
+        const entry = {
           id: genId('COL'),
-          userName,
+          userName: name,
           type,
           status: type === COLLAB_TYPE_ASSIST ? COLLAB_STATUS_PENDING : COLLAB_STATUS_ACTIVE,
         };
         task.collaboratorEntries.push(entry);
-      } else {
-        const userChanged = entry.userName !== userName;
-        entry.userName = userName;
-        if (type === COLLAB_TYPE_INFORM) {
-          entry.status = COLLAB_STATUS_ACTIVE;
-          entry.planStartDate = null;
-          entry.planEndDate = null;
-          entry.estimatedHours = 0;
-        } else if (userChanged || entry.status === COLLAB_STATUS_REJECTED) {
-          entry.status = COLLAB_STATUS_PENDING;
-          entry.planStartDate = null;
-          entry.planEndDate = null;
-          entry.estimatedHours = 0;
-          entry.proposedAt = null;
-          entry.proposedNote = null;
-          entry.reviewedBy = null;
-          entry.reviewedAt = null;
-          entry.reviewNote = null;
+        if (type === COLLAB_TYPE_ASSIST && opts.notify !== false && !prevNames.has(name)) {
+          notifyCollaboratorAssistRequest(task, entry);
         }
       }
-      if (isNewAssist || (type === COLLAB_TYPE_ASSIST && entry.status === COLLAB_STATUS_PENDING && opts.notify !== false)) {
-        notifyCollaboratorAssistRequest(task, entry);
-      }
       syncCollaboratorsArray(task);
-      return entry;
+      return task.collaboratorEntries.filter(e => e.type === type);
+    }
+
+    function upsertCollaboratorEntry(task, type, userName, opts = {}) {
+      const names = userName ? [userName] : [];
+      return syncCollaboratorsByType(task, type, names, opts);
     }
 
     function isInformCollaborator(task, userName = currentUser.name) {
@@ -853,7 +1120,7 @@
       { id: 'U005', name: '刘易', dept: '规划建设部', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '3534416912677627' },
       { id: 'U006', name: '黄艳', dept: '实施交付部', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '21043656561293359' },
       { id: 'U007', name: '吴志伟', dept: '研发集成部', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '093551554921496156' },
-      { id: 'U008', name: '张俊官', dept: '网络运维部', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '081324474424058926' },
+      { id: 'U008', name: '张俊官', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '081324474424058926' },
       { id: 'U009', name: '钱广', dept: 'AI创新部', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '0164024035201204206' },
       { id: 'U010', name: '陈璇  Chenxuan', dept: '项目管控部', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '418924990' },
       { id: 'U011', name: '吕腾飞', dept: '规划建设部', role: 'staff', position: '执行人员', leaderId: 'U005', standardWeekHours: 60, dingTalkUserId: '010338552721752309' },
@@ -874,15 +1141,17 @@
       { id: 'U026', name: '马明晶', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: 'U007', standardWeekHours: 60, dingTalkUserId: '085040485938826388' },
       { id: 'U027', name: '张政', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: 'U007', standardWeekHours: 60, dingTalkUserId: '686062681' },
       { id: 'U028', name: '任双', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: 'U007', standardWeekHours: 60, dingTalkUserId: '538187641' },
-      { id: 'U029', name: '季橙成', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U008', standardWeekHours: 60, dingTalkUserId: '180206100123351674' },
-      { id: 'U030', name: '李天硕', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U008', standardWeekHours: 60, dingTalkUserId: '980952307' },
-      { id: 'U031', name: '朱磊', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U008', standardWeekHours: 60, dingTalkUserId: '49642046' },
-      { id: 'U032', name: '孙坤毫', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U008', standardWeekHours: 60, dingTalkUserId: '733909115' },
-      { id: 'U033', name: '周骋骋', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U008', standardWeekHours: 60, dingTalkUserId: '454227911' },
-      { id: 'U034', name: '李明海', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U008', standardWeekHours: 60, dingTalkUserId: '82849151' },
+      { id: 'U029', name: '季橙成', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '180206100123351674' },
+      { id: 'U030', name: '李天硕', dept: '网络运维部', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '980952307' },
+      { id: 'U031', name: '朱磊', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '49642046' },
+      { id: 'U032', name: '孙坤毫', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '733909115' },
+      { id: 'U033', name: '周骋骋', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '454227911' },
+      { id: 'U034', name: '李明海', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '82849151' },
       { id: 'U035', name: '刘俊豪', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: 'U009', standardWeekHours: 60, dingTalkUserId: '484147694' },
       { id: 'U036', name: '陈运来', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: 'U009', standardWeekHours: 60, dingTalkUserId: '204240620' },
     ];
+    /** 人员档案全量（协办人选人等场景用，不受角色/部门页签限制） */
+    let allStaffUsers = users.slice();
 
     // 当前用户
     let currentUser = users.find(u => u.name === '王元斌') || users[17];
@@ -1200,8 +1469,12 @@
       return daysUntilDue >= 0 && daysUntilDue <= 1;
     }
 
-    /** 任务展示用状态：阻塞 > 延期 > 临期 > 业务状态 */
+    /** 任务展示用状态：终态优先，其次阻塞 > 延期 > 临期 > 业务状态 */
     function getTaskDisplayStatus(task) {
+      if (!task) return 'todo';
+      if (task.status === 'abolished' || task.status === 'archived' || task.status === 'rejected' || task.status === 'done' || task.status === 'paused') {
+        return task.status;
+      }
       if (isTaskBlocked(task) && isActiveTaskStatus(task)) return 'blocked';
       if (isOverdue(task)) return 'overdue';
       if (isDueSoon(task)) return 'dueSoon';
@@ -1476,6 +1749,43 @@
       archived: { label: '已归档', color: '#9CA3AF', bg: '#F3F4F6', icon: 'fa-archive' },
     };
 
+    function isProjectArchived(project) {
+      return !!(project && (project.archived === true || project.status === 'archived'));
+    }
+
+    function normalizeProjectRecord(project) {
+      if (!project) return project;
+      if (isProjectArchived(project)) {
+        project.archived = true;
+        project.status = 'archived';
+      } else if (project.archived == null) {
+        project.archived = false;
+      }
+      if (!Array.isArray(project.teamMembers)) project.teamMembers = [];
+      project.teamMembers = sanitizeProjectTeamMembers(project.manager, project.teamMembers);
+      return project;
+    }
+
+    function normalizeAllProjects() {
+      projects.forEach(normalizeProjectRecord);
+    }
+
+    /** 同步时可提交的项目（含已归档，避免归档后无法写回服务端） */
+    function canUserSyncProject(project) {
+      if (!project) return false;
+      if (isFullAccess(currentUser.role)) return true;
+      return project.manager === currentUser.name || project.creator === currentUser.name;
+    }
+
+    /** 同步时可提交的任务（含已作废/已归档，避免终态变更无法写回服务端） */
+    function canUserSyncTask(task) {
+      if (!task) return false;
+      if (isFullAccess(currentUser.role)) return true;
+      if (task.status !== 'archived' && task.status !== 'abolished' && canEditTask(task)) return true;
+      if (canAbolishTask(task)) return true;
+      return false;
+    }
+
     // 优先级定义
     const priorityMap = {
       urgent: { label: '紧急', color: '#DC2626', bg: '#FEE2E2' },
@@ -1503,11 +1813,15 @@
       page: 'dashboard',
       prevPage: null,
       taskTab: 'all',
+      taskScopeTab: 'mine',
+      taskCenterDept: 'all',
       showModal: null,
       form: {},
       roleFilter: 'all',
       // 各页面搜索关键词
       projectSearch: '',
+      projectFilter: 'all',
+      projectDept: 'all',
       taskSearch: '',
       staffSearch: '',
       logSearch: '',
@@ -1520,6 +1834,7 @@
       pendingSystemUpdates: [],
       systemUpdatesList: [],
       systemUpdateSearch: '',
+      collabDropdownOpen: null,
     };
 
     let authSession = {
@@ -1553,11 +1868,15 @@
       /** 从服务端加载：钉钉模式下整表替换，并按角色只保留可见数据 */
       applyServerPayload(data, opts = {}) {
         const mergeUsers = opts.mergeUsers === true;
-        if (Array.isArray(data.projects)) projects = data.projects.slice();
+        if (Array.isArray(data.projects)) {
+          projects = data.projects.slice();
+          normalizeAllProjects();
+        }
         if (Array.isArray(data.tasks)) {
           tasks = data.tasks.slice();
           normalizeAllTaskCollaborators();
         }
+        backfillTaskAttachmentsToProjectsLocal();
         if (Array.isArray(data.taskDependencies)) taskDependencies = data.taskDependencies.slice();
         else if (!taskDependencies.length) taskDependencies = [];
         refreshAllDependencySchedules();
@@ -1577,6 +1896,13 @@
             });
           }
         }
+        if (Array.isArray(data.allUsers) && data.allUsers.length) {
+          allStaffUsers = data.allUsers.slice();
+        } else if (Array.isArray(data.allStaffUsers) && data.allStaffUsers.length) {
+          allStaffUsers = data.allStaffUsers.slice();
+        } else if (Array.isArray(data.users) && data.users.length && !allStaffUsers.length) {
+          allStaffUsers = data.users.slice();
+        }
         const meId = data.currentUserId || currentUser.id;
         const me = users.find(u => u.id === meId)
           || users.find(u => u.dingTalkUserId && u.dingTalkUserId === authSession.dingTalkUserId);
@@ -1591,6 +1917,7 @@
       applyAllUsersFromServer(list) {
         if (!Array.isArray(list)) return;
         users = list.slice();
+        allStaffUsers = list.slice();
         this._serverReady = true;
         const meId = currentUser.id;
         const me = users.find(u => u.id === meId)
@@ -1604,6 +1931,9 @@
           const idx = users.findIndex(u => u.id === saved.id);
           if (idx >= 0) users[idx] = { ...users[idx], ...saved };
           else users.push(saved);
+          const allIdx = allStaffUsers.findIndex(u => u.id === saved.id);
+          if (allIdx >= 0) allStaffUsers[allIdx] = { ...allStaffUsers[allIdx], ...saved };
+          else if (saved?.id) allStaffUsers.push(saved);
         });
         const meId = currentUser.id;
         const me = users.find(u => u.id === meId)
@@ -1647,14 +1977,15 @@
           return false;
         }
         this._syncing = true;
+        backfillTaskAttachmentsToProjectsLocal();
         const includeUsers = !opts.skipUsers && this._serverReady && isFullAccess(currentUser.role);
         const includeManagerUserUpdates = !opts.skipUsers && this._serverReady && currentUser.role === 'manager';
         const syncProjects = isFullAccess(currentUser.role)
           ? projects
-          : projects.filter(p => canManageProject(p));
+          : projects.filter(p => canUserSyncProject(p));
         const syncTasks = isFullAccess(currentUser.role)
           ? tasks
-          : tasks.filter(t => canEditTask(t));
+          : tasks.filter(t => canUserSyncTask(t));
         const syncDeps = isFullAccess(currentUser.role)
           ? taskDependencies
           : taskDependencies.filter(dep => {
@@ -1735,6 +2066,7 @@
           changeLogs,
           transferLogs,
           users,
+          allStaffUsers,
           currentUserId: currentUser.id,
           pushLogs,
           pushSentKeys: [...pushSentKeys],
@@ -1769,16 +2101,30 @@
     function save(opts = {}) {
       persistLocalCache();
       if (ApiConfig.enabled && authSession.token) {
-        DataService.scheduleSave(opts);
+        if (opts.immediateSync) {
+          clearTimeout(DataService._saveTimer);
+          DataService.syncToServer(opts);
+        } else {
+          DataService.scheduleSave(opts);
+        }
       }
     }
 
     function load() {
-      if (ApiConfig.enabled) return;
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return;
         const data = JSON.parse(raw);
+        if (ApiConfig.enabled) {
+          if (data.authSession && typeof data.authSession === 'object') {
+            authSession = { ...authSession, ...data.authSession };
+          }
+          if (data.currentUserId) {
+            const user = users.find(u => u.id === data.currentUserId);
+            if (user) currentUser = user;
+          }
+          return;
+        }
         DataService.mergePayload(data);
         if (Array.isArray(data.taskDependencies)) taskDependencies = data.taskDependencies.slice();
         refreshAllDependencySchedules();
@@ -1797,6 +2143,16 @@
     function seedConfirmTestData() {}
 
     // ========== 辅助函数 ==========
+    /** 是否为末级任务（无下级子任务） */
+    function isLeafTask(task) {
+      if (!task) return false;
+      return !tasks.some(t => t.parentId === task.id);
+    }
+
+    function filterLeafTasks(taskList) {
+      return (taskList || []).filter(isLeafTask);
+    }
+
     function getChildrenCount(taskId) {
       const children = tasks.filter(t => t.parentId === taskId);
       let count = children.length;
@@ -1838,8 +2194,50 @@
       return prefix + '-' + Date.now().toString(36).slice(-4).toUpperCase();
     }
 
+    /** 任务创建时间（只读，保存时写入） */
+    function getNowCreatedAt() {
+      const d = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function formatTaskCreatedAt(value) {
+      if (!value) return '未知';
+      return String(value).replace('T', ' ').slice(0, 19);
+    }
+
+    function isTerminalTaskStatus(status) {
+      return status === 'abolished' || status === 'archived';
+    }
+
     // ========== 渲染主框架 ==========
+    function captureUiScrollPositions() {
+      const overlay = document.querySelector('.modal-overlay');
+      return {
+        mainContent: document.querySelector('.main-content')?.scrollTop || 0,
+        modalBox: overlay?.querySelector('.modal-box')?.scrollTop || 0,
+        modalBody: overlay?.querySelector('.modal-body')?.scrollTop || 0,
+        windowY: window.scrollY || 0,
+      };
+    }
+
+    function restoreUiScrollPositions(saved) {
+      if (!saved) return;
+      const apply = () => {
+        const main = document.querySelector('.main-content');
+        if (main) main.scrollTop = saved.mainContent;
+        const overlay = document.querySelector('.modal-overlay');
+        const box = overlay?.querySelector('.modal-box');
+        if (box) box.scrollTop = saved.modalBox;
+        const body = overlay?.querySelector('.modal-body');
+        if (body) body.scrollTop = saved.modalBody;
+        if (saved.windowY) window.scrollTo(0, saved.windowY);
+      };
+      requestAnimationFrame(() => requestAnimationFrame(apply));
+    }
+
     function render() {
+      const scrollPos = captureUiScrollPositions();
       const app = document.getElementById('app');
       app.innerHTML = `
         <div class="app-layout">
@@ -1870,6 +2268,7 @@
         </div>` : ''}
         ${renderMobileNav()}
       `;
+      restoreUiScrollPositions(scrollPos);
       if (state.showModal === 'taskDetail' && state.form.taskId) {
         requestAnimationFrame(() => {
           hydrateAuthedImages(document.getElementById('app'));
@@ -2051,8 +2450,8 @@
     // ========== 工作台 ==========
     function renderDashboard() {
       const isStaff = currentUser.role === 'staff';
-      const myAssignedTasks = getMyAssignedTasks();
-      const myCollabTasks = getMyCollaboratorTasks();
+      const myAssignedTasks = filterLeafTasks(getMyAssignedTasks());
+      const myCollabTasks = filterLeafTasks(getMyCollaboratorTasks());
       const myTasks = myAssignedTasks;
 
       const myDoing = myAssignedTasks.filter(t => t.status === 'doing');
@@ -2261,7 +2660,7 @@
 
     // ========== 任务卡片 ==========
     function getAllActiveProjects() {
-      return projects.filter(p => !p.archived);
+      return projects.filter(p => !isProjectArchived(p));
     }
 
     function getAllVisibleTasks() {
@@ -2274,19 +2673,30 @@
       if (isTaskCollaborator(task)) return true;
       if (task.creator === currentUser.name) return true;
       if (isTaskProjectManager(task)) return true;
+      if (isTaskProjectTeamMember(task)) return true;
       return false;
+    }
+
+    function isTaskProjectTeamMember(task) {
+      if (!task?.projectId) return false;
+      const project = projects.find(p => p.id === task.projectId);
+      return !!(
+        project &&
+        Array.isArray(project.teamMembers) &&
+        project.teamMembers.includes(currentUser.name)
+      );
     }
 
     /** 可管理项目：项目负责人/创建人，或总经理/管理员 */
     function canManageProject(project) {
-      if (!project || project.archived) return false;
+      if (!project || isProjectArchived(project)) return false;
       if (isFullAccess(currentUser.role)) return true;
       return project.manager === currentUser.name || project.creator === currentUser.name;
     }
 
-    /** 可新建项目：总经理/管理员/部门经理 */
+    /** 可新建项目：全部登录用户 */
     function canCreateProject() {
-      return isFullAccess(currentUser.role) || currentUser.role === 'manager';
+      return true;
     }
 
     /** 可删除项目：仅总经理/管理员 */
@@ -2327,16 +2737,77 @@
       ];
     }
 
+    /** 任务中心是否显示「部门」范围页签 */
+    function canViewDeptTaskScope() {
+      return isFullAccess(currentUser.role) || currentUser.role === 'manager';
+    }
+
+    function getUserDeptByName(name) {
+      const u = users.find(x => x.name === name);
+      return u?.dept || '';
+    }
+
+    function getTaskCenterDeptOptions() {
+      if (currentUser.role === 'manager') {
+        return [{ id: currentUser.dept, label: currentUser.dept }];
+      }
+      if (isFullAccess(currentUser.role)) {
+        return [
+          { id: 'all', label: '全部部门' },
+          ...departments.map(d => ({ id: d, label: d })),
+        ];
+      }
+      return [];
+    }
+
+    function getActiveTaskCenterDept() {
+      if (currentUser.role === 'manager') return currentUser.dept;
+      return state.taskCenterDept || 'all';
+    }
+
+    /** 部门范围：本部门成员负责的末级任务 */
+    function getDeptScopeLeafTasks() {
+      const dept = getActiveTaskCenterDept();
+      return filterLeafTasks(tasks.filter(t => {
+        if (t.status === 'archived') return false;
+        const assigneeDept = getUserDeptByName(t.assignee);
+        if (!assigneeDept) return false;
+        if (dept === 'all') return true;
+        return assigneeDept === dept;
+      }));
+    }
+
+    /** 任务中心当前范围下的末级任务列表 */
+    function getTaskCenterBaseTasks() {
+      if (state.taskScopeTab === 'dept' && canViewDeptTaskScope()) {
+        return getDeptScopeLeafTasks();
+      }
+      return filterLeafTasks(getMyRelatedTasks());
+    }
+
+    function setTaskScopeTab(scope) {
+      state.taskScopeTab = scope;
+      if (scope === 'dept' && currentUser.role === 'manager') {
+        state.taskCenterDept = currentUser.dept;
+      }
+      render();
+    }
+
+    function setTaskCenterDept(dept) {
+      state.taskCenterDept = dept;
+      render();
+    }
+
     /** 本人参与的项目：有相关任务，或本人为项目负责人（不含仅创建人） */
     function getMyParticipatingProjects() {
       const idSet = new Set();
       getMyRelatedTasks().forEach(t => { if (t.projectId) idSet.add(t.projectId); });
       projects.forEach(p => {
-        if (!p.archived && p.manager === currentUser.name) {
+        if (!isProjectArchived(p) && p.manager === currentUser.name) {
           idSet.add(p.id);
         }
       });
-      return projects.filter(p => idSet.has(p.id) && !p.archived);
+      return projects.filter(p => idSet.has(p.id) && !isProjectArchived(p));
     }
 
     /** @deprecated 使用 canManageProject */
@@ -2675,11 +3146,20 @@
       const atMatch = findActiveCommentMentionMatch(ta.value, pos);
       if (!atMatch) return;
       const prefix = before.slice(0, before.length - atMatch[0].length);
+      const overlay = document.querySelector('.modal-overlay');
+      const modalBoxScroll = overlay?.querySelector('.modal-box')?.scrollTop || 0;
+      const modalBodyScroll = overlay?.querySelector('.modal-body')?.scrollTop || 0;
       ta.value = `${prefix}@${name} ${after}`;
       const cursor = prefix.length + name.length + 2;
       ta.focus();
       ta.setSelectionRange(cursor, cursor);
       hideTaskCommentMentionDropdown(taskId);
+      requestAnimationFrame(() => {
+        const box = overlay?.querySelector('.modal-box');
+        const body = overlay?.querySelector('.modal-body');
+        if (box) box.scrollTop = modalBoxScroll;
+        if (body) body.scrollTop = modalBodyScroll;
+      });
     }
 
     function handleTaskCommentInput(event, taskId) {
@@ -2869,6 +3349,92 @@
       return item?.fileId || item?.id || '';
     }
 
+    function taskAttachmentAlreadySynced(project, item) {
+      if (!project || !item) return false;
+      return (project.documents || []).some(doc =>
+        (item.fileId && doc.fileId === item.fileId) ||
+        (item.nodeId && doc.source === 'dingtalk_wiki' && doc.nodeId === item.nodeId) ||
+        (item.id && doc.syncedFromAttachmentId === item.id)
+      );
+    }
+
+    function syncTaskAttachmentToProject(project, task, item) {
+      if (!project || !task?.projectId || task.projectId !== project.id || !item) return false;
+      if (taskAttachmentAlreadySynced(project, item)) return false;
+      if (!Array.isArray(project.documents)) project.documents = [];
+      project.documents.push({
+        ...item,
+        id: genId('DOC'),
+        syncedFromTaskId: task.id,
+        syncedFromAttachmentId: item.id,
+      });
+      return true;
+    }
+
+    function backfillTaskAttachmentsToProjectsLocal() {
+      const projectById = new Map(projects.map(p => [p.id, p]));
+      let synced = 0;
+      let skipped = 0;
+      const projectIds = new Set();
+
+      for (const task of tasks) {
+        if (!task?.projectId || !Array.isArray(task.attachments) || !task.attachments.length) continue;
+        const project = projectById.get(task.projectId);
+        if (!project) continue;
+        for (const item of task.attachments) {
+          if (taskAttachmentAlreadySynced(project, item)) {
+            skipped += 1;
+            continue;
+          }
+          if (syncTaskAttachmentToProject(project, task, item)) {
+            synced += 1;
+            projectIds.add(project.id);
+          }
+        }
+      }
+
+      return { synced, skipped, projectsTouched: projectIds.size };
+    }
+
+    async function syncTaskAttachmentsFromServer() {
+      if (!isFullAccess(currentUser.role)) {
+        alert('仅总经理/管理员可执行');
+        return;
+      }
+      if (!confirm('将把历史任务附件补同步到所属项目的「项目文档」中（已存在的不会重复添加）。是否继续？')) return;
+
+      if (ApiConfig.enabled && authSession.token) {
+        try {
+          const res = await fetch(ApiConfig.baseUrl + '/data/admin/sync-task-attachments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+            body: '{}',
+            signal: AbortSignal.timeout(ApiConfig.timeout),
+          });
+          const data = await res.json();
+          if (!data.success) {
+            alert(data.message || '同步失败');
+            return;
+          }
+          await DataService.loadFromServer();
+          render();
+          alert(data.message || '同步完成');
+        } catch (e) {
+          alert('同步失败：' + e.message);
+        }
+        return;
+      }
+
+      const result = backfillTaskAttachmentsToProjectsLocal();
+      if (result.synced > 0) save();
+      render();
+      alert(
+        result.synced > 0
+          ? `已同步 ${result.synced} 个任务附件到 ${result.projectsTouched} 个项目（本地数据）`
+          : '无需同步，任务附件均已存在于项目文档中'
+      );
+    }
+
     function openDingTalkDoc(url) {
       if (!url) {
         alert('文档链接无效');
@@ -2927,6 +3493,10 @@
         if (t) {
           if (!t.attachments) t.attachments = [];
           t.attachments.push(data.item);
+          if (t.projectId) {
+            const p = projects.find(x => x.id === t.projectId);
+            if (p) syncTaskAttachmentToProject(p, t, data.item);
+          }
         }
       }
       save();
@@ -2946,6 +3516,48 @@
       return (state.form.wikiWorkspaces || []).find(w => w.workspaceId === state.form.wikiSelectedWorkspaceId) || null;
     }
 
+    /** 将 API 返回的文档库拆成「我的文档 / 团队知识库」（兼容旧版仅返回 workspaces 的后端） */
+    function splitWikiWorkspacesForSidebar(allWorkspaces, personalWorkspaces, teamWorkspaces) {
+      const personal = [...(personalWorkspaces || [])];
+      const team = [...(teamWorkspaces || [])];
+      if (personal.length || team.length) {
+        return { personal, team };
+      }
+      const all = allWorkspaces || [];
+      for (const ws of all) {
+        if (String(ws.type || '').toUpperCase() === 'PERSONAL') {
+          personal.push({ ...ws, name: ws.name || '我的文档' });
+        } else {
+          team.push(ws);
+        }
+      }
+      if (!personal.length && !team.length && all.length) {
+        team.push(...all);
+      }
+      return { personal, team };
+    }
+
+    function applyWikiWorkspaceLists(data) {
+      const allWorkspaces = data.workspaces || [
+        ...(data.personalWorkspaces || []),
+        ...(data.teamWorkspaces || []),
+      ];
+      const split = splitWikiWorkspacesForSidebar(
+        allWorkspaces,
+        data.personalWorkspaces,
+        data.teamWorkspaces
+      );
+      state.form.wikiWorkspaces = allWorkspaces;
+      state.form.wikiPersonalWorkspaces = split.personal;
+      state.form.wikiTeamWorkspaces = split.team;
+      state.form.wikiMineError = data.mineError || '';
+      state.form.wikiBindError = data.bindError || '';
+      if (!split.personal.length && allWorkspaces.length && !data.personalWorkspaces && !data.mineError) {
+        state.form.wikiMineError = '「我的文档」需重启后端后加载；当前仅显示团队知识库';
+      }
+      return allWorkspaces;
+    }
+
     async function showWikiDocPicker(entityType, entityId) {
       if (!ApiConfig.enabled || !authSession.token) {
         alert('请登录并连接服务端后添加钉钉文档');
@@ -2956,12 +3568,16 @@
         wikiEntityType: entityType,
         wikiEntityId: entityId,
         wikiWorkspaces: [],
+        wikiPersonalWorkspaces: [],
+        wikiTeamWorkspaces: [],
         wikiSelectedWorkspaceId: '',
         wikiExpanded: {},
         wikiChildren: {},
         wikiLoadingKey: 'workspaces',
         wikiSelectedNode: null,
         wikiError: '',
+        wikiMineError: '',
+        wikiBindError: '',
         wikiSearch: '',
       };
       state.showModal = 'wikiDocPicker';
@@ -2978,13 +3594,17 @@
           headers: { ...AuthService.getAuthHeaders() },
           signal: AbortSignal.timeout(30000),
         });
-        const data = await parseApiJsonResponse(res, '加载知识库失败');
-        if (!data.success) throw new Error(data.message || '加载知识库失败');
-        state.form.wikiWorkspaces = data.workspaces || [];
-        if (state.form.wikiWorkspaces.length) {
-          await selectWikiWorkspace(state.form.wikiWorkspaces[0].workspaceId, { skipRender: true });
+        const data = await parseApiJsonResponse(res, '加载文档库失败');
+        if (!data.success) throw new Error(data.message || '加载文档库失败');
+        const allWorkspaces = applyWikiWorkspaceLists(data);
+        if (allWorkspaces.length) {
+          const defaultWs = state.form.wikiPersonalWorkspaces[0]
+            || allWorkspaces.find(ws => ws.type === 'PERSONAL' && ws.accessibleVia === currentUser.name)
+            || allWorkspaces[0];
+          await selectWikiWorkspace(defaultWs.workspaceId, { skipRender: true });
         } else {
-          state.form.wikiError = '人员档案中暂无可访问的知识库（请确认已同步通讯录并绑定 dingTalkUserId / unionId）';
+          state.form.wikiError = state.form.wikiBindError
+            || '暂无可访问的文档库。请确认已绑定钉钉 userid/unionId，并重新同步通讯录';
         }
         state.form.wikiLoadingKey = '';
         render();
@@ -3054,9 +3674,34 @@
       else render();
     }
 
+    async function onWikiTreeNodeDblClick(nodeId) {
+      const node = wikiNodeLookup[nodeId];
+      if (!node || node.type === 'FOLDER') return;
+      state.form.wikiSelectedNode = node;
+      await confirmWikiDocPicker();
+    }
+
+    function getWikiDocTreeHtml() {
+      const selectedWs = getSelectedWikiWorkspace();
+      if (!selectedWs) {
+        return `<div style="padding:24px;text-align:center;color:#9CA3AF;font-size:12px;">请先在左侧选择「我的文档」或团队知识库</div>`;
+      }
+      if (!selectedWs.rootNodeId) {
+        return `<div style="padding:24px;text-align:center;color:#9CA3AF;font-size:12px;">知识库根节点不可用</div>`;
+      }
+      return renderWikiTreeBranch(selectedWs.rootNodeId, 0)
+        || `<div style="padding:24px;text-align:center;color:#9CA3AF;font-size:12px;">该目录下暂无文档</div>`;
+    }
+
+    function refreshWikiDocTree() {
+      const el = document.getElementById('wiki-doc-tree');
+      if (!el) return;
+      el.innerHTML = getWikiDocTreeHtml();
+    }
+
     function setWikiDocSearch(value) {
       state.form.wikiSearch = value;
-      render();
+      refreshWikiDocTree();
     }
 
     function wikiNodeMatchesSearch(node, search) {
@@ -3081,6 +3726,7 @@
         const iconColor = isFolder ? '#D97706' : '#0089FF';
         let html = `
           <div onclick="toggleWikiTreeNodeById('${node.nodeId}')"
+            ${isFolder ? '' : `ondblclick="event.stopPropagation();onWikiTreeNodeDblClick('${node.nodeId}')"`}
             style="display:flex;align-items:center;gap:8px;padding:8px 10px 8px ${padding}px;cursor:pointer;border-radius:6px;
               background:${selected ? '#EFF6FF' : 'transparent'};border:1px solid ${selected ? '#BFDBFE' : 'transparent'};"
             onmouseover="if(!${selected})this.style.background='#F9FAFB'"
@@ -3110,16 +3756,58 @@
       ).replace(/\n/g, '<br>');
     }
 
-    function renderWikiDocPickerModal() {
-      const workspaces = state.form.wikiWorkspaces || [];
-      const selectedWs = getSelectedWikiWorkspace();
+    function renderWikiWorkspaceSidebarItem(ws) {
+      const selected = ws.workspaceId === state.form.wikiSelectedWorkspaceId;
+      const isPersonal = String(ws.type || '').toUpperCase() === 'PERSONAL';
+      return `
+        <button type="button" onclick="selectWikiWorkspace('${ws.workspaceId}')"
+          style="width:100%;text-align:left;padding:8px 10px;margin-bottom:4px;border-radius:6px;border:1px solid ${selected ? '#BFDBFE' : 'transparent'};
+            background:${selected ? '#EFF6FF' : '#fff'};cursor:pointer;">
+          <div style="font-size:13px;font-weight:500;color:#1F2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(ws.name)}">${escapeHtml(ws.name)}</div>
+          <div style="font-size:10px;color:#9CA3AF;margin-top:2px;">${isPersonal ? '我的文档' : '团队知识库'}${ws.accessibleVia && !ws.isOwn ? ' · 来自 ' + escapeHtml(ws.accessibleVia) : ''}</div>
+        </button>`;
+    }
+
+    function renderWikiWorkspaceSidebar() {
+      const split = splitWikiWorkspacesForSidebar(
+        state.form.wikiWorkspaces,
+        state.form.wikiPersonalWorkspaces,
+        state.form.wikiTeamWorkspaces
+      );
+      const personal = split.personal;
+      const team = split.team;
       const loadingWorkspaces = state.form.wikiLoadingKey === 'workspaces';
+      if (loadingWorkspaces) {
+        return `<div style="padding:12px;font-size:12px;color:#9CA3AF;text-align:center;"><i class="fas fa-spinner fa-spin"></i> 加载中…</div>`;
+      }
+      if (!personal.length && !team.length) {
+        const hint = state.form.wikiBindError || state.form.wikiMineError || '暂无文档库';
+        return `<div style="padding:12px;font-size:12px;color:#9CA3AF;text-align:center;line-height:1.6;">${escapeHtml(hint)}</div>`;
+      }
+      let html = '';
+      html += `<div style="padding:4px 6px 6px;font-size:11px;font-weight:700;color:#0089FF;letter-spacing:0.02em;">我的文档</div>`;
+      if (personal.length) {
+        html += personal.map(renderWikiWorkspaceSidebarItem).join('');
+      } else {
+        html += `<div style="padding:4px 10px 10px;font-size:11px;color:#9CA3AF;line-height:1.5;">${state.form.wikiMineError ? escapeHtml(state.form.wikiMineError) : '暂无可用的个人文档库'}</div>`;
+      }
+      html += `<div style="margin-top:8px;padding:4px 6px 6px;font-size:11px;font-weight:700;color:#7C3AED;letter-spacing:0.02em;">团队知识库</div>`;
+      if (team.length) {
+        html += team.map(renderWikiWorkspaceSidebarItem).join('');
+      } else {
+        html += `<div style="padding:4px 10px;font-size:11px;color:#9CA3AF;">暂无团队知识库</div>`;
+      }
+      return html;
+    }
+
+    function renderWikiDocPickerModal() {
+      const selectedWs = getSelectedWikiWorkspace();
       const selectedNode = state.form.wikiSelectedNode;
       return `
         <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
           <div class="modal-box" style="max-width:760px;" onclick="event.stopPropagation()">
             <div class="modal-header">
-              <h3 class="modal-title"><i class="fas fa-sitemap" style="color:#0089FF;margin-right:8px;"></i>从知识库选择钉钉文档</h3>
+              <h3 class="modal-title"><i class="fas fa-sitemap" style="color:#0089FF;margin-right:8px;"></i>选择钉钉文档</h3>
               <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:18px;"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body" style="padding-top:0;">
@@ -3130,50 +3818,34 @@
               ` : ''}
               <div style="display:flex;gap:12px;min-height:360px;">
                 <div style="width:200px;flex-shrink:0;border:1px solid #E5E7EB;border-radius:8px;background:#F9FAFB;overflow:hidden;display:flex;flex-direction:column;">
-                  <div style="padding:10px 12px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;">知识库</div>
+                  <div style="padding:10px 12px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:1px solid #E5E7EB;">知识库 / 我的文档</div>
                   <div style="flex:1;overflow-y:auto;padding:6px;">
-                    ${loadingWorkspaces ? `<div style="padding:12px;font-size:12px;color:#9CA3AF;text-align:center;"><i class="fas fa-spinner fa-spin"></i> 加载中…</div>` : (
-                      workspaces.length ? workspaces.map(ws => `
-                        <button type="button" onclick="selectWikiWorkspace('${ws.workspaceId}')"
-                          style="width:100%;text-align:left;padding:8px 10px;margin-bottom:4px;border-radius:6px;border:1px solid ${ws.workspaceId === state.form.wikiSelectedWorkspaceId ? '#BFDBFE' : 'transparent'};
-                            background:${ws.workspaceId === state.form.wikiSelectedWorkspaceId ? '#EFF6FF' : '#fff'};cursor:pointer;">
-                          <div style="font-size:13px;font-weight:500;color:#1F2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(ws.name)}">${escapeHtml(ws.name)}</div>
-                          <div style="font-size:10px;color:#9CA3AF;margin-top:2px;">${ws.type === 'PERSONAL' ? '我的文档' : '团队知识库'}${ws.accessibleVia ? ' · 来自 ' + escapeHtml(ws.accessibleVia) : ''}</div>
-                        </button>
-                      `).join('') : `<div style="padding:12px;font-size:12px;color:#9CA3AF;text-align:center;">暂无知识库</div>`
-                    )}
+                    ${renderWikiWorkspaceSidebar()}
                   </div>
                 </div>
                 <div style="flex:1;border:1px solid #E5E7EB;border-radius:8px;background:#fff;overflow:hidden;display:flex;flex-direction:column;">
                   <div style="padding:10px 12px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;gap:8px;">
-                    <span style="font-size:12px;font-weight:600;color:#6B7280;flex-shrink:0;">目录</span>
+                    <span style="font-size:12px;font-weight:600;color:#6B7280;flex-shrink:0;">${selectedWs ? escapeHtml(selectedWs.name || '目录') : '目录'}</span>
                     <input type="text" placeholder="搜索当前已加载的文档…" value="${escapeHtml(state.form.wikiSearch || '')}"
                       oninput="setWikiDocSearch(this.value)"
                       style="flex:1;padding:6px 10px;border:1px solid #E5E7EB;border-radius:6px;font-size:12px;">
                   </div>
-                  <div style="flex:1;overflow-y:auto;padding:6px;">
-                    ${!selectedWs ? `<div style="padding:24px;text-align:center;color:#9CA3AF;font-size:12px;">请先选择知识库</div>` : (
-                      selectedWs.rootNodeId
-                        ? (renderWikiTreeBranch(selectedWs.rootNodeId, 0) || `<div style="padding:24px;text-align:center;color:#9CA3AF;font-size:12px;">该目录下暂无文档</div>`)
-                        : `<div style="padding:24px;text-align:center;color:#9CA3AF;font-size:12px;">知识库根节点不可用</div>`
-                    )}
+                  <div id="wiki-doc-tree" style="flex:1;overflow-y:auto;padding:6px;">
+                    ${getWikiDocTreeHtml()}
                   </div>
                 </div>
               </div>
-              <div style="margin-top:12px;padding:10px 12px;background:#F9FAFB;border-radius:8px;border:1px solid #E5E7EB;font-size:12px;color:#6B7280;">
+              <div style="margin-top:12px;padding:10px 12px;background:#F9FAFB;border-radius:8px;border:1px solid #E5E7EB;font-size:12px;color:#6B7280;line-height:1.6;">
                 ${selectedNode
                   ? `已选：<strong style="color:#1F2937;">${escapeHtml(selectedNode.name || '未命名')}</strong>`
-                  : '请在右侧目录中选择具体文档（文件夹不可添加）'}
+                  : '请在左侧选择「我的文档」或团队知识库，再在右侧目录中选择具体文档；双击文档可直接确认添加（文件夹不可添加）'}
               </div>
             </div>
-            <div class="modal-footer" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-              <button type="button" class="btn btn-ghost" onclick="linkDingTalkDocByPaste()"><i class="fas fa-link"></i> 粘贴链接</button>
-              <div style="display:flex;gap:8px;">
-                <button type="button" class="btn btn-ghost" onclick="closeModal()">取消</button>
-                <button type="button" class="btn btn-primary" onclick="confirmWikiDocPicker()" ${selectedNode ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>
-                  <i class="fas fa-check"></i> 确认添加
-                </button>
-              </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-ghost" onclick="closeModal()">取消</button>
+              <button type="button" class="btn btn-primary" onclick="confirmWikiDocPicker()" ${selectedNode ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>
+                <i class="fas fa-check"></i> 确认添加
+              </button>
             </div>
           </div>
         </div>
@@ -3191,20 +3863,6 @@
           nodeId: node.nodeId,
           workspaceId: node.workspaceId,
         });
-      } catch (e) {
-        alert(e.message || '添加钉钉文档失败');
-      }
-    }
-
-    async function linkDingTalkDocByPaste() {
-      const entityType = state.form.wikiEntityType;
-      const entityId = state.form.wikiEntityId;
-      const input = prompt('请粘贴钉钉文档链接\n\n在钉钉文档右上角「分享」→「复制链接」');
-      if (input == null) return;
-      const url = String(input).trim();
-      if (!url) return;
-      try {
-        await submitWikiDocLink(entityType, entityId, { url });
       } catch (e) {
         alert(e.message || '添加钉钉文档失败');
       }
@@ -3316,6 +3974,10 @@
         if (t) {
           if (!t.attachments) t.attachments = [];
           t.attachments.push(data.item);
+          if (t.projectId) {
+            const p = projects.find(x => x.id === t.projectId);
+            if (p) syncTaskAttachmentToProject(p, t, data.item);
+          }
         }
       }
       save();
@@ -3369,7 +4031,11 @@
         return;
       }
       try {
-        const res = await fetch(ApiConfig.baseUrl + '/files/' + encodeURIComponent(refKey), {
+        const qs = new URLSearchParams({
+          entityType,
+          entityId,
+        });
+        const res = await fetch(ApiConfig.baseUrl + '/files/' + encodeURIComponent(refKey) + '?' + qs.toString(), {
           method: 'DELETE',
           headers: { ...AuthService.getAuthHeaders() },
           signal: AbortSignal.timeout(30000),
@@ -3422,6 +4088,7 @@
             ${parent ? `<span style="color:#059669;"><i class="fas fa-level-up-alt" style="margin-right:4px;transform:rotate(90deg);"></i>${parent.title}</span>` : ''}
             ${project ? `<span><i class="fas fa-folder" style="margin-right:4px;"></i>${project.name}</span>` : ''}
             <span><i class="fas fa-user" style="margin-right:4px;"></i>${task.assignee}</span>
+            <span><i class="fas fa-clock" style="margin-right:4px;"></i>${formatTaskCreatedAt(task.createdAt)}</span>
             <span style="${isOverdue(task) && task.status !== 'abolished' ? 'color:#DC2626;' : isDueSoon(task) ? 'color:#D97706;' : ''}"><i class="fas fa-calendar" style="margin-right:4px;"></i>${task.dueDate || normalizeDateStr(resolveTaskDueDate(task)) || '-'}</span>
           </div>
           ${task.status !== 'done' && task.status !== 'abolished' ? `
@@ -3471,25 +4138,53 @@
       XLSX.writeFile(wb, filename.endsWith('.xlsx') ? filename : filename + '.xlsx');
     }
 
-    function getFilteredProjects() {
-      let list = getViewableProjects();
-
+    function getProjectsBeforeTabFilters() {
+      let list = getViewableProjects().filter(p => !isProjectArchived(p));
       if (state.projectSearch) {
         const q = state.projectSearch.toLowerCase();
         list = list.filter(p =>
           p.name.toLowerCase().includes(q) ||
           p.id.toLowerCase().includes(q) ||
-          p.manager.toLowerCase().includes(q)
+          p.manager.toLowerCase().includes(q) ||
+          (p.dept || '').toLowerCase().includes(q)
         );
       }
-      list = list.filter(p => !p.archived);
+      return list;
+    }
+
+    function applyProjectStatusFilter(list) {
       const filter = state.projectFilter || 'all';
-      if (filter !== 'all') list = list.filter(p => p.status === filter);
+      if (filter === 'all') return list;
+      return list.filter(p => p.status === filter);
+    }
+
+    function applyProjectDeptFilter(list) {
+      const dept = state.projectDept || 'all';
+      if (dept === 'all') return list;
+      return list.filter(p => p.dept === dept);
+    }
+
+    function getProjectDeptFilterTabs() {
+      const base = applyProjectStatusFilter(getProjectsBeforeTabFilters());
+      return [
+        { id: 'all', label: '全部部门', count: base.length, icon: 'fa-globe' },
+        ...departments.map(dept => ({
+          id: dept,
+          label: dept,
+          count: base.filter(p => p.dept === dept).length,
+        })),
+      ];
+    }
+
+    function getFilteredProjects() {
+      let list = getProjectsBeforeTabFilters();
+      list = applyProjectDeptFilter(list);
+      list = applyProjectStatusFilter(list);
       return list;
     }
 
     function getFilteredTasksForExport() {
-      let list = getMyRelatedTasks();
+      let list = getTaskCenterBaseTasks();
       const typeTab = state.taskTab || 'all';
       if (typeTab === 'normal') list = list.filter(t => t.type === 'normal');
       if (typeTab === 'temp') list = list.filter(t => t.type === 'temp');
@@ -3588,7 +4283,7 @@
           t.id, t.title, project ? project.name : '临时任务', t.assignee,
           t.type === 'temp' ? '临时' : '常规', st.label,
           priorityLabel[t.priority] || '普通', t.dueDate || '', t.progress || 0,
-          t.estimatedHours || 0, t.actualHours || 0, t.createdAt || '', t.desc || '',
+          t.estimatedHours || 0, t.actualHours || 0, formatTaskCreatedAt(t.createdAt), t.desc || '',
         ];
       });
       downloadExcel('任务列表', headers, rows, `任务列表_${new Date().toISOString().split('T')[0]}.xlsx`);
@@ -3609,7 +4304,9 @@
     // ========== 项目列表 ==========
     function renderProjects() {
       const filteredProjects = getFilteredProjects();
-      const scopeProjects = getViewableProjects();
+      const scopeProjects = applyProjectDeptFilter(getProjectsBeforeTabFilters());
+      const deptTabs = getProjectDeptFilterTabs();
+      const selectedDept = state.projectDept || 'all';
 
       const statusCounts = {
         planning: scopeProjects.filter(p => p.status === 'planning').length,
@@ -3621,7 +4318,7 @@
       return `
         <div>
           <p class="content-intro" style="margin-bottom:20px;">${getProjectsPageIntro()}</p>
-          <div class="filter-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+          <div class="filter-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:12px;">
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button onclick="state.projectFilter='all';render()" style="padding:8px 16px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid ${(state.projectFilter||'all') === 'all' ? '#7C3AED' : '#E5E7EB'};background:${(state.projectFilter||'all') === 'all' ? '#F5F3FF' : '#fff'};color:${(state.projectFilter||'all') === 'all' ? '#7C3AED' : '#6B7280'};cursor:pointer;transition:all 0.2s;">
                 <i class="fas fa-folder-open" style="margin-right:4px;font-size:11px;"></i>全部
@@ -3644,9 +4341,20 @@
               ${ApiConfig.enabled ? `<button class="btn btn-ghost btn-sm" onclick="refreshProjectsFromServer()" title="从服务端重新拉取项目"><i class="fas fa-sync-alt"></i></button>` : ''}
               <div style="position:relative;">
               <i class="fas fa-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#9CA3AF;font-size:13px;"></i>
-              <input class="input search-input-wide" style="width:280px;padding-left:36px;" placeholder="搜索项目名称、编号、负责人..." value="${state.projectSearch}" onchange="state.projectSearch=this.value;render()">
+              <input class="input search-input-wide" style="width:280px;padding-left:36px;" placeholder="搜索项目名称、编号、负责人、部门..." value="${state.projectSearch}" onchange="state.projectSearch=this.value;render()">
             </div>
             </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:20px;">
+            ${deptTabs.map(tab => {
+              const isActive = selectedDept === tab.id;
+              return `
+                <button onclick="state.projectDept='${tab.id}';render()" style="padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid ${isActive ? '#2563EB' : '#E5E7EB'};background:${isActive ? '#EFF6FF' : '#fff'};color:${isActive ? '#2563EB' : '#6B7280'};cursor:pointer;transition:all 0.2s;">
+                  ${tab.icon ? `<i class="fas ${tab.icon}" style="margin-right:4px;font-size:10px;"></i>` : `<i class="fas fa-building" style="margin-right:4px;font-size:10px;"></i>`}${tab.label}
+                  <span style="margin-left:4px;background:${isActive ? '#2563EB' : '#E5E7EB'};color:${isActive ? '#fff' : '#6B7280'};padding:2px 6px;border-radius:10px;font-size:10px;">${tab.count}</span>
+                </button>
+              `;
+            }).join('')}
           </div>
           <div class="project-grid">
             ${filteredProjects.length === 0 ? '<div style="text-align:center;padding:60px;color:#9CA3AF;grid-column:1/-1;"><i class="fas fa-folder-open" style="font-size:48px;margin-bottom:16px;opacity:0.3;display:block;"></i>暂无项目</div>' : ''}
@@ -3695,19 +4403,20 @@
 
     // ========== 任务中心 ==========
     function renderTasks() {
-      let myTasks = getMyRelatedTasks();
+      const scopeTab = state.taskScopeTab || 'mine';
+      const isDeptScope = scopeTab === 'dept' && canViewDeptTaskScope();
+      const baseTasks = getTaskCenterBaseTasks();
+      let displayTasks = baseTasks.slice();
 
       // 按类型筛选
       const typeTab = state.taskTab || 'all';
-      if (typeTab === 'normal') myTasks = myTasks.filter(t => t.type === 'normal');
-      if (typeTab === 'temp') myTasks = myTasks.filter(t => t.type === 'temp');
-
-      const allMine = getMyRelatedTasks();
+      if (typeTab === 'normal') displayTasks = displayTasks.filter(t => t.type === 'normal');
+      if (typeTab === 'temp') displayTasks = displayTasks.filter(t => t.type === 'temp');
 
       // 搜索过滤（含上级任务名）
       if (state.taskSearch) {
         const q = state.taskSearch.toLowerCase();
-        myTasks = myTasks.filter(t => {
+        displayTasks = displayTasks.filter(t => {
           const parent = t.parentId ? tasks.find(pt => pt.id === t.parentId) : null;
           return t.title.toLowerCase().includes(q) ||
             t.id.toLowerCase().includes(q) ||
@@ -3717,7 +4426,7 @@
       }
 
       // 排序：紧急置顶、然后按截止日期
-      myTasks.sort((a, b) => {
+      displayTasks.sort((a, b) => {
         if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
         if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
         if (isOverdue(a) && !isOverdue(b)) return -1;
@@ -3725,32 +4434,63 @@
         return new Date(a.dueDate) - new Date(b.dueDate);
       });
 
-      const todoTasks = myTasks.filter(t => t.status === 'todo');
-      const doingTasks = myTasks.filter(t => t.status === 'doing');
-      const doneTasks = myTasks.filter(t => t.status === 'done');
-      const otherTasks = myTasks.filter(t => !['todo', 'doing', 'done'].includes(t.status));
+      const todoTasks = displayTasks.filter(t => t.status === 'todo');
+      const doingTasks = displayTasks.filter(t => t.status === 'doing');
+      const doneTasks = displayTasks.filter(t => t.status === 'done');
+      const otherTasks = displayTasks.filter(t => !['todo', 'doing', 'done'].includes(t.status));
+
+      const deptLabel = isDeptScope
+        ? (getActiveTaskCenterDept() === 'all' ? '全公司各部门' : getActiveTaskCenterDept())
+        : '';
+      const introText = isDeptScope
+        ? `展示 <strong>${deptLabel}</strong> 成员负责的<strong>末级任务</strong>，用于部门监督。点击任务可查看详情；若您为项目负责人，可进行驳回、转办等操作。`
+        : '展示<strong>本人负责或协办</strong>的<strong>末级任务</strong>（不含仅作拆分的上级任务）。查看全公司项目及其他同事任务，请进入<strong>项目管理</strong>。';
+
+      const mineCount = filterLeafTasks(getMyRelatedTasks()).length;
+      const deptCount = getDeptScopeLeafTasks().length;
 
       return `
         <div style="margin-bottom:16px;">
-          <p class="content-intro" style="margin-bottom:16px;">任务中心展示<strong>本人负责或协办</strong>的任务。查看全公司项目及其他同事任务，请进入<strong>项目管理</strong>。</p>
+          <p class="content-intro" style="margin-bottom:16px;">${introText}</p>
+          ${canViewDeptTaskScope() ? `
+          <div style="display:flex;gap:0;margin-bottom:12px;background:#F3F4F6;padding:4px;border-radius:10px;width:fit-content;">
+            <button onclick="setTaskScopeTab('mine')" style="padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all 0.2s;background:${scopeTab === 'mine' ? '#fff' : 'transparent'};color:${scopeTab === 'mine' ? '#7C3AED' : '#6B7280'};box-shadow:${scopeTab === 'mine' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'};">
+              <i class="fas fa-user" style="margin-right:6px;"></i>我的
+              <span style="margin-left:4px;font-size:11px;color:${scopeTab === 'mine' ? '#7C3AED' : '#9CA3AF'};">${mineCount}</span>
+            </button>
+            <button onclick="setTaskScopeTab('dept')" style="padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all 0.2s;background:${scopeTab === 'dept' ? '#fff' : 'transparent'};color:${scopeTab === 'dept' ? '#7C3AED' : '#6B7280'};box-shadow:${scopeTab === 'dept' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'};">
+              <i class="fas fa-users" style="margin-right:6px;"></i>部门
+              <span style="margin-left:4px;font-size:11px;color:${scopeTab === 'dept' ? '#7C3AED' : '#9CA3AF'};">${deptCount}</span>
+            </button>
+          </div>
+          ` : ''}
+          ${isDeptScope && isFullAccess(currentUser.role) ? `
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+            ${getTaskCenterDeptOptions().map(opt => `
+              <button onclick="setTaskCenterDept('${opt.id}')" style="padding:6px 14px;border-radius:16px;font-size:12px;font-weight:500;border:1px solid ${getActiveTaskCenterDept() === opt.id ? '#7C3AED' : '#E5E7EB'};background:${getActiveTaskCenterDept() === opt.id ? '#F5F3FF' : '#fff'};color:${getActiveTaskCenterDept() === opt.id ? '#7C3AED' : '#6B7280'};cursor:pointer;">
+                ${opt.label}
+              </button>
+            `).join('')}
+          </div>
+          ` : ''}
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button onclick="state.taskTab='all';render()" style="padding:8px 16px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid ${typeTab === 'all' ? '#7C3AED' : '#E5E7EB'};background:${typeTab === 'all' ? '#F5F3FF' : '#fff'};color:${typeTab === 'all' ? '#7C3AED' : '#6B7280'};cursor:pointer;transition:all 0.2s;">
                 <i class="fas fa-list" style="margin-right:4px;font-size:11px;"></i>全部
-                <span style="margin-left:4px;background:${typeTab === 'all' ? '#7C3AED' : '#E5E7EB'};color:${typeTab === 'all' ? '#fff' : '#6B7280'};padding:2px 6px;border-radius:10px;font-size:10px;">${allMine.length}</span>
+                <span style="margin-left:4px;background:${typeTab === 'all' ? '#7C3AED' : '#E5E7EB'};color:${typeTab === 'all' ? '#fff' : '#6B7280'};padding:2px 6px;border-radius:10px;font-size:10px;">${baseTasks.length}</span>
               </button>
               <button onclick="state.taskTab='normal';render()" style="padding:8px 16px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid ${typeTab === 'normal' ? '#7C3AED' : '#E5E7EB'};background:${typeTab === 'normal' ? '#F5F3FF' : '#fff'};color:${typeTab === 'normal' ? '#7C3AED' : '#6B7280'};cursor:pointer;transition:all 0.2s;">
                 <i class="fas fa-folder" style="margin-right:4px;font-size:11px;"></i>常规任务
-                <span style="margin-left:4px;background:${typeTab === 'normal' ? '#7C3AED' : '#E5E7EB'};color:${typeTab === 'normal' ? '#fff' : '#6B7280'};padding:2px 6px;border-radius:10px;font-size:10px;">${allMine.filter(t => t.type === 'normal').length}</span>
+                <span style="margin-left:4px;background:${typeTab === 'normal' ? '#7C3AED' : '#E5E7EB'};color:${typeTab === 'normal' ? '#fff' : '#6B7280'};padding:2px 6px;border-radius:10px;font-size:10px;">${baseTasks.filter(t => t.type === 'normal').length}</span>
               </button>
               <button onclick="state.taskTab='temp';render()" style="padding:8px 16px;border-radius:20px;font-size:13px;font-weight:500;border:1px solid ${typeTab === 'temp' ? '#7C3AED' : '#E5E7EB'};background:${typeTab === 'temp' ? '#F5F3FF' : '#fff'};color:${typeTab === 'temp' ? '#7C3AED' : '#6B7280'};cursor:pointer;transition:all 0.2s;">
                 <i class="fas fa-bolt" style="margin-right:4px;font-size:11px;"></i>临时任务
-                <span style="margin-left:4px;background:${typeTab === 'temp' ? '#7C3AED' : '#E5E7EB'};color:${typeTab === 'temp' ? '#fff' : '#6B7280'};padding:2px 6px;border-radius:10px;font-size:10px;">${allMine.filter(t => t.type === 'temp').length}</span>
+                <span style="margin-left:4px;background:${typeTab === 'temp' ? '#7C3AED' : '#E5E7EB'};color:${typeTab === 'temp' ? '#fff' : '#6B7280'};padding:2px 6px;border-radius:10px;font-size:10px;">${baseTasks.filter(t => t.type === 'temp').length}</span>
               </button>
             </div>
             <div style="position:relative;">
               <i class="fas fa-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#9CA3AF;font-size:13px;"></i>
-              <input class="input search-input-wide" style="width:280px;padding-left:36px;" placeholder="搜索任务名称、编号..." value="${state.taskSearch}" onchange="state.taskSearch=this.value;render()">
+              <input class="input search-input-wide" style="width:280px;padding-left:36px;" placeholder="搜索任务名称、编号、负责人..." value="${state.taskSearch}" onchange="state.taskSearch=this.value;render()">
             </div>
           </div>
         </div>
@@ -3930,7 +4670,7 @@
 
       return `
         <div>
-          ${project.archived ? `<p class="content-intro" style="margin-bottom:16px;"><i class="fas fa-archive" style="margin-right:6px;"></i>该项目已归档，仅可查看。归档操作请在未归档项目的详情页进行。</p>` : ''}
+          ${isProjectArchived(project) ? `<p class="content-intro" style="margin-bottom:16px;"><i class="fas fa-archive" style="margin-right:6px;"></i>该项目已归档，仅可查看。归档操作请在未归档项目的详情页进行。</p>` : ''}
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
             <button class="btn btn-ghost" onclick="goBack()"><i class="fas fa-arrow-left"></i>返回</button>
             <span class="tag" style="background:${pst.bg};color:${pst.color};"><i class="fas ${pst.icon}"></i>${pst.label}</span>
@@ -3945,7 +4685,7 @@
                   <div style="font-size:13px;color:#9CA3AF;">${project.desc || '暂无描述'}</div>
                 </div>
                 <div style="display:flex;gap:8px;">
-                  ${!project.archived && canManageProject(project) ? `
+                  ${!isProjectArchived(project) && canManageProject(project) ? `
                     <button class="btn btn-ghost" onclick="editProject('${project.id}')"><i class="fas fa-edit"></i>编辑</button>
                     <button class="btn btn-primary" onclick="showNewTaskModal('${project.id}')"><i class="fas fa-plus"></i>添加任务</button>
                   ` : ''}
@@ -3964,7 +4704,7 @@
               })}
 
               <!-- 项目状态流转 -->
-              ${canManageProject(project) && project.status !== 'archived' ? `
+              ${canManageProject(project) && !isProjectArchived(project) ? `
               <div style="margin-bottom:16px;padding:12px;background:#F9FAFB;border-radius:8px;">
                 <div style="font-size:12px;color:#9CA3AF;margin-bottom:8px;">项目状态</div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -3981,9 +4721,10 @@
                 </div>
               </div>
               ` : ''}
-              <div style="display:flex;gap:24px;font-size:13px;color:#6B7280;margin-bottom:16px;">
+              <div style="display:flex;gap:24px;font-size:13px;color:#6B7280;margin-bottom:16px;flex-wrap:wrap;">
                 <span><i class="fas fa-building" style="margin-right:6px;"></i>${project.dept}</span>
                 <span><i class="fas fa-user" style="margin-right:6px;"></i>${project.manager}</span>
+                ${(project.teamMembers || []).length ? `<span><i class="fas fa-users" style="margin-right:6px;"></i>团队成员：${(project.teamMembers || []).join('、')}</span>` : ''}
                 <span><i class="fas fa-calendar" style="margin-right:6px;"></i>${project.startDate} ~ ${project.endDate}</span>
               </div>
               <div style="display:flex;gap:24px;margin-bottom:16px;">
@@ -4034,17 +4775,19 @@
       const indent = level * 24;
 
       let html = `
-        <div style="padding:12px 16px;background:${level === 0 ? '#F9FAFB' : '#FAFAFA'};border-radius:8px;border:1px solid #E5E7EB;margin-bottom:8px;${level > 0 ? 'margin-left:' + indent + 'px;' : ''}cursor:pointer;${isTaskBlocked(task) ? 'border-color:#FDE68A;background:#FFFBEB;' : isOverdue(task) ? 'border-color:#FECACA;background:#FFFBFB;' : ''}" onclick="viewTask('${task.id}')">
+        <div style="padding:12px 16px;background:${task.status === 'abolished' ? '#F9FAFB' : level === 0 ? '#F9FAFB' : '#FAFAFA'};border-radius:8px;border:1px solid ${task.status === 'abolished' ? '#E5E7EB' : '#E5E7EB'};margin-bottom:8px;${level > 0 ? 'margin-left:' + indent + 'px;' : ''}cursor:pointer;opacity:${task.status === 'abolished' ? '0.75' : '1'};${isTaskBlocked(task) ? 'border-color:#FDE68A;background:#FFFBEB;' : isOverdue(task) ? 'border-color:#FECACA;background:#FFFBFB;' : ''}" onclick="viewTask('${task.id}')">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
             ${level > 0 ? '<span style="color:#CBD5E1;font-size:12px;">└</span>' : ''}
             <span class="priority-dot priority-${task.priority}"></span>
-            <span style="font-size:14px;font-weight:500;flex:1;">${task.title}${renderDependencyBadges(task, true)}</span>
+            <span style="font-size:14px;font-weight:500;flex:1;${task.status === 'abolished' ? 'text-decoration:line-through;color:#9CA3AF;' : ''}">${task.title}${renderDependencyBadges(task, true)}</span>
             ${task.type === 'temp' ? '<span class="tag tag-temp" style="font-size:10px;"><i class="fas fa-bolt"></i>临时</span>' : ''}
+            ${task.status === 'abolished' ? '<span class="tag" style="background:#F3F4F6;color:#9CA3AF;font-size:10px;"><i class="fas fa-ban"></i>已作废</span>' : ''}
             <span class="status-tag status-${displayStatus}" style="font-size:10px;">${st.label}</span>
           </div>
           <div style="display:flex;align-items:center;gap:16px;font-size:12px;color:#9CA3AF;">
             <span><i class="fas fa-user" style="margin-right:4px;"></i>${task.assignee}</span>
-            <span><i class="fas fa-calendar" style="margin-right:4px;"></i>${task.dueDate}</span>
+            <span><i class="fas fa-clock" style="margin-right:4px;"></i>${formatTaskCreatedAt(task.createdAt)}</span>
+            <span><i class="fas fa-calendar" style="margin-right:4px;"></i>${task.dueDate || '-'}</span>
             <span>进度：${progress}%</span>
           </div>
           <div style="margin-top:8px;">
@@ -4067,7 +4810,7 @@
         return;
       }
       state.returnToTaskId = null;
-      state.form = { projectId, type: 'normal', creator: currentUser.name, status: 'todo', priority: 'normal', progress: 0, informCollaborator: '', assistCollaborator: '' };
+      state.form = { projectId, type: 'normal', creator: currentUser.name, status: 'todo', priority: 'normal', progress: 0, informCollaborators: [], assistCollaborators: [] };
       state.page = 'projectDetail';
       state.showModal = 'taskEdit';
       render();
@@ -4091,8 +4834,8 @@
         planStartDate: parent.planStartDate || new Date().toISOString().split('T')[0],
         dueDate: parent.dueDate || '',
         assignee: parent.assignee || currentUser.name,
-        informCollaborator: '',
-        assistCollaborator: '',
+        informCollaborators: [],
+        assistCollaborators: [],
       };
       state.showModal = 'taskEdit';
       render();
@@ -4183,11 +4926,45 @@
       return false;
     }
 
+    /** 允许多名部门经理的部门（如信息中心），不设经理时不自动降级原经理 */
+    const MULTI_MANAGER_DEPTS = ['信息中心'];
+
+    /**
+     * 指定人员为部门经理后：本部门执行人员/管理员的上级批量指向该经理；
+     * 单经理部门内原部门经理自动降为执行人员并归入新经理。
+     * @returns {number} 实际变更人数
+     */
+    function syncDeptStaffLeadersToManager(dept, managerId) {
+      if (!dept || !managerId) return 0;
+      const allowMultiManager = MULTI_MANAGER_DEPTS.includes(dept);
+      let count = 0;
+      users = users.map(u => {
+        if (u.dept !== dept || u.id === managerId) return u;
+        if (u.role === 'staff' || u.role === 'admin') {
+          if (u.leaderId === managerId) return u;
+          count++;
+          return { ...u, leaderId: managerId };
+        }
+        if (!allowMultiManager && u.role === 'manager') {
+          count++;
+          return {
+            ...u,
+            role: 'staff',
+            position: u.position === '部门经理' ? '执行人员' : u.position,
+            leaderId: managerId,
+          };
+        }
+        return u;
+      });
+      allStaffUsers = allStaffUsers.map(u => users.find(x => x.id === u.id) || u);
+      return count;
+    }
+
     function canCreateSubTask(task) {
       if (!task || task.type === 'temp' || !task.projectId) return false;
       if (task.status === 'archived' || task.status === 'abolished') return false;
       const project = projects.find(p => p.id === task.projectId);
-      if (!project || project.archived) return false;
+      if (!project || isProjectArchived(project)) return false;
       if (isFullAccess(currentUser.role)) return true;
       if (canManageProject(project)) return true;
       if (task.assignee === currentUser.name) return true;
@@ -4393,13 +5170,28 @@
       }
     })();
 
+    /** 解析 API 响应；若返回 HTML（常见于后端未启动）则给出可读错误 */
+    async function parseJsonResponse(res) {
+      const text = await res.text();
+      if (!text || /^\s*</.test(text)) {
+        throw new Error(
+          '无法连接服务端，请确认后端已启动（server 目录执行 npm start），并通过 http://localhost:3000/app 访问'
+        );
+      }
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        throw new Error('服务端响应格式异常，请确认后端已正常启动');
+      }
+    }
+
     async function loadPublicConfig() {
       if (!ApiConfig.enabled) return;
       try {
         const res = await fetch(ApiConfig.baseUrl + '/config/public', {
           signal: AbortSignal.timeout(8000),
         });
-        const data = await res.json();
+        const data = await parseJsonResponse(res);
         if (!data.success) return;
         if (data.corpId) DingTalkApi.corpId = data.corpId;
         if (data.appKey) DingTalkApi.appKey = data.appKey;
@@ -4526,7 +5318,7 @@
               body: JSON.stringify({ userId }),
               signal: AbortSignal.timeout(ApiConfig.timeout),
             });
-            const data = await res.json();
+            const data = await parseJsonResponse(res);
             if (!data.success) return data;
             const merged = users.find(u => u.id === data.user?.id) || this.mergeUserFromServer(data.user);
             const result = this.applySession(merged, {
@@ -4568,7 +5360,7 @@
               body: JSON.stringify({ dingTalkUserId, corpId: corpId || DingTalkApi.corpId }),
               signal: AbortSignal.timeout(ApiConfig.timeout),
             });
-            const data = await res.json();
+            const data = await parseJsonResponse(res);
             if (!data.success) return data;
             const user = users.find(u => u.id === data.user?.id) || this.mergeUserFromServer(data.user);
             const result = this.applySession(user, {
@@ -4582,7 +5374,7 @@
             return result;
           } catch (e) {
             console.warn('[登录] userid 接口失败:', e);
-            return { success: false, message: e.message };
+            return { success: false, message: e.message || '登录接口异常' };
           }
         }
 
@@ -4617,7 +5409,7 @@
             body: JSON.stringify({ authCode, corpId: corpId || DingTalkApi.corpId }),
             signal: AbortSignal.timeout(ApiConfig.timeout),
           });
-          const data = await res.json();
+          const data = await parseJsonResponse(res);
           if (!data.success) return data;
           const user = users.find(u => u.id === data.user?.id) || this.mergeUserFromServer(data.user);
           const result = this.applySession(user, {
@@ -4630,7 +5422,7 @@
           await DataService.loadFromServer();
           return result;
         } catch (e) {
-          return { success: false, message: e.message };
+          return { success: false, message: e.message || '登录接口异常' };
         }
       },
 
@@ -4642,7 +5434,7 @@
             headers: { ...this.getAuthHeaders() },
             signal: AbortSignal.timeout(ApiConfig.timeout),
           });
-          const data = await res.json();
+          const data = await parseJsonResponse(res);
           if (!data.success) return data;
           const user = users.find(u => u.id === data.user?.id) || this.mergeUserFromServer(data.user);
           return this.applySession(user, {
@@ -4723,9 +5515,19 @@
         });
       },
 
-      /** 应用启动：优先 URL userid/authCode，其次钉钉 JSAPI 免登，再次已保存会话 */
+      /** 应用启动：优先已保存会话，其次 URL userid/authCode，再次钉钉 JSAPI 免登 */
       async init() {
         const urlParams = this.parseUrlParams();
+
+        if (authSession.token && this.isDingTalkMode()) {
+          const result = await this.fetchSession();
+          if (result.success) {
+            if (urlParams.dingTalkUserId || urlParams.authCode) this.cleanAuthUrlParams();
+            return result;
+          }
+          authSession.token = null;
+          authSession.refreshToken = null;
+        }
 
         if (urlParams.dingTalkUserId) {
           const result = await this.loginByDingTalkUserId(urlParams.dingTalkUserId, urlParams.corpId);
@@ -4751,11 +5553,6 @@
           if (jsResult && !jsResult.success) {
             state.authError = jsResult.message || '钉钉免登失败';
           }
-        }
-
-        if (authSession.token && this.isDingTalkMode()) {
-          const result = await this.fetchSession();
-          if (result.success) return result;
         }
 
         return { success: true, source: authSession.loginSource || 'persisted' };
@@ -5121,7 +5918,7 @@
 
       resolveRecipients(eventType, payload) {
         const names = payload.recipientNames || (payload.recipientName ? [payload.recipientName] : []);
-        return names.map(name => users.find(u => u.name === name)).filter(Boolean);
+        return names.map(name => getStaffDirectoryUsers().find(u => u.name === name)).filter(Boolean);
       },
 
       getTaskPayload(task, extra = {}) {
@@ -5392,7 +6189,7 @@
       });
       notifyCollaboratorAssistRejected(task, entry, reason || '项目负责人或任务负责人未接受您的协助');
       save();
-      alert('已拒绝该协办时段，请编辑任务更换辅助性协办人');
+      alert('已拒绝该协办时段，可在任务编辑中调整辅助性协办人');
       state.showModal = 'taskDetail';
       state.form = { taskId };
       render();
@@ -5976,9 +6773,10 @@
           <div class="kanban-card-meta" style="flex-wrap:wrap;">
             ${parent ? `<span style="color:#059669;"><i class="fas fa-level-up-alt" style="margin-right:4px;transform:rotate(90deg);"></i>${parent.title}</span>` : ''}
             <span><i class="fas fa-folder" style="margin-right:4px;"></i>${project ? project.name : '临时任务'}</span>
+            <span><i class="fas fa-clock" style="margin-right:4px;"></i>${formatTaskCreatedAt(task.createdAt)}</span>
             <span style="${isOverdue(task) ? 'color:#DC2626;' : ''}"><i class="fas fa-calendar" style="margin-right:4px;"></i>${task.dueDate || '-'}</span>
           </div>
-          ${task.status !== 'done' ? `
+          ${task.status !== 'done' && task.status !== 'abolished' ? `
           <div style="margin-top:8px;">
             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
               <span style="font-size:10px;color:#9CA3AF;">进度</span>
@@ -6733,6 +7531,11 @@
                 <div style="font-size:13px;color:#92400E;">${task.rejectReason || '未填写原因'}</div>
               </div>
               ` : ''}
+              ${task.status === 'abolished' ? `
+              <div style="padding:12px;background:#F3F4F6;border-radius:8px;margin-bottom:16px;border:1px solid #E5E7EB;">
+                <div style="font-size:13px;font-weight:600;color:#6B7280;"><i class="fas fa-ban" style="margin-right:4px;"></i>该任务已作废，不可再编辑或推进</div>
+              </div>
+              ` : ''}
 
               <p style="color:#6B7280;margin-bottom:16px;">${task.desc || '暂无描述'}</p>
 
@@ -6766,6 +7569,10 @@
                 <div style="padding:10px 12px;background:#F9FAFB;border-radius:8px;">
                   <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">主负责人</div>
                   <span style="font-size:13px;font-weight:500;">${task.assignee}</span>
+                </div>
+                <div style="padding:10px 12px;background:#F9FAFB;border-radius:8px;">
+                  <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">创建时间</div>
+                  <span style="font-size:13px;font-weight:500;">${formatTaskCreatedAt(task.createdAt)}</span>
                 </div>
                 <div style="padding:10px 12px;background:#F9FAFB;border-radius:8px;">
                   <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">截止日期</div>
@@ -6892,7 +7699,7 @@
               ` : ''}
 
               ${canTransfer ? `<button class="btn btn-ghost" onclick="showTransferModal('${task.id}')"><i class="fas fa-exchange-alt"></i>转办</button>` : ''}
-              ${canOperateTask(task) && task.status !== 'abolished' ? `<button class="btn btn-ghost" style="color:#DC2626;" onclick="abolishTask('${task.id}')"><i class="fas fa-ban"></i>作废</button>` : ''}
+              ${canAbolishTask(task) && task.status !== 'abolished' && task.status !== 'archived' ? `<button class="btn btn-ghost" style="color:#DC2626;" onclick="abolishTask('${task.id}')"><i class="fas fa-ban"></i>作废</button>` : ''}
               ${canOperateTask(task) ? `<button class="btn btn-primary" onclick="editTask('${task.id}')"><i class="fas fa-edit"></i>编辑</button>` : ''}
               ${!canEdit ? `<button class="btn btn-ghost" onclick="closeModal()">关闭</button>` : ''}
             </div>
@@ -6912,14 +7719,11 @@
       // 编辑时只有负责人可以操作
       const canEdit = !isEdit || canOperateTask(task);
       const assigneeName = task.assignee || state.form.assignee || currentUser.name;
-      const informEntry = getCollaboratorEntry(task, COLLAB_TYPE_INFORM, null) || getCollaboratorEntries(task, { type: COLLAB_TYPE_INFORM })[0];
-      const assistEntry = getCollaboratorEntry(task, COLLAB_TYPE_ASSIST, null) || getCollaboratorEntries(task, { type: COLLAB_TYPE_ASSIST, excludeRejected: true })[0]
-        || getCollaboratorEntries(task, { type: COLLAB_TYPE_ASSIST })[0];
-      const selectedInformCollaborator = state.form.informCollaborator ?? informEntry?.userName ?? '';
-      const selectedAssistCollaborator = state.form.assistCollaborator ?? assistEntry?.userName ?? '';
+      const selectedInformCollaborators = getTaskFormCollaboratorNames(task, COLLAB_TYPE_INFORM);
+      const selectedAssistCollaborators = getTaskFormCollaboratorNames(task, COLLAB_TYPE_ASSIST);
 
       return `
-        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal-overlay">
           <div class="modal-box" onclick="event.stopPropagation()">
             <div class="modal-header">
               <h3 class="modal-title">${isEdit ? '编辑任务' : (isSubTask ? '添加子任务' : '新建任务')}</h3>
@@ -6947,13 +7751,18 @@
                 <input class="input" style="width:100%;background:#F3F4F6;" value="${isEdit ? task.creator : currentUser.name}" disabled>
                 <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">创建人默认为当前用户，不可修改</div>
               </div>
+              <div class="form-group">
+                <label class="form-label">创建时间</label>
+                <input class="input" style="width:100%;background:#F3F4F6;" value="${isEdit ? formatTaskCreatedAt(task.createdAt) : '保存时自动记录'}" disabled>
+                <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">创建时间不可修改</div>
+              </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                 <div class="form-group">
                   <label class="form-label">负责人</label>
                   <select class="select" style="width:100%;" onchange="state.form.assignee=this.value" ${!canEdit ? 'disabled' : ''}>
                     ${getTaskAssigneeCandidates().map(u => `<option value="${u.name}" ${task.assignee === u.name ? 'selected' : ''}>${formatUserOptionLabel(u)}</option>`).join('')}
                   </select>
-                  <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">可选本部门及信息中心人员</div>
+                  <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">可选人员档案中的任意人员</div>
                 </div>
                 <div class="form-group">
                   <label class="form-label">优先级</label>
@@ -6967,19 +7776,17 @@
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                 <div class="form-group">
                   <label class="form-label">告知性协办人</label>
-                  <select class="select" style="width:100%;" onchange="state.form.informCollaborator=this.value" ${!canEdit ? 'disabled' : ''}>
-                    <option value="">无</option>
-                    ${getTaskCollaboratorCandidates().filter(u => u.name !== assigneeName && u.name !== selectedAssistCollaborator).map(u => `<option value="${u.name}" ${selectedInformCollaborator === u.name ? 'selected' : ''}>${formatUserOptionLabel(u)}</option>`).join('')}
-                  </select>
-                  <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">仅接收任务/项目进展通知，不计入工时</div>
+                  <div data-collab-ms-host="inform">
+                    ${renderCollaboratorMultiSelect(COLLAB_TYPE_INFORM, selectedInformCollaborators, assigneeName, selectedAssistCollaborators, !canEdit)}
+                  </div>
+                  <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">可选人员档案中的任意人员；仅接收任务/项目进展通知，不计入工时</div>
                 </div>
                 <div class="form-group">
                   <label class="form-label">辅助性协办人</label>
-                  <select class="select" style="width:100%;" onchange="state.form.assistCollaborator=this.value" ${!canEdit ? 'disabled' : ''}>
-                    <option value="">无</option>
-                    ${getTaskCollaboratorCandidates().filter(u => u.name !== assigneeName && u.name !== selectedInformCollaborator).map(u => `<option value="${u.name}" ${selectedAssistCollaborator === u.name ? 'selected' : ''}>${formatUserOptionLabel(u)}</option>`).join('')}
-                  </select>
-                  <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">需协办人填写协助时段并经审批后计入工时</div>
+                  <div data-collab-ms-host="assist">
+                    ${renderCollaboratorMultiSelect(COLLAB_TYPE_ASSIST, selectedAssistCollaborators, assigneeName, selectedInformCollaborators, !canEdit)}
+                  </div>
+                  <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">可选人员档案中的任意人员；需各协办人分别填写协助时段并经审批后计入工时</div>
                 </div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
@@ -7031,12 +7838,17 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label">状态</label>
-                  <select class="select" style="width:100%;" onchange="state.form.status=this.value">
+                  ${isEdit && isTerminalTaskStatus(task.status) ? `
+                  <input class="input" style="width:100%;background:#F3F4F6;" value="${(statusMap[task.status] || statusMap.todo).label}" disabled>
+                  ` : `
+                  <select class="select" style="width:100%;" onchange="state.form.status=this.value" ${!canEdit ? 'disabled' : ''}>
                     <option value="todo" ${task.status === 'todo' ? 'selected' : ''}>待开始</option>
                     <option value="doing" ${task.status === 'doing' ? 'selected' : ''}>进行中</option>
                     <option value="done" ${task.status === 'done' ? 'selected' : ''}>已完成</option>
                     <option value="paused" ${task.status === 'paused' ? 'selected' : ''}>已暂停</option>
+                    ${task.status === 'rejected' ? `<option value="rejected" selected>已驳回</option>` : ''}
                   </select>
+                  `}
                 </div>
               </div>
               ${isEdit ? '<div class="form-group"><label class="form-label">修改原因 <span class="form-required">*</span></label><textarea class="textarea" style="width:100%;height:60px;" onchange="state.form.reason=this.value" placeholder="请填写修改原因（必填）"></textarea></div>' : ''}
@@ -7081,7 +7893,7 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label">项目负责人</label>
-                  <select class="select" style="width:100%;" onchange="state.form.manager=this.value">
+                  <select class="select" style="width:100%;" onchange="state.form.manager=this.value;state.form.teamMembers=sanitizeProjectTeamMembers(this.value,getProjectTeamMembersForm());refreshProjectTeamMultiSelect();">
                     ${getProjectManagerCandidates().map(u => `<option value="${u.name}" ${project.manager === u.name ? 'selected' : ''}>${formatUserOptionLabel(u)}</option>`).join('')}
                   </select>
                   <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">可选本部门全员、信息中心全员，或各部门经理</div>
@@ -7096,6 +7908,13 @@
                   <label class="form-label">结束日期</label>
                   <input class="input" type="date" style="width:100%;" value="${project.endDate || ''}" onchange="state.form.endDate=this.value">
                 </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">项目团队成员</label>
+                <div data-project-team-ms-host>
+                  ${renderProjectTeamMultiSelect(project.teamMembers || [], project.manager || currentUser.name, false)}
+                </div>
+                <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">可多选，不含项目负责人</div>
               </div>
               <div class="form-group">
                 <label class="form-label">项目状态</label>
@@ -7124,7 +7943,10 @@
         alert('仅项目负责人或创建人可编辑');
         return;
       }
-      state.form = { ...project };
+      state.form = {
+        ...project,
+        teamMembers: [...(project.teamMembers || [])],
+      };
       state.showModal = 'projectEdit';
       render();
     }
@@ -7141,7 +7963,14 @@
       }
 
       const oldManager = existing.manager;
-      projects[idx] = { ...projects[idx], ...state.form };
+      projects[idx] = {
+        ...projects[idx],
+        ...state.form,
+        teamMembers: sanitizeProjectTeamMembers(
+          state.form.manager || existing.manager,
+          state.form.teamMembers
+        ),
+      };
       if (state.form.manager && state.form.manager !== oldManager) {
         notifyProjectManagerAssigned(projects[idx]);
       }
@@ -7190,6 +8019,7 @@
       const oldStatus = project.status;
       project.status = 'archived';
       project.archived = true;
+      normalizeProjectRecord(project);
 
       // 记录日志
       appendChangeLogEntry({
@@ -7203,7 +8033,7 @@
       });
 
       save();
-      goTo('projects');
+      goTo('archive');
     }
 
     // 项目删除（仅总经理/管理员）
@@ -7311,7 +8141,7 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label">项目负责人</label>
-                  <select class="select" style="width:100%;" onchange="state.form.manager=this.value">
+                  <select class="select" style="width:100%;" onchange="state.form.manager=this.value;state.form.teamMembers=sanitizeProjectTeamMembers(this.value,getProjectTeamMembersForm());refreshProjectTeamMultiSelect();">
                     ${getProjectManagerCandidates().map(u => `<option value="${u.name}" ${project.manager === u.name ? 'selected' : ''}>${formatUserOptionLabel(u)}</option>`).join('')}
                   </select>
                   <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">可选本部门全员、信息中心全员，或各部门经理</div>
@@ -7326,6 +8156,13 @@
                   <label class="form-label">结束日期</label>
                   <input class="input" type="date" style="width:100%;" value="${project.endDate || ''}" onchange="state.form.endDate=this.value">
                 </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">项目团队成员</label>
+                <div data-project-team-ms-host>
+                  ${renderProjectTeamMultiSelect(project.teamMembers || [], project.manager || currentUser.name, false)}
+                </div>
+                <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">可多选，不含项目负责人</div>
               </div>
             </div>
             <div class="modal-footer">
@@ -7357,6 +8194,7 @@
                   <select class="select" style="width:100%;" onchange="state.form.assignee=this.value">
                     ${getTaskAssigneeCandidates().map(u => `<option value="${u.name}" ${u.name === currentUser.name ? 'selected' : ''}>${formatUserOptionLabel(u)}</option>`).join('')}
                   </select>
+                  <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">可选人员档案中的任意人员</div>
                 </div>
                 <div class="form-group">
                   <label class="form-label">优先级</label>
@@ -7426,6 +8264,7 @@
                     <option value="gm" ${user.role === 'gm' ? 'selected' : ''}>总经理</option>
                   </select>
                   ${!canEditRole ? '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">仅总经理/管理员可修改</div>' : ''}
+                  ${canEditRole && (state.form.role || user.role) === 'manager' ? '<div style="font-size:11px;color:#2563EB;margin-top:4px;"><i class="fas fa-info-circle"></i> 保存后将自动把本部门执行人员的上级设为此人；单经理部门原经理将降为执行人员。</div>' : ''}
                 </div>
               </div>
               <div class="form-group">
@@ -7466,6 +8305,7 @@
       }
       if (!state.form.name && isFullAccess(currentUser.role)) { alert('请输入姓名'); return; }
 
+      let savedUser = null;
       const idx = users.findIndex(u => u.id === state.form.userId);
       if (idx >= 0) {
         const existing = users[idx];
@@ -7482,9 +8322,10 @@
         } else {
           users[idx] = { ...users[idx], ...state.form };
         }
+        savedUser = users[idx];
       } else if (isFullAccess(currentUser.role)) {
         if (!state.form.name) { alert('请输入姓名'); return; }
-        users.push({
+        savedUser = {
           id: genId('U'),
           name: state.form.name,
           dept: state.form.dept || currentUser.dept,
@@ -7493,10 +8334,20 @@
           leaderId: state.form.leaderId || '',
           standardWeekHours: state.form.standardWeekHours || 60,
           dingTalkUserId: '',
-        });
+        };
+        users.push(savedUser);
       }
+
+      let batchLeaderSyncCount = 0;
+      if (savedUser?.role === 'manager' && savedUser.dept && isFullAccess(currentUser.role)) {
+        batchLeaderSyncCount = syncDeptStaffLeadersToManager(savedUser.dept, savedUser.id);
+      }
+
       save();
       closeModal();
+      if (batchLeaderSyncCount > 0) {
+        alert(`已同步更新本部门 ${batchLeaderSyncCount} 名人员的上级为「${savedUser.name}」`);
+      }
     }
 
     function renderRejectModal() {
@@ -7605,6 +8456,7 @@
     function closeModal() {
       hideTaskCommentMentionDropdown();
       closeImageLightbox();
+      state.collabDropdownOpen = null;
       if (state.returnToTaskId) {
         const taskId = state.returnToTaskId;
         state.returnToTaskId = null;
@@ -7866,19 +8718,20 @@
         alert('您没有编辑该任务的权限');
         return;
       }
-      state.form = { ...task };
+      state.collabDropdownOpen = null;
+      state.form = initTaskFormCollaborators(task);
       state.showModal = 'taskEdit';
       render();
     }
 
     function showTempTaskModal() {
-      state.form = { type: 'temp', creator: currentUser.name, status: 'todo', priority: 'normal', progress: 0 };
+      state.form = { type: 'temp', creator: currentUser.name, status: 'todo', priority: 'normal', progress: 0, informCollaborators: [], assistCollaborators: [] };
       state.showModal = 'tempTask';
       render();
     }
 
     function showQuickTempTaskModal() {
-      state.form = { type: 'temp', creator: currentUser.name, status: 'todo', priority: 'normal', progress: 0, assignee: currentUser.name };
+      state.form = { type: 'temp', creator: currentUser.name, status: 'todo', priority: 'normal', progress: 0, assignee: currentUser.name, informCollaborators: [], assistCollaborators: [] };
       state.showModal = 'taskEdit';
       render();
     }
@@ -7893,7 +8746,7 @@
         parentId: null,
         collaboratorEntries: [],
         creator: currentUser.name,
-        createdAt: new Date().toISOString().split('T')[0],
+        createdAt: getNowCreatedAt(),
         estimatedHours: 0,
         actualHours: 0,
         planStartDate: null,
@@ -7916,33 +8769,38 @@
         return;
       }
 
-      if (!confirm('确定作废该任务？')) return;
+      if (hasActiveChildren(task.id)) {
+        alert('该任务存在未完成的下级任务，请先处理下级任务后再作废。');
+        return;
+      }
 
-      // 更新任务状态
+      if (!confirm('确定作废该任务？作废后不可恢复。')) return;
+
+      const oldStatus = task.status;
       task.status = 'abolished';
       getTaskSuccessorDeps(task.id).forEach(dep => {
         const succ = getDependencyTask(dep.successorTaskId);
         if (succ) refreshTaskDependencySchedule(succ);
       });
 
-      // 记录日志
       appendChangeLogEntry({
         taskId: task.id,
         operator: currentUser.name,
         operateTime: new Date().toLocaleString(),
-        before: '正常',
+        before: statusMap[oldStatus]?.label || oldStatus,
         after: '已作废',
         reason: '任务作废',
         project: projects.find(p => p.id === task.projectId)?.name || '临时任务',
       });
 
-      // 更新上级任务进度（排除已作废的任务）
       if (task.parentId) {
         updateParentProgress(task.parentId);
       }
 
-      save();
-      closeModal();
+      save({ immediateSync: true });
+      state.form = { taskId: task.id };
+      state.showModal = 'taskDetail';
+      render();
     }
 
     function showProjectModal() {
@@ -7950,7 +8808,13 @@
         alert('您没有新建项目的权限');
         return;
       }
-      state.form = { creator: currentUser.name, status: 'active', dept: currentUser.dept, manager: currentUser.name };
+      state.form = {
+        creator: currentUser.name,
+        status: 'active',
+        dept: currentUser.dept,
+        manager: currentUser.name,
+        teamMembers: [],
+      };
       state.showModal = 'projectCreate';
       render();
     }
@@ -7964,12 +8828,16 @@
         desc: state.form.desc || '',
         dept: state.form.dept || currentUser.dept,
         manager: state.form.manager || currentUser.name,
+        teamMembers: sanitizeProjectTeamMembers(
+          state.form.manager || currentUser.name,
+          state.form.teamMembers
+        ),
         status: 'active',
         startDate: state.form.startDate || new Date().toISOString().split('T')[0],
         endDate: state.form.endDate || '',
         archived: false,
         creator: currentUser.name,
-        createdAt: new Date().toISOString().split('T')[0],
+        createdAt: getNowCreatedAt(),
         documents: [],
       };
 
@@ -8035,6 +8903,10 @@
           alert('您没有编辑该任务的权限');
           return;
         }
+        if (isTerminalTaskStatus(task.status)) {
+          alert('已作废或已归档的任务不可编辑');
+          return;
+        }
         // 编辑已有任务，必须填写修改原因
         if (!state.form.reason) { alert('请填写修改原因'); return; }
         const oldAssignee = task.assignee;
@@ -8052,13 +8924,19 @@
           reason: state.form.reason,
           project: projects.find(p => p.id === task.projectId)?.name || '临时任务',
         });
+        const preservedCreatedAt = task.createdAt;
+        const preservedStatus = isTerminalTaskStatus(task.status) ? task.status : null;
         Object.assign(task, state.form);
+        if (preservedCreatedAt) task.createdAt = preservedCreatedAt;
+        if (preservedStatus) task.status = preservedStatus;
         delete task.informCollaborator;
         delete task.assistCollaborator;
+        delete task.informCollaborators;
+        delete task.assistCollaborators;
         syncTaskScheduleFields(task);
         try {
-          upsertCollaboratorEntry(task, COLLAB_TYPE_INFORM, state.form.informCollaborator || '', { notify: false });
-          upsertCollaboratorEntry(task, COLLAB_TYPE_ASSIST, state.form.assistCollaborator || '');
+          syncCollaboratorsByType(task, COLLAB_TYPE_INFORM, getTaskFormCollaboratorNames(task, COLLAB_TYPE_INFORM), { notify: false });
+          syncCollaboratorsByType(task, COLLAB_TYPE_ASSIST, getTaskFormCollaboratorNames(task, COLLAB_TYPE_ASSIST));
         } catch (e) {
           alert(e.message);
           return;
@@ -8096,7 +8974,7 @@
           assignee: state.form.assignee || currentUser.name,
           collaboratorEntries: [],
           creator: currentUser.name,
-          createdAt: new Date().toISOString().split('T')[0],
+          createdAt: getNowCreatedAt(),
           estimatedHours: state.form.estimatedHours || 0,
           actualHours: 0,
           planStartDate: state.form.planStartDate || null,
@@ -8106,8 +8984,8 @@
         });
         tasks.push(newTask);
         try {
-          upsertCollaboratorEntry(newTask, COLLAB_TYPE_INFORM, state.form.informCollaborator || '', { notify: false });
-          upsertCollaboratorEntry(newTask, COLLAB_TYPE_ASSIST, state.form.assistCollaborator || '');
+          syncCollaboratorsByType(newTask, COLLAB_TYPE_INFORM, getTaskFormCollaboratorNames(newTask, COLLAB_TYPE_INFORM), { notify: false });
+          syncCollaboratorsByType(newTask, COLLAB_TYPE_ASSIST, getTaskFormCollaboratorNames(newTask, COLLAB_TYPE_ASSIST));
         } catch (e) {
           tasks.pop();
           alert(e.message);
@@ -8349,7 +9227,7 @@
           endDate: row.endDate || '',
           archived: false,
           creator: currentUser.name,
-          createdAt: new Date().toISOString().split('T')[0],
+          createdAt: getNowCreatedAt(),
         };
         projects.push(project);
       }
@@ -8396,7 +9274,7 @@
           planStartDate: null,
           actualStartDate: null,
           actualEndDate: null,
-          createdAt: new Date().toISOString().split('T')[0],
+          createdAt: getNowCreatedAt(),
         };
         if (isLast) finalizeImportedTask(task, row);
         tasks.push(task);
@@ -8429,6 +9307,20 @@
               </p>
               <button class="btn btn-primary" onclick="mergeSeedFromServer()" style="background:#D97706;border-color:#D97706;">
                 <i class="fas fa-plus-circle"></i> 补全缺失项目数据
+              </button>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-bottom:20px;border-color:#BFDBFE;">
+            <div class="panel-header">
+              <span class="panel-title"><i class="fas fa-paperclip" style="color:#2563EB;"></i>任务附件同步到项目文档</span>
+            </div>
+            <div class="panel-body">
+              <p style="font-size:13px;color:#6B7280;margin-bottom:12px;line-height:1.6;">
+                任务附件会在上传后<strong>自动同步</strong>到所属项目的「项目文档」。若历史数据未显示，可点击下方按钮手动补同步一次（可重复执行）。
+              </p>
+              <button class="btn btn-primary" onclick="syncTaskAttachmentsFromServer()" style="background:#2563EB;border-color:#2563EB;">
+                <i class="fas fa-sync-alt"></i> 同步已有任务附件
               </button>
             </div>
           </div>
@@ -8843,7 +9735,7 @@
               endDate: row.endDate || '',
               archived: false,
               creator: currentUser.name,
-              createdAt: new Date().toISOString().split('T')[0],
+              createdAt: getNowCreatedAt(),
             });
             successCount++;
           } catch (e) {
@@ -8899,7 +9791,7 @@
               planStartDate: null,
               actualStartDate: null,
               actualEndDate: null,
-              createdAt: new Date().toISOString().split('T')[0],
+              createdAt: getNowCreatedAt(),
             };
             finalizeImportedTask(task, row);
             tasks.push(task);

@@ -62,6 +62,13 @@ if (config.staticDir) {
     res.redirect(301, '/app' + q);
   });
 
+  const wallPath = path.join(config.staticDir, '滚动大屏.html');
+  app.get('/wall', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(wallPath);
+  });
+  app.get('/滚动大屏.html', (_req, res) => res.redirect(301, '/wall'));
+
   app.use(express.static(config.staticDir));
 }
 
@@ -88,6 +95,7 @@ app.listen(config.port, config.host, () => {
   console.log(`  健康检查: http://localhost:${config.port}/api/health`);
   if (config.staticDir) {
     console.log(`  本机访问: http://localhost:${config.port}/app`);
+    console.log(`  滚动大屏: http://localhost:${config.port}/wall?key=<API_KEY>`);
   }
   if (config.localAsServer && lanIps.length) {
     for (const ip of lanIps) {

@@ -17,6 +17,8 @@ const {
   mergePushLogsById,
   replaceAllData,
   reloadStoreFromDisk,
+  getDb,
+  persistStore,
 } = require('../db/database');
 const { getWorkCalendar } = require('../services/workCalendar');
 
@@ -25,13 +27,16 @@ const {
   isRelatedToTask,
   isRelatedToProject,
   canManageProject,
+  canUserSyncProject,
   canEditTask,
+  canUserSyncTask,
 } = require('../utils/taskRelations');
 const {
   mergeSeedIntoStore,
   loadSeedFile,
   getDefaultSeedPath,
 } = require('../utils/mergeSeedData');
+const { backfillTaskAttachmentsToProjectDocuments, ensureTaskAttachmentsSyncedToProjects } = require('../utils/projectDocuments');
 const {
   INFO_CENTER_DEPT,
   filterProjectsForUser,
@@ -48,8 +53,11 @@ function filterDependenciesForUser(user, deps, allTasks, allProjects) {
 }
 
 function filterByRole(user, data) {
+  const allUsers = data.users || [];
+  const withStaffDirectory = payload => ({ ...payload, allUsers });
+
   if (isFullAccess(user.role)) {
-    return data;
+    return withStaffDirectory(data);
   }
 
   const allTasks = data.tasks || [];
@@ -69,20 +77,20 @@ function filterByRole(user, data) {
   };
 
   if (user.role === 'manager') {
-    return {
+    return withStaffDirectory({
       ...visible,
-      users: data.users.filter(u =>
+      users: allUsers.filter(u =>
         u.dept === user.dept ||
         isFullAccess(u.role) ||
         u.dept === INFO_CENTER_DEPT
       ),
-    };
+    });
   }
 
-  return {
+  return withStaffDirectory({
     ...visible,
-    users: data.users,
-  };
+    users: allUsers,
+  });
 }
 
 function canStaffTouchTask(user, task, allUsers) {
@@ -197,8 +205,8 @@ function mergeIncomingSync(user, incoming) {
     }
     replaceAllData({
       users: mergeUsersPreservingServerFields(store.users, Array.isArray(incoming.users) ? incoming.users : store.users),
-      projects: wipeRisk ? store.projects : incomingProjects,
-      tasks: wipeRisk ? store.tasks : incomingTasks,
+      projects: wipeRisk ? store.projects : mergeProjectsById(store.projects, incomingProjects, null),
+      tasks: wipeRisk ? store.tasks : mergeTasksById(store.tasks, incomingTasks, null),
       taskDependencies: wipeRisk ? store.taskDependencies : (
         Array.isArray(incoming.taskDependencies) ? incoming.taskDependencies : mergedTaskDependencies
       ),
@@ -211,10 +219,10 @@ function mergeIncomingSync(user, incoming) {
 
   if (user.role === 'manager') {
     const mergedTasks = mergeTasksById(store.tasks, incoming.tasks || [], t =>
-      canEditTask(user, t, store.projects)
+      canUserSyncTask(user, t, store.projects)
     );
     const mergedProjects = mergeProjectsById(store.projects, incoming.projects || [], p =>
-      canManageProject(user, p)
+      canUserSyncProject(user, p)
     );
     replaceAllData({
       users: mergeManagerUserUpdates(store.users, user, incoming.userUpdates),
@@ -229,10 +237,10 @@ function mergeIncomingSync(user, incoming) {
   }
 
   const mergedTasks = mergeTasksById(store.tasks, incoming.tasks || [], t =>
-    canEditTask(user, t, store.projects)
+    canUserSyncTask(user, t, store.projects)
   );
   const mergedProjects = mergeProjectsById(store.projects, incoming.projects || [], p =>
-    canManageProject(user, p)
+    canUserSyncProject(user, p)
   );
   replaceAllData({
     users: store.users,
@@ -247,6 +255,8 @@ function mergeIncomingSync(user, incoming) {
 
 router.get('/miniapp/bootstrap', requireApiKey, requireAuth, (req, res) => {
   reloadStoreFromDisk();
+  const store = getDb();
+  if (ensureTaskAttachmentsSyncedToProjects(store)) persistStore();
   const raw = {
     users: getAllUsers(),
     projects: getAllProjects(),
@@ -263,6 +273,8 @@ router.get('/miniapp/bootstrap', requireApiKey, requireAuth, (req, res) => {
 
 router.get('/data/bootstrap', requireAuth, (req, res) => {
   reloadStoreFromDisk();
+  const store = getDb();
+  if (ensureTaskAttachmentsSyncedToProjects(store)) persistStore();
   const raw = {
     users: getAllUsers(),
     projects: getAllProjects(),
@@ -285,6 +297,8 @@ router.get('/data/bootstrap', requireAuth, (req, res) => {
 
 router.put('/data/sync', requireAuth, (req, res) => {
   const body = req.body || {};
+  const store = getDb();
+  ensureTaskAttachmentsSyncedToProjects(store);
   const {
     projects,
     tasks,
@@ -364,6 +378,29 @@ router.post('/data/admin/merge-seed', requireAuth, (req, res) => {
     res.json({
       success: true,
       message: `已补全 ${result.addedProjects} 个项目、${result.addedTasks} 个任务`,
+      ...result,
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/** 管理员：将已有任务附件补同步到所属项目文档（幂等） */
+router.post('/data/admin/sync-task-attachments', requireAuth, (req, res) => {
+  if (!isFullAccess(req.user.role)) {
+    return res.status(403).json({ success: false, message: '仅总经理/管理员可执行' });
+  }
+  try {
+    const store = getDb();
+    const result = backfillTaskAttachmentsToProjectDocuments(store);
+    if (result.synced > 0) {
+      persistStore();
+    }
+    res.json({
+      success: true,
+      message: result.synced > 0
+        ? `已同步 ${result.synced} 个任务附件到 ${result.projectsTouched} 个项目`
+        : '无需同步，任务附件均已存在于项目文档中',
       ...result,
     });
   } catch (e) {
