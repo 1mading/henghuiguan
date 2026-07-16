@@ -1,35 +1,36 @@
 # ========== 敏感配置（禁止提交）==========
-server/.env
+恒慧管项目/server/.env
 .env
 .env.*
 !.env.example
 !**/.env.example
-server/miniapp/config.js
+恒慧管项目/server/miniapp/config.js
 
 # ========== 运行时 / 业务数据（禁止提交）==========
-server/data/
-server/src/db/seed-data.json
-server/src/db/seed-data.local.json
+恒慧管项目/server/data/
+恒慧管项目/server/src/db/seed-data.json
+恒慧管项目/server/src/db/seed-data.local.json
 
 # ========== 依赖与构建 ==========
-server/node_modules/
+恒慧管项目/server/node_modules/
 node_modules/
 
 # ========== 上传文件与备份 ==========
-server/data/uploads/
+恒慧管项目/server/data/uploads/
 **/data/backups/
 *.json.tmp
 
 # ========== 本地工具与 IDE ==========
 .claude/
+恒慧管项目/.claude/
 .cursor/plans/
 *.log
 .DS_Store
 Thumbs.db
 
 # ========== 密钥轮换备份（若生成）==========
-server/.env.bak
-server/.env.backup
+恒慧管项目/server/.env.bak
+恒慧管项目/server/.env.backup
 *.pem
 *.key
 *.p12

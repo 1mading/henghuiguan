@@ -1,0 +1,27 @@
+{
+  "name": "henghuiguan-server",
+  "version": "1.0.0",
+  "description": "恒慧管 - 部门内部项目管控系统后端",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "start:prod": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "seed": "node src/db/seed.js",
+    "record-change": "node scripts/record-change.js",
+    "publish-release": "node scripts/publish-release.js",
+    "ops-reminder": "node scripts/ops-reminder.js",
+    "rotate-secrets": "node scripts/rotate-secrets.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.2.0",
+    "uuid": "^11.0.5"
+  }
+}
