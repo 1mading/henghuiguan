@@ -5104,6 +5104,9 @@
       const prLabel = prKey === 'urgent' ? '高' : (prKey === 'important' ? '中' : '低');
       const due = normalizeDateStr(resolveTaskDueDate(task)) || task.dueDate || '';
       const projectLabel = task.projectId ? getTaskProjectLabel(task) : '临时任务';
+      const submitterName = !task.projectId
+        ? (typeof getTaskSubmitterName === 'function' ? getTaskSubmitterName(task) : (task.creator || ''))
+        : '';
       const desc = (task.description || task.remark || '').trim();
 
       const canOp = typeof canOperateTask === 'function' && canOperateTask(task);
@@ -5140,6 +5143,7 @@
           ${desc ? `<div class="wb-todo-desc">${escapeHtml(desc)}</div>` : ''}
           <div class="wb-todo-meta">
             <span class="tag">${escapeHtml(projectLabel)}</span>
+            ${submitterName ? `<span class="tag"><i class="fas fa-user"></i> 提单人 ${escapeHtml(submitterName)}</span>` : ''}
             ${due ? `<span class="tag"><i class="far fa-calendar"></i> ${escapeHtml(due)}</span>` : ''}
             <span class="tag" style="color:${pr.color};">${escapeHtml(prLabel)}</span>
           </div>
@@ -10358,7 +10362,8 @@
       TASK_REJECTED: 'task_rejected',       // 任务驳回
       TASK_DUE_SOON: 'task_due_soon',       // 即将到期
       TASK_OVERDUE: 'task_overdue',         // 已逾期
-      TASK_COMPLETED: 'task_completed',     // 任务完成（挂项目：通知项目负责人+上级；未挂项目临时任务：不自动推送，可确认后通知提单人）
+      TASK_COMPLETED: 'task_completed',     // 任务完成（挂项目：通知项目负责人+上级；未挂项目临时任务：不自动推送，可确认后通知提单人，无需理由）
+      TASK_PAUSED: 'task_paused',           // 表单提报临时任务暂停：可确认后通知提单人（须写明原因）
       TASK_COMMENT_MENTION: 'task_comment_mention', // 留言 @ 提及
       TASK_COLLAB_ASSIST_REQUEST: 'task_collab_assist_request', // 辅助性协办邀请
       TASK_COLLAB_PROPOSED: 'task_collab_proposed', // 协办时段待审批
@@ -10415,6 +10420,7 @@
       PushEventType.TASK_DUE_SOON,
       PushEventType.TASK_OVERDUE,
       PushEventType.TASK_COMPLETED,
+      PushEventType.TASK_PAUSED,
       PushEventType.TASK_COMMENT_MENTION,
       PushEventType.TASK_COLLAB_ASSIST_REQUEST,
       PushEventType.TASK_COLLAB_PROPOSED,
@@ -10515,6 +10521,14 @@
         const name = id && title ? `${id}，${title}` : (id || title || '未命名任务');
         return `任务：${name} 已完成`;
       },
+      /** 联系人暂停通知：任务名 + 已暂停 + 原因 */
+      contactTaskPausedLine(d) {
+        const id = d.taskId || '';
+        const title = d.taskTitle || '';
+        const name = id && title ? `${id}，${title}` : (id || title || '未命名任务');
+        const reason = String(d.reason || '').trim();
+        return reason ? `任务：${name} 已暂停\n原因：${reason}` : `任务：${name} 已暂停`;
+      },
     };
 
     const PushTemplates = {
@@ -10594,6 +10608,21 @@
             PushFormat.listOrOne(items, it => {
               const block = PushFormat.taskBlock(it);
               return it.assignee ? `${block}\n负责人：${it.assignee}` : block;
+            }),
+          ]),
+        };
+      },
+      [PushEventType.TASK_PAUSED]: (d) => {
+        const items = PushFormat.itemsOf(d);
+        const n = items.length;
+        return {
+          title: '【恒慧管·任务暂停】',
+          content: PushFormat.compose([
+            n === 1 ? '任务已暂停：' : `以下 ${n} 条任务已暂停：`,
+            PushFormat.listOrOne(items, it => {
+              const block = PushFormat.taskBlock(it);
+              const withAssignee = it.assignee ? `${block}\n负责人：${it.assignee}` : block;
+              return PushFormat.withNote(withAssignee, it.reason);
             }),
           ]),
         };
@@ -10852,6 +10881,33 @@
               : items.map((it, i) => `${i + 1}. ${PushFormat.contactTaskCompletedLine(it)}`).join('\n');
             lastLog = await this._deliverToRecipients(eventType, payload, contactRecipients, {
               title: '【恒慧管·任务完成】',
+              content,
+            }, { withLink: false });
+          }
+          if (memberRecipients.length) {
+            lastLog = await this._deliverToRecipients(
+              eventType,
+              payload,
+              memberRecipients,
+              template(payload),
+              { withLink: true }
+            );
+          }
+          return lastLog;
+        }
+
+        // 任务暂停：联系人短文案（含原因）无链接；业务成员保持原卡片
+        if (eventType === PushEventType.TASK_PAUSED) {
+          const contactRecipients = recipients.filter(isContactProfile);
+          const memberRecipients = recipients.filter(r => !isContactProfile(r));
+          let lastLog = null;
+          if (contactRecipients.length) {
+            const items = PushFormat.itemsOf(payload);
+            const content = items.length === 1
+              ? PushFormat.contactTaskPausedLine(items[0])
+              : items.map((it, i) => `${i + 1}. ${PushFormat.contactTaskPausedLine(it)}`).join('\n');
+            lastLog = await this._deliverToRecipients(eventType, payload, contactRecipients, {
+              title: '【恒慧管·任务暂停】',
               content,
             }, { withLink: false });
           }
@@ -11683,37 +11739,22 @@
       });
     }
 
-    /** 未挂项目的临时任务完成时：弹窗确认是否通知提单人 */
+    /** 未挂项目的临时任务完成时：弹窗确认是否通知提单人（无需理由） */
     function maybeAskNotifySubmitterOnTempDone(task) {
       if (!isStandaloneTempTask(task)) return;
-      const staff = resolveTaskSubmitterStaff(task);
-      const rawLabel = getTaskSubmitterName(task);
-      if (!rawLabel && !staff) return;
-      if (staff && isSamePersonName(staff.name, currentUser.name)) return;
-      if (!staff && isSamePersonName(rawLabel, currentUser.name)) return;
-
-      const displayName = staff?.name || rawLabel;
-      const tip = staff
-        ? (staff.dingTalkUserId
-          ? `是否通知提单人「${displayName}」：任务已完成？\n（将发送钉钉工作通知）`
-          : `是否通知提单人「${displayName}」：任务已完成？\n（该人员未绑定钉钉 userid，仅写入应用内通知）`)
-        : `提单人「${displayName}」无法匹配人员档案（可能是钉钉 userid 未同步）。\n请在人员档案确认该人员已同步，或让表单「提交人」传姓名后再试。`;
-
-      if (!staff) {
-        alert(tip);
+      const prepared = prepareSubmitterNotify(task);
+      if (!prepared) return;
+      if (prepared.unmatched) {
+        alert(prepared.unmatchedTip);
         return;
       }
+      const { staff, displayName } = prepared;
+      const tip = staff.dingTalkUserId
+        ? `是否通知提单人「${displayName}」：任务已完成？\n（将发送钉钉工作通知）`
+        : `是否通知提单人「${displayName}」：任务已完成？\n（该人员未绑定钉钉 userid，仅写入应用内通知）`;
       if (!confirm(tip)) return;
 
-      // 回写正确姓名，避免任务上一直显示 userid
-      if (task.creator && task.creator !== staff.name && /^[0-9A-Za-z_-]+$/.test(task.creator)) {
-        task.creator = staff.name;
-      }
-      if (task.intakeMeta) {
-        task.intakeMeta.submitterName = staff.name;
-        if (staff.dingTalkUserId) task.intakeMeta.submitterDingTalkUserId = staff.dingTalkUserId;
-      }
-
+      applySubmitterNameFix(task, staff);
       NotificationService.send(PushEventType.TASK_COMPLETED, {
         ...NotificationService.getTaskPayload(task),
         recipientNames: [staff.name],
@@ -11722,10 +11763,81 @@
       save({ skipUsers: true });
     }
 
+    /**
+     * 表单提报临时任务暂停时：弹窗确认是否通知提单人；若推送须写明原因。
+     * @param {object} task
+     * @param {string} [defaultReason] 编辑保存时的修改原因，可作为默认暂停原因
+     */
+    function maybeAskNotifySubmitterOnTempPaused(task, defaultReason = '') {
+      if (!isStandaloneTempTask(task) || !isAitableIntakeTask(task)) return;
+      const prepared = prepareSubmitterNotify(task);
+      if (!prepared) return;
+      if (prepared.unmatched) {
+        alert(prepared.unmatchedTip);
+        return;
+      }
+      const { staff, displayName } = prepared;
+      const tip = staff.dingTalkUserId
+        ? `是否通知提单人「${displayName}」：任务已暂停？\n（将发送钉钉工作通知，须填写暂停原因）`
+        : `是否通知提单人「${displayName}」：任务已暂停？\n（该人员未绑定钉钉 userid，仅写入应用内通知；须填写暂停原因）`;
+      if (!confirm(tip)) return;
+
+      let reason = String(defaultReason || '').trim();
+      while (!reason) {
+        const raw = prompt('请填写暂停原因（将通知提单人）：', '');
+        if (raw === null) return; // 取消推送，任务仍保持已暂停
+        reason = String(raw).trim();
+        if (!reason) alert('推送提单人时必须写明暂停原因');
+      }
+
+      applySubmitterNameFix(task, staff);
+      NotificationService.send(PushEventType.TASK_PAUSED, {
+        ...NotificationService.getTaskPayload(task),
+        recipientNames: [staff.name],
+        operator: currentUser.name,
+        reason,
+      });
+      save({ skipUsers: true });
+    }
+
+    /** 解析提单人并校验是否可推送；返回 null 表示无需弹窗 */
+    function prepareSubmitterNotify(task) {
+      const staff = resolveTaskSubmitterStaff(task);
+      const rawLabel = getTaskSubmitterName(task);
+      if (!rawLabel && !staff) return null;
+      if (staff && isSamePersonName(staff.name, currentUser.name)) return null;
+      if (!staff && isSamePersonName(rawLabel, currentUser.name)) return null;
+
+      const displayName = staff?.name || rawLabel;
+      if (!staff) {
+        return {
+          unmatched: true,
+          unmatchedTip: `提单人「${displayName}」无法匹配人员档案（可能是钉钉 userid 未同步）。\n请在人员档案确认该人员已同步，或让表单「提交人」传姓名后再试。`,
+        };
+      }
+      return { staff, displayName };
+    }
+
+    function applySubmitterNameFix(task, staff) {
+      if (!task || !staff) return;
+      if (task.creator && task.creator !== staff.name && /^[0-9A-Za-z_-]+$/.test(task.creator)) {
+        task.creator = staff.name;
+      }
+      if (task.intakeMeta) {
+        task.intakeMeta.submitterName = staff.name;
+        if (staff.dingTalkUserId) task.intakeMeta.submitterDingTalkUserId = staff.dingTalkUserId;
+      }
+    }
+
     /** 任务刚变为已完成时的通知入口 */
     function onTaskMarkedDone(task) {
       notifyTaskCompleted(task);
       maybeAskNotifySubmitterOnTempDone(task);
+    }
+
+    /** 任务刚变为已暂停时的通知入口（表单提报临时任务可推送提单人） */
+    function onTaskMarkedPaused(task, defaultReason = '') {
+      maybeAskNotifySubmitterOnTempPaused(task, defaultReason);
     }
 
     // 钉钉人员同步
@@ -14830,6 +14942,8 @@
       if (newStatus === 'done') {
         onTaskMarkedDone(task);
         onPredecessorTaskCompleted(task);
+      } else if (newStatus === 'paused' && oldStatus !== 'paused') {
+        onTaskMarkedPaused(task);
       }
 
       save();
@@ -15673,6 +15787,9 @@
           onPredecessorTaskCompleted(task);
         } else if (task.status === 'done') {
           task.progress = 100;
+        }
+        if (state.form.status === 'paused' && oldStatus !== 'paused') {
+          onTaskMarkedPaused(task, state.form.reason || '');
         }
         if (state.form.assignee && state.form.assignee !== oldAssignee) {
           notifyTaskAssigned(task);
