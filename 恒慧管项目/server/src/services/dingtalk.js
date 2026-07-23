@@ -1,5 +1,23 @@
 const config = require('../config');
-const { getAllUsers, setUsers, findUserByDingTalkId, upsertUser, applyPersonRenames } = require('../db/database');
+const {
+  getAllUsers,
+  setUsers,
+  findUserByDingTalkId,
+  upsertUser,
+  applyPersonRenames,
+  getStaffDeptCatalog,
+  setStaffDeptCatalog,
+} = require('../db/database');
+const {
+  PROFILE_KIND_MEMBER,
+  PROFILE_KIND_CONTACT,
+  normalizeProfileKind,
+  resolveProfileKindForUser,
+  mergeDeptsIntoCatalog,
+  catalogKindForDept,
+  mergeOrgTreeIntoCatalog,
+  buildOrgForest,
+} = require('../utils/staffProfile');
 
 let cachedAccessToken = null;
 let tokenExpiresAt = 0;
@@ -121,7 +139,34 @@ async function getUserIdByAuthCode(authCode) {
   return result?.userid || null;
 }
 
-async function sendWorkNotification({ dingTalkUserIds, title, content, url }) {
+/**
+ * 工作通知跳转：在钉钉工作台内打开 H5，避免普通 https 被当外部网页用浏览器打开。
+ * 企业内部应用 app_id = 0_{agentId}
+ */
+function buildWorkAppJumpUrl(pageUrl) {
+  const corpId = String(config.dingtalk.corpId || '').trim();
+  const agentId = String(config.dingtalk.agentId || '').trim();
+  const redirect = String(pageUrl || '').trim();
+  if (!corpId || !agentId || !redirect) return '';
+  const appId = `0_${agentId}`;
+  return (
+    'dingtalk://dingtalkclient/action/openapp'
+    + `?corpid=${encodeURIComponent(corpId)}`
+    + `&container_type=work_platform`
+    + `&app_id=${encodeURIComponent(appId)}`
+    + `&redirect_type=jump`
+    + `&redirect_url=${encodeURIComponent(redirect)}`
+  );
+}
+
+function resolveWorkNotificationPageUrl(url) {
+  const custom = String(url || '').trim();
+  if (custom) return custom;
+  if (config.publicBaseUrl) return `${config.publicBaseUrl}/app`;
+  return '';
+}
+
+async function sendWorkNotification({ dingTalkUserIds, title, content, url, withLink = true }) {
   const ids = [...new Set((dingTalkUserIds || []).map(String).filter(id => id && id !== 'demo'))];
   if (!ids.length) {
     throw new Error('无有效钉钉接收人（请先在人员档案绑定 userid）');
@@ -134,6 +179,7 @@ async function sendWorkNotification({ dingTalkUserIds, title, content, url }) {
       message: '钉钉未配置，演示模式已记录推送',
       dingTalkUserIds: ids,
       title,
+      withLink: withLink !== false,
     };
   }
 
@@ -143,16 +189,43 @@ async function sendWorkNotification({ dingTalkUserIds, title, content, url }) {
   }
 
   const accessToken = await getAccessToken();
-  const link = url || (config.publicBaseUrl ? `${config.publicBaseUrl}/app` : '');
-  const textContent = `${title}\n${content}${link ? `\n${link}` : ''}`;
+  const pageUrl = resolveWorkNotificationPageUrl(url);
+  const jumpUrl = withLink === false ? '' : buildWorkAppJumpUrl(pageUrl);
+  const safeTitle = String(title || '【恒慧管】通知').slice(0, 64);
+  const safeContent = String(content || '').trim();
+
+  let msg;
+  if (jumpUrl) {
+    const markdown = safeContent
+      ? `### ${safeTitle}\n\n${safeContent}`
+      : `### ${safeTitle}`;
+    msg = {
+      msgtype: 'action_card',
+      action_card: {
+        title: safeTitle,
+        markdown,
+        single_title: '打开恒慧管',
+        single_url: jumpUrl,
+      },
+    };
+  } else {
+    if (withLink !== false) {
+      console.warn('[钉钉推送] 缺少 corpId/agentId/页面地址，降级为纯文本（链接可能在浏览器打开）');
+    }
+    // withLink:false 明确不附页面 URL；其它降级场景仍可附 pageUrl 便于排查
+    const textContent = withLink === false
+      ? `${safeTitle}\n${safeContent}`.trim()
+      : `${safeTitle}\n${safeContent}${pageUrl ? `\n${pageUrl}` : ''}`.trim();
+    msg = {
+      msgtype: 'text',
+      text: { content: textContent },
+    };
+  }
 
   const body = {
     agent_id: agentId,
     userid_list: ids.join(','),
-    msg: {
-      msgtype: 'text',
-      text: { content: textContent },
-    },
+    msg,
   };
 
   const res = await fetch(
@@ -174,7 +247,13 @@ async function sendWorkNotification({ dingTalkUserIds, title, content, url }) {
   if (data.errcode !== 0) {
     throw new Error(formatDingTalkApiError('message/corpconversation/asyncsend_v2', data));
   }
-  return { success: true, taskId: data.task_id, dingTalkUserIds: ids };
+  return {
+    success: true,
+    taskId: data.task_id,
+    dingTalkUserIds: ids,
+    inAppJump: !!jumpUrl,
+    withLink: withLink !== false,
+  };
 }
 
 async function getAuthScopes(accessToken) {
@@ -223,6 +302,7 @@ async function listSubDepartments(accessToken, deptId) {
 async function collectAllDepartments(accessToken, rootDeptIds = [1]) {
   const departments = [];
   const deptNameById = {};
+  const parentIdByDeptId = {};
   const roots = [...new Set((Array.isArray(rootDeptIds) ? rootDeptIds : [rootDeptIds]).filter(Boolean))];
   const queue = roots.length ? [...roots] : [1];
   const seen = new Set();
@@ -236,10 +316,26 @@ async function collectAllDepartments(accessToken, rootDeptIds = [1]) {
     for (const d of subs) {
       if (d.dept_id == null) continue;
       if (d.name) deptNameById[d.dept_id] = d.name;
+      parentIdByDeptId[d.dept_id] = deptId;
       queue.push(d.dept_id);
     }
   }
-  return { departments, deptNameById };
+
+  // listsub 只返回子部门名；授权根部门（如财务中心）必须单独 get，否则同步弹窗勾不到
+  const missingIds = departments
+    .map(d => d.dept_id)
+    .filter(id => id != null && !deptNameById[id]);
+  if (missingIds.length) {
+    await runConcurrent(missingIds, 5, async (deptId) => {
+      const detail = await getDepartmentDetail(accessToken, deptId);
+      if (detail && detail.name) deptNameById[deptId] = detail.name;
+      if (detail && detail.parent_id != null && parentIdByDeptId[deptId] == null) {
+        parentIdByDeptId[deptId] = detail.parent_id;
+      }
+    });
+  }
+
+  return { departments, deptNameById, parentIdByDeptId };
 }
 
 async function runConcurrent(items, limit, fn) {
@@ -992,6 +1088,7 @@ async function resolveWikiNodeByUrl(docUrl, operatorUnionId) {
 
 /**
  * 钉钉登录时：按 userid 查库；若无则拉钉钉详情，按姓名/手机号匹配已有档案并绑定，否则新建 staff
+ * 通知联系人（profileKind=contact）可绑定 userid，但调用方应拒绝其登录。
  */
 async function ensureUserForDingTalkLogin(dingTalkUserId) {
   if (!dingTalkUserId) return null;
@@ -1023,6 +1120,8 @@ async function ensureUserForDingTalkLogin(dingTalkUserId) {
         ...byName,
         ...profileFieldsFromDetail(detail, dingTalkUserId),
         name: resolveSyncedDisplayName(byName.name, name),
+        // 不因登录尝试把联系人升级为业务成员
+        profileKind: byName.profileKind || PROFILE_KIND_MEMBER,
       };
       if (byName.name && linked.name && byName.name !== linked.name) {
         applyPersonRenames([{ from: byName.name, to: linked.name }]);
@@ -1039,6 +1138,7 @@ async function ensureUserForDingTalkLogin(dingTalkUserId) {
         ...byMobile,
         ...profileFieldsFromDetail(detail, dingTalkUserId),
         name: name || byMobile.name,
+        profileKind: byMobile.profileKind || PROFILE_KIND_MEMBER,
       };
       upsertUser(linked);
       return linked;
@@ -1054,6 +1154,7 @@ async function ensureUserForDingTalkLogin(dingTalkUserId) {
     name: name || dingTalkUserId,
     dept: '未分配部门',
     role: 'staff',
+    profileKind: PROFILE_KIND_MEMBER,
     position: '员工',
     leaderId: '',
     standardWeekHours: 60,
@@ -1061,6 +1162,58 @@ async function ensureUserForDingTalkLogin(dingTalkUserId) {
   };
   upsertUser(created);
   return created;
+}
+
+/** 列出钉钉授权范围内的部门（含父子），并合并进本地目录树 */
+async function listDingTalkDepartments() {
+  if (!isConfigured()) {
+    return {
+      success: false,
+      message: '钉钉未配置',
+      departments: [],
+      catalog: getStaffDeptCatalog(),
+      orgForest: buildOrgForest(getStaffDeptCatalog()),
+    };
+  }
+  const accessToken = await getAccessToken();
+  const { departments, deptNameById, parentIdByDeptId, rootDeptIds } = await loadDingTalkPool(accessToken);
+  const treeNodes = [];
+  for (const d of departments) {
+    const name = deptNameById[d.dept_id];
+    if (!name) continue;
+    const parentId = parentIdByDeptId?.[d.dept_id];
+    const parentName = parentId != null ? (deptNameById[parentId] || '') : '';
+    treeNodes.push({
+      name,
+      parentName,
+      dingTalkDeptId: String(d.dept_id),
+    });
+  }
+  if (treeNodes.length) {
+    const merged = mergeOrgTreeIntoCatalog(getStaffDeptCatalog(), treeNodes);
+    setStaffDeptCatalog(merged);
+  }
+  const catalog = getStaffDeptCatalog();
+  const names = [...new Set(treeNodes.map(n => n.name).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  const unnamedRoots = departments
+    .map(d => d.dept_id)
+    .filter(id => id != null && !deptNameById[id]);
+  return {
+    success: true,
+    departments: names.map(name => ({
+      name,
+      kindHint: catalogKindForDept(catalog, name),
+      parentName: (catalog.find(c => c.name === name) || {}).parentName || '',
+    })),
+    rootDeptIds,
+    unnamedRootCount: unnamedRoots.length,
+    message: names.length
+      ? `已加载 ${names.length} 个钉钉部门`
+      : '钉钉授权范围内未读到部门名称。请确认开放平台通讯录授权已包含目标部门（如财务中心），或配置 DINGTALK_SYNC_ROOT_DEPT_IDS。',
+    catalog,
+    orgForest: buildOrgForest(catalog),
+  };
 }
 
 function namesMatch(localName, dingName) {
@@ -1146,19 +1299,29 @@ function findLocalForDingReplace(dingUserId, dingName, nextUsers, claimedLocalId
   return { local: null, how: 'none' };
 }
 
-function applyDingTalkProfileToLocal(local, dingUserId, detail, basic, deptNameById) {
+function applyDingTalkProfileToLocal(local, dingUserId, detail, basic, deptNameById, catalog) {
   const dingName = detail.name || basic?.name || local.name;
   const name = resolveSyncedDisplayName(local.name, dingName);
   const dept = resolveDeptName(detail.dept_id_list || basic?.dept_id_list, deptNameById);
   const position = detail.title || basic?.title || local.position || '执行人员';
   const profile = profileFieldsFromDetail({ ...basic, ...detail }, dingUserId);
+  const role = isPrivilegedStaffRole(local.role) ? local.role : (local.role || 'staff');
+  const resolvedDept = dept === '未分配部门' && local.dept ? local.dept : dept;
+  const profileKind = local.profileKind
+    ? (isPrivilegedStaffRole(role) ? PROFILE_KIND_MEMBER : normalizeProfileKind(local.profileKind))
+    : resolveProfileKindForUser({
+      dept: resolvedDept,
+      role,
+      catalog: catalog || getStaffDeptCatalog(),
+    });
   return {
     ...local,
     name,
-    dept: dept === '未分配部门' && local.dept ? local.dept : dept,
+    dept: resolvedDept,
     position,
     active: true,
-    role: isPrivilegedStaffRole(local.role) ? local.role : (local.role || 'staff'),
+    role,
+    profileKind,
     standardWeekHours: local.standardWeekHours || 60,
     ...profile,
   };
@@ -1190,6 +1353,9 @@ async function replaceUsersFromDingTalk(options = {}) {
       message: '所选部门未拉取到钉钉成员，请检查部门名称是否与钉钉一致，或开放平台授权范围是否包含这些部门',
     };
   }
+
+  // 勾选但未在目录中的部门，默认记为通知联系人部门
+  const nextCatalog = mergeDeptsIntoCatalog(getStaffDeptCatalog(), deptNames, PROFILE_KIND_CONTACT);
 
   const dingIds = [...pool.userIdSet];
   const detailsById = {};
@@ -1232,7 +1398,9 @@ async function replaceUsersFromDingTalk(options = {}) {
       const idx = nextUsers.findIndex(u => u.id === match.local.id);
       if (idx < 0) continue;
       const oldName = nextUsers[idx].name;
-      const merged = applyDingTalkProfileToLocal(nextUsers[idx], dingUserId, detail, basic, deptNameById);
+      const merged = applyDingTalkProfileToLocal(
+        nextUsers[idx], dingUserId, detail, basic, deptNameById, nextCatalog
+      );
       nextUsers[idx] = merged;
       claimedLocalIds.add(merged.id);
       coveredLocalIds.add(merged.id);
@@ -1244,6 +1412,7 @@ async function replaceUsersFromDingTalk(options = {}) {
         name: merged.name,
         dept: merged.dept,
         role: merged.role,
+        profileKind: merged.profileKind,
         dingTalkUserId: merged.dingTalkUserId,
         how: match.how,
         renamedFrom: oldName !== merged.name ? oldName : undefined,
@@ -1251,11 +1420,14 @@ async function replaceUsersFromDingTalk(options = {}) {
       continue;
     }
 
+    const dept = resolveDeptName(detail.dept_id_list || basic.dept_id_list, deptNameById);
+    const profileKind = catalogKindForDept(nextCatalog, dept);
     const created = {
       id: nextLocalUserId(nextUsers),
       name: dingName || dingUserId,
-      dept: resolveDeptName(detail.dept_id_list || basic.dept_id_list, deptNameById),
+      dept,
       role: 'staff',
+      profileKind,
       position: detail.title || basic.title || '执行人员',
       leaderId: '',
       standardWeekHours: 60,
@@ -1270,6 +1442,7 @@ async function replaceUsersFromDingTalk(options = {}) {
       name: created.name,
       dept: created.dept,
       role: created.role,
+      profileKind: created.profileKind,
       dingTalkUserId: created.dingTalkUserId,
     });
   }
@@ -1284,6 +1457,7 @@ async function replaceUsersFromDingTalk(options = {}) {
       name: local.name,
       dept: local.dept,
       role: local.role,
+      profileKind: local.profileKind || PROFILE_KIND_MEMBER,
       dingTalkUserId: local.dingTalkUserId || '',
     });
     const idx = nextUsers.findIndex(u => u.id === local.id);
@@ -1300,6 +1474,7 @@ async function replaceUsersFromDingTalk(options = {}) {
     skippedInactive,
     dingTalkPulled: dingIds.length,
     depts: deptNames,
+    staffDeptCatalog: nextCatalog,
   };
 
   if (dryRun) {
@@ -1326,6 +1501,7 @@ async function replaceUsersFromDingTalk(options = {}) {
   }
 
   const renameResult = applyPersonRenames(renames);
+  setStaffDeptCatalog(nextCatalog);
   const persisted = setUsers(nextUsers);
   let htmlPersisted = false;
   if (persisted) {
@@ -1370,6 +1546,7 @@ async function replaceUsersFromDingTalk(options = {}) {
       `；钉钉拉取 ${dingIds.length} 人${persistHint}`,
     allUsers: nextUsers,
     updatedUsers: [...toUpdate, ...toCreate].map(row => nextUsers.find(u => u.id === row.id)).filter(Boolean),
+    staffDeptCatalog: nextCatalog,
   };
 }
 
@@ -1711,10 +1888,12 @@ module.exports = {
   isConfigured,
   getAccessToken,
   getUserIdByAuthCode,
+  buildWorkAppJumpUrl,
   sendWorkNotification,
   syncUsersFromDingTalk,
   replaceUsersFromDingTalk,
   ensureUserForDingTalkLogin,
+  listDingTalkDepartments,
   diagnoseDingTalkSync,
   normalizeDingTalkDocUrl,
   isDingTalkDocUrl,

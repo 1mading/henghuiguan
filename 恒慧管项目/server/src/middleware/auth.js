@@ -57,6 +57,12 @@ function requireAuth(req, res, next) {
     if (!user) {
       return writeErr(res, 403, 'not authorized', { user_id: headerId });
     }
+    if (user.profileKind === 'contact') {
+      return res.status(403).json({ success: false, message: '通知联系人不可登录恒慧管' });
+    }
+    if (user.active === false) {
+      return res.status(403).json({ success: false, message: '账号已停用' });
+    }
     req.user = user;
     return next();
   }
@@ -70,6 +76,12 @@ function requireAuth(req, res, next) {
     const user = findUserById(payload.sub);
     if (!user) {
       return res.status(401).json({ success: false, message: '用户不存在' });
+    }
+    if (user.profileKind === 'contact') {
+      return res.status(403).json({ success: false, message: '通知联系人不可登录恒慧管' });
+    }
+    if (user.active === false) {
+      return res.status(403).json({ success: false, message: '账号已停用' });
     }
     req.user = user;
     req.tokenPayload = payload;

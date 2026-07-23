@@ -2,9 +2,20 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { isFullAccess } = require('../utils/roles');
 const { requireAuth } = require('../middleware/auth');
-const { insertPushLog, getAllPushLogs } = require('../db/database');
-const { sendWorkNotification, syncUsersFromDingTalk, diagnoseDingTalkSync } = require('../services/dingtalk');
+const {
+  insertPushLog,
+  getAllPushLogs,
+  getStaffDeptCatalog,
+  setStaffDeptCatalog,
+} = require('../db/database');
+const {
+  sendWorkNotification,
+  syncUsersFromDingTalk,
+  diagnoseDingTalkSync,
+  listDingTalkDepartments,
+} = require('../services/dingtalk');
 const { createInboxFromPush } = require('../services/appNotifications');
+const { normalizeStaffDeptCatalog, upsertCatalogDept, buildOrgForest } = require('../utils/staffProfile');
 
 const router = express.Router();
 
@@ -18,6 +29,44 @@ router.get('/dingtalk/sync/diagnose', requireAuth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
+});
+
+router.get('/dingtalk/departments', requireAuth, async (req, res) => {
+  if (!isFullAccess(req.user.role)) {
+    return res.status(403).json({ success: false, message: '仅总经理/管理员可查看' });
+  }
+  try {
+    const result = await listDingTalkDepartments();
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message || '拉取部门失败' });
+  }
+});
+
+router.get('/staff/dept-catalog', requireAuth, (req, res) => {
+  const catalog = getStaffDeptCatalog();
+  res.json({ success: true, staffDeptCatalog: catalog, orgForest: buildOrgForest(catalog) });
+});
+
+router.put('/staff/dept-catalog', requireAuth, (req, res) => {
+  if (!isFullAccess(req.user.role)) {
+    return res.status(403).json({ success: false, message: '仅总经理/管理员可修改部门目录' });
+  }
+  const body = req.body || {};
+  let next = getStaffDeptCatalog();
+  if (Array.isArray(body.staffDeptCatalog)) {
+    next = normalizeStaffDeptCatalog(body.staffDeptCatalog);
+  } else if (body.name) {
+    next = upsertCatalogDept(next, body.name, body.kind, body.parentName);
+  } else {
+    return res.status(400).json({ success: false, message: '请提供 staffDeptCatalog 或 name/kind' });
+  }
+  setStaffDeptCatalog(next);
+  const catalog = getStaffDeptCatalog();
+  res.json({ success: true, staffDeptCatalog: catalog, orgForest: buildOrgForest(catalog) });
 });
 
 router.post('/dingtalk/users/sync', requireAuth, async (req, res) => {
@@ -98,6 +147,7 @@ router.post('/dingtalk/push/work-notification', requireAuth, async (req, res) =>
       dingTalkUserIds,
       title,
       content,
+      withLink: body.withLink !== false,
     });
     logEntry.status = result.mock ? 'queued' : 'sent';
     logEntry.response = result;
@@ -160,6 +210,7 @@ router.post('/dingtalk/push/batch', requireAuth, async (req, res) => {
         dingTalkUserIds,
         title,
         content,
+        withLink: item.withLink !== false,
       });
       results.push({
         success: true,

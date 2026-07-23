@@ -19,6 +19,7 @@ const {
   reloadStoreFromDisk,
   getDb,
   persistStore,
+  getStaffDeptCatalog,
 } = require('../db/database');
 const { getWorkCalendar } = require('../services/workCalendar');
 
@@ -43,6 +44,7 @@ const {
   filterTasksForUser,
 } = require('../utils/projectAccess');
 const { isPerformanceAdmin, ensurePerformanceStore } = require('../services/performance');
+const { isContactProfile, buildOrgForest } = require('../utils/staffProfile');
 
 const router = express.Router();
 
@@ -55,7 +57,14 @@ function filterDependenciesForUser(user, deps, allTasks, allProjects) {
 
 function filterByRole(user, data) {
   const allUsers = data.users || [];
-  const withStaffDirectory = payload => ({ ...payload, allUsers });
+  const staffDeptCatalog = data.staffDeptCatalog || getStaffDeptCatalog();
+  const orgForest = buildOrgForest(staffDeptCatalog);
+  const withStaffDirectory = payload => ({
+    ...payload,
+    allUsers,
+    staffDeptCatalog,
+    orgForest,
+  });
 
   if (isFullAccess(user.role)) {
     return withStaffDirectory(data);
@@ -75,22 +84,28 @@ function filterByRole(user, data) {
     changeLogs: data.changeLogs,
     transferLogs: data.transferLogs,
     pushLogs: data.pushLogs,
+    staffDeptCatalog,
+    orgForest,
   };
 
   if (user.role === 'manager') {
     return withStaffDirectory({
       ...visible,
+      // 经理业务编辑范围不含通知联系人
       users: allUsers.filter(u =>
-        u.dept === user.dept ||
-        isFullAccess(u.role) ||
-        u.dept === INFO_CENTER_DEPT
+        !isContactProfile(u) && (
+          u.dept === user.dept ||
+          isFullAccess(u.role) ||
+          u.dept === INFO_CENTER_DEPT
+        )
       ),
     });
   }
 
   return withStaffDirectory({
     ...visible,
-    users: allUsers,
+    // 执行人员本地 users 仅业务成员；全量档案走 allUsers（通知）
+    users: allUsers.filter(u => !isContactProfile(u)),
   });
 }
 
@@ -267,6 +282,7 @@ router.get('/miniapp/bootstrap', requireApiKey, requireAuth, (req, res) => {
     transferLogs: getAllTransferLogs(),
     pushLogs: getAllPushLogs(100),
     workCalendar: getWorkCalendar(),
+    staffDeptCatalog: getStaffDeptCatalog(),
     serverTime: new Date().toISOString(),
   };
   writeOk(res, filterByRole(req.user, raw));
@@ -286,6 +302,7 @@ router.get('/data/bootstrap', requireAuth, (req, res) => {
     transferLogs: getAllTransferLogs(),
     pushLogs: getAllPushLogs(100),
     workCalendar: getWorkCalendar(),
+    staffDeptCatalog: getStaffDeptCatalog(),
   };
   const filtered = filterByRole(req.user, raw);
   res.json({

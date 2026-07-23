@@ -3,6 +3,11 @@ const path = require('path');
 const config = require('../config');
 const { backupJsonFile } = require('../utils/backup');
 const { mergeProjectDocuments } = require('../utils/projectDocuments');
+const {
+  defaultStaffDeptCatalog,
+  normalizeStaffDeptCatalog,
+  normalizeProfileKind,
+} = require('../utils/staffProfile');
 
 const DEFAULT_STORE = {
   users: [],
@@ -18,6 +23,8 @@ const DEFAULT_STORE = {
   performanceTemplates: [],
   performanceCycles: [],
   performanceAssessments: [],
+  workReports: [],
+  staffDeptCatalog: defaultStaffDeptCatalog(),
 };
 
 let store = null;
@@ -53,6 +60,25 @@ function normalizeAllProjects(projects) {
   (projects || []).forEach(normalizeProjectRecord);
 }
 
+function ensureStaffDeptCatalog(s) {
+  const before = JSON.stringify(s.staffDeptCatalog || null);
+  s.staffDeptCatalog = normalizeStaffDeptCatalog(s.staffDeptCatalog);
+  return JSON.stringify(s.staffDeptCatalog) !== before;
+}
+
+function normalizeUserProfileKinds(users) {
+  let changed = false;
+  (users || []).forEach(u => {
+    if (!u) return;
+    const kind = normalizeProfileKind(u.profileKind);
+    if (u.profileKind !== kind) {
+      u.profileKind = kind;
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 function loadStoreFromDisk() {
   const file = getStorePath();
   const dir = path.dirname(file);
@@ -68,6 +94,9 @@ function loadStoreFromDisk() {
     const raw = fs.readFileSync(file, 'utf8');
     store = { ...structuredClone(DEFAULT_STORE), ...JSON.parse(raw) };
     normalizeAllProjects(store.projects);
+    let dirty = ensureStaffDeptCatalog(store);
+    dirty = normalizeUserProfileKinds(store.users) || dirty;
+    if (dirty) persistStore();
   } catch (e) {
     console.warn('[db] 读取失败，使用空库', e.message);
     store = structuredClone(DEFAULT_STORE);
@@ -189,7 +218,24 @@ function replaceAllData(payload) {
   if (payload.workCalendar && typeof payload.workCalendar === 'object') {
     s.workCalendar = payload.workCalendar;
   }
+  if (Array.isArray(payload.staffDeptCatalog)) {
+    s.staffDeptCatalog = normalizeStaffDeptCatalog(payload.staffDeptCatalog);
+  }
+  ensureStaffDeptCatalog(s);
+  normalizeUserProfileKinds(s.users);
   persistStore();
+}
+
+function getStaffDeptCatalog() {
+  const s = getStore();
+  ensureStaffDeptCatalog(s);
+  return [...s.staffDeptCatalog];
+}
+
+function setStaffDeptCatalog(catalog) {
+  const s = getStore();
+  s.staffDeptCatalog = normalizeStaffDeptCatalog(catalog);
+  return persistStore();
 }
 
 function getWorkCalendar() {
@@ -284,6 +330,7 @@ function markNotificationsRead(userId, { ids = null, all = false } = {}) {
 
 function setUsers(users) {
   const cleaned = (users || []).filter(u => !String(u.id || '').startsWith('DT-'));
+  normalizeUserProfileKinds(cleaned);
   getStore().users = cleaned;
   return persistStore();
 }
@@ -529,6 +576,8 @@ module.exports = {
   appendChangeLogs,
   getWorkCalendar,
   setWorkCalendar,
+  getStaffDeptCatalog,
+  setStaffDeptCatalog,
   isEmpty,
   insertPushLog,
   persistStore,

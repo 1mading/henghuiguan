@@ -10,6 +10,7 @@ const displayRoutes = require('./display');
 const systemUpdatesRoutes = require('./systemUpdates');
 const notificationsRoutes = require('./notifications');
 const performanceRoutes = require('./performance');
+const workReportsRoutes = require('./workReports');
 const intakeRoutes = require('./intake');
 
 const router = express.Router();
@@ -33,6 +34,7 @@ router.use(displayRoutes);
 router.use(authRoutes);
 router.use(dingtalkRoutes);
 router.use(performanceRoutes);
+router.use(workReportsRoutes);
 router.use(dataRoutes);
 
 router.use((_req, res) => {
