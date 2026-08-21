@@ -14756,9 +14756,74 @@
       };
 
       projects.push(newProject);
+      createDefaultPhaseMilestones(newProject);
       notifyProjectManagerAssigned(newProject);
       save();
       closeModal();
+    }
+
+    // 标准项目模板（依据《恒慧管-标准项目模板规范》v1.1）：新建项目时自动生成
+    // 6 个阶段里程碑（根任务）及必选门禁任务（M1~M7）。恒慧管机制：根任务即里程碑，
+    // 普通任务须挂靠里程碑下，故阶段=里程碑、门禁=其下关键任务。
+    function createDefaultPhaseMilestones(project) {
+      const phases = [
+        { key: '00', name: '00-立项与选型阶段' },
+        { key: '01', name: '01-启动过程组' },
+        { key: '02', name: '02-规划过程组' },
+        { key: '03', name: '03-执行过程组' },
+        { key: '04', name: '04-监控过程组' },
+        { key: '05', name: '05-收尾过程组' },
+      ];
+      // 必选里程碑 M1~M7 归属对应阶段（A 规范 v1.1 第三节）
+      const gates = {
+        '00': ['M1 厂商选型定标', 'M2 采购合同+SLA签订'],
+        '01': ['M3 项目启动会召开'],
+        '02': ['M4 需求确认签字', 'M5 实施计划审批'],
+        '05': ['M6 验收签字', 'M7 运维交接+复盘'],
+      };
+      const makeTask = (over) => {
+        const t = {
+          id: genId('T'),
+          projectId: project.id,
+          parentId: null,
+          isMilestone: false,
+          title: '',
+          type: 'normal',
+          creator: currentUser.name,
+          assignee: project.manager,
+          collaboratorEntries: [],
+          status: 'todo',
+          priority: 'medium',
+          progress: 0,
+          estimatedHours: 0,
+          actualHours: 0,
+          planStartDate: null,
+          actualStartDate: null,
+          actualEndDate: null,
+          attachments: [],
+          desc: '',
+          createdAt: getNowCreatedAt(),
+        };
+        Object.assign(t, over);
+        reconcileEffectivePlanStart(t);
+        syncTaskScheduleFields(t);
+        return t;
+      };
+      phases.forEach((ph) => {
+        const milestone = makeTask({
+          isMilestone: true,
+          title: ph.name,
+          planStartDate: project.startDate || null,
+        });
+        tasks.push(milestone);
+        (gates[ph.key] || []).forEach((g) => {
+          tasks.push(makeTask({
+            parentId: milestone.id,
+            title: '【里程碑】' + g,
+            priority: 'high',
+          }));
+        });
+      });
     }
 
     function showRejectModal(taskId) {
