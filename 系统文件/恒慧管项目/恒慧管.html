@@ -306,6 +306,35 @@
     .wb-activity-text { font-size: 13px; color: var(--text); line-height: 1.5; }
     .wb-activity-meta { font-size: 12px; color: var(--text-light); margin-top: 6px; }
     .wb-week-done { margin-top: 28px; }
+    .wb-milestone-block { margin-bottom: 28px; }
+    .wb-milestone-project-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 4px 0 10px; margin-bottom: 2px;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .wb-milestone-project-head + .wb-activity-item { padding-top: 12px; }
+    .wb-milestone-project-group + .wb-milestone-project-group {
+      margin-top: 18px; padding-top: 4px;
+    }
+    .wb-milestone-project-name {
+      flex: 1; min-width: 0;
+      font-size: 14px; font-weight: 700; color: var(--text);
+      line-height: 1.35; letter-spacing: -0.01em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      cursor: pointer;
+    }
+    .wb-milestone-project-name:hover { color: var(--brand-dark); }
+    .wb-milestone-project-link {
+      border: none; background: none; color: var(--brand);
+      font-size: 12px; font-weight: 500; cursor: pointer;
+      font-family: inherit; padding: 0; flex-shrink: 0;
+    }
+    .wb-activity-icon.is-next {
+      background: #E0F2FE; color: #0369A1;
+    }
+    .wb-activity-icon.is-idle {
+      background: #F3F4F6; color: #9CA3AF;
+    }
     .wb-empty {
       background: #fff; border-radius: 14px; padding: 48px 24px; text-align: center;
       border: 1px solid var(--border); color: var(--text-muted); font-size: 13px;
@@ -4347,22 +4376,31 @@
       return (taskList || []).filter(isLeafTask);
     }
 
-    function getChildrenCount(taskId) {
-      const children = tasks.filter(t => t.parentId === taskId);
+    function getChildrenCount(taskId, _visited) {
+      const visited = _visited || new Set();
+      if (!taskId || visited.has(taskId)) return 0;
+      visited.add(taskId);
+      const children = tasks.filter(t => t.parentId === taskId && t.parentId !== t.id);
       let count = children.length;
-      children.forEach(c => { count += getChildrenCount(c.id); });
+      children.forEach(c => { count += getChildrenCount(c.id, visited); });
       return count;
     }
 
-    function getChildrenDoneCount(taskId) {
-      const children = tasks.filter(t => t.parentId === taskId);
+    function getChildrenDoneCount(taskId, _visited) {
+      const visited = _visited || new Set();
+      if (!taskId || visited.has(taskId)) return 0;
+      visited.add(taskId);
+      const children = tasks.filter(t => t.parentId === taskId && t.parentId !== t.id);
       let count = children.filter(c => c.status === 'done').length;
-      children.forEach(c => { count += getChildrenDoneCount(c.id); });
+      children.forEach(c => { count += getChildrenDoneCount(c.id, visited); });
       return count;
     }
 
-    function calcProgress(taskId) {
-      const children = tasks.filter(t => t.parentId === taskId && t.status !== 'abolished');
+    function calcProgress(taskId, _visited) {
+      const visited = _visited || new Set();
+      if (!taskId || visited.has(taskId)) return 0;
+      visited.add(taskId);
+      const children = tasks.filter(t => t.parentId === taskId && t.parentId !== t.id && t.status !== 'abolished');
       if (children.length === 0) {
         const t = tasks.find(x => x.id === taskId);
         if (!t || t.status === 'abolished') return 0;
@@ -4370,7 +4408,7 @@
         return Math.max(0, Math.min(100, t.progress || 0));
       }
       let total = 0;
-      children.forEach(c => { total += calcProgress(c.id); });
+      children.forEach(c => { total += calcProgress(c.id, visited); });
       return Math.round(total / children.length);
     }
 
@@ -4384,8 +4422,13 @@
       }
     }
 
+    let _genIdSeq = 0;
     function genId(prefix) {
-      return prefix + '-' + Date.now().toString(36).slice(-4).toUpperCase();
+      _genIdSeq = (_genIdSeq + 1) % 1e6;
+      const time = Date.now().toString(36).toUpperCase();
+      const seq = _genIdSeq.toString(36).toUpperCase().padStart(2, '0');
+      const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+      return `${prefix}-${time}${seq}${rand}`;
     }
 
     /** 任务创建时间（只读，保存时写入） */
@@ -5238,6 +5281,139 @@
       return items;
     }
 
+    /** 标准模板门禁任务（标题以【里程碑】开头），工作台/任务中心不展示 */
+    function isNamedMilestoneGate(task) {
+      return !!(task && /^【里程碑】/.test(String(task.title || '').trim()));
+    }
+
+    /** 阶段里程碑与门禁里程碑：不进入工作台待办、任务中心 */
+    function shouldHideMilestoneLikeTask(task) {
+      return isMilestoneTask(task) || isNamedMilestoneGate(task);
+    }
+
+    /** @deprecated 兼容旧调用 */
+    function shouldHideFromWorkbenchTodos(task) {
+      return shouldHideMilestoneLikeTask(task);
+    }
+
+    /** 项目阶段里程碑（根级 isMilestone），按标题/创建时间排序 */
+    function getOrderedProjectMilestones(project) {
+      if (!project) return [];
+      const list = tasks.filter(t =>
+        t.projectId === project.id &&
+        t.status !== 'abolished' &&
+        isMilestoneTask(t)
+      );
+      const roots = getProjectRootTasks(list).filter(isMilestoneTask);
+      return roots.slice().sort((a, b) => {
+        const ta = String(a.title || '');
+        const tb = String(b.title || '');
+        if (ta !== tb) return ta.localeCompare(tb, 'zh');
+        return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+      });
+    }
+
+    /** 当前（首个未完成）与下一个阶段里程碑；当前尚未开始时不展示下一个 */
+    function getCurrentAndNextMilestones(project) {
+      const ordered = getOrderedProjectMilestones(project);
+      if (!ordered.length) return { current: null, next: null, ordered };
+      const currentIdx = ordered.findIndex(m =>
+        m.status !== 'done' && m.status !== 'archived'
+      );
+      if (currentIdx < 0) {
+        return { current: ordered[ordered.length - 1], next: null, ordered, allDone: true };
+      }
+      const current = ordered[currentIdx];
+      const currentStarted =
+        current.status === 'doing' ||
+        current.status === 'paused' ||
+        Number(current.progress) > 0 ||
+        !!current.actualStartDate ||
+        calcProgress(current.id) > 0;
+      return {
+        current,
+        next: currentStarted ? (ordered[currentIdx + 1] || null) : null,
+        ordered,
+        allDone: false,
+      };
+    }
+
+    /** 工作台展示的项目里程碑：进行中、当前用户相关的项目 */
+    function getWorkbenchMilestoneProjects() {
+      return getViewableProjects()
+        .filter(p => !isProjectArchived(p) && p.status === 'active')
+        .filter(p => {
+          const related =
+            isSamePersonName(p.manager, currentUser.name) ||
+            isSamePersonName(p.creator, currentUser.name) ||
+            (Array.isArray(p.teamMembers) && p.teamMembers.some(n => isSamePersonName(n, currentUser.name))) ||
+            tasks.some(t => t.projectId === p.id && isRelatedToTask(t));
+          return related || isFullAccess(currentUser.role);
+        })
+        .filter(p => getOrderedProjectMilestones(p).length > 0)
+        .slice(0, 8);
+    }
+
+    function renderWorkbenchMilestoneItem(milestone, roleLabel, iconClass) {
+      if (!milestone) {
+        return `
+          <div class="wb-activity-item">
+            <div class="wb-activity-icon is-idle"><i class="fas fa-flag"></i></div>
+            <div class="wb-activity-body">
+              <div class="wb-activity-text" style="color:#94A3B8;">${escapeHtml(roleLabel)} · 暂无</div>
+            </div>
+          </div>`;
+      }
+      const progress = calcProgress(milestone.id);
+      const due = normalizeDateStr(resolveTaskDueDate(milestone)) || milestone.dueDate || '';
+      const st = statusMap[getTaskDisplayStatus(milestone)] || statusMap[milestone.status] || { label: milestone.status || '' };
+      const meta = [
+        st.label || '',
+        `${progress}%`,
+        due ? `截止 ${due}` : '',
+      ].filter(Boolean).join(' · ');
+      return `
+        <div class="wb-activity-item" onclick="viewTask('${milestone.id}')" style="cursor:pointer;">
+          <div class="wb-activity-icon ${iconClass || ''}"><i class="fas fa-flag"></i></div>
+          <div class="wb-activity-body">
+            <div class="wb-activity-text">${escapeHtml(roleLabel)} · ${escapeHtml(milestone.title || '')}</div>
+            <div class="wb-activity-meta">${escapeHtml(meta)}</div>
+          </div>
+        </div>`;
+    }
+
+    function renderWorkbenchMilestoneSection() {
+      const list = getWorkbenchMilestoneProjects();
+      const itemsHtml = list.length
+        ? list.map(project => {
+            const { current, next, allDone } = getCurrentAndNextMilestones(project);
+            return `
+              <div class="wb-milestone-project-group">
+                <div class="wb-milestone-project-head">
+                  <div class="wb-milestone-project-name" title="${escapeHtml(project.name || '')}"
+                    onclick="viewProject('${project.id}')">${escapeHtml(project.name || '')}</div>
+                  ${allDone ? '<span style="font-size:11px;font-weight:600;color:#059669;flex-shrink:0;">已完成</span>' : ''}
+                  <button type="button" class="wb-milestone-project-link"
+                    onclick="event.stopPropagation();viewProject('${project.id}')">详情</button>
+                </div>
+                ${renderWorkbenchMilestoneItem(current, allDone ? '最近完成' : '当前', allDone ? 'is-done' : '')}
+                ${next ? renderWorkbenchMilestoneItem(next, '下一个', 'is-next') : ''}
+              </div>`;
+          }).join('')
+        : `<div class="wb-empty" style="border:none;padding:20px 8px;">暂无进行中的项目里程碑</div>`;
+
+      return `
+        <div class="wb-milestone-block">
+          <div class="wb-section-head">
+            <div class="wb-section-title">项目里程碑</div>
+            <button type="button" class="wb-more-link" onclick="goTo('projects')">全部项目</button>
+          </div>
+          <div class="wb-activity-panel">
+            ${itemsHtml}
+          </div>
+        </div>`;
+    }
+
     function renderWorkbenchTodoCard(task) {
       const overdue = isOverdue(task) && task.status !== 'done';
       const dueSoon = !overdue && isDueSoon(task) && task.status !== 'done';
@@ -5301,26 +5477,36 @@
 
     function renderWorkbenchHome() {
       const activeProjects = getViewableProjects().filter(p => !isProjectArchived(p) && p.status === 'active');
-      const allOpenTasks = tasks.filter(t => t.status !== 'abolished' && t.status !== 'archived');
-      const completedTasks = allOpenTasks.filter(t => t.status === 'done');
-      const highPriority = allOpenTasks.filter(t =>
+      const workTasks = tasks.filter(t =>
+        t.status !== 'abolished' &&
+        t.status !== 'archived' &&
+        !shouldHideFromWorkbenchTodos(t)
+      );
+      const completedTasks = workTasks.filter(t => t.status === 'done');
+      const highPriority = workTasks.filter(t =>
         (t.priority === 'urgent' || t.priority === 'important') && t.status !== 'done'
       );
       let myTodos = [];
       try {
-        myTodos = sortTasksForCenter(getMyTodoLeafTasks().filter(t => t.status !== 'done' && t.status !== 'abolished' && t.status !== 'archived'));
+        myTodos = sortTasksForCenter(
+          getMyTodoLeafTasks()
+            .filter(t => t.status !== 'done' && t.status !== 'abolished' && t.status !== 'archived')
+            .filter(t => !shouldHideFromWorkbenchTodos(t))
+        );
       } catch { myTodos = []; }
       const overdueCount = myTodos.filter(t => isOverdue(t)).length;
       const soonCount = myTodos.filter(t => !isOverdue(t) && isDueSoon(t)).length;
       const preview = myTodos.slice(0, 8);
       const activities = getRecentActivityItems(6);
       let weekDone = [];
-      try { weekDone = getMyWeekCompletedTasks(); } catch { weekDone = []; }
+      try {
+        weekDone = getMyWeekCompletedTasks().filter(item => !shouldHideFromWorkbenchTodos(item.task));
+      } catch { weekDone = []; }
       const weekDonePreview = weekDone.slice(0, 6);
 
       const stats = [
         { label: '进行中项目', value: activeProjects.length, accent: '#4F46E5', bg: '#EEF2FF', icon: 'fa-folder-open' },
-        { label: '总任务数', value: allOpenTasks.length, accent: '#0EA5E9', bg: '#F0F9FF', icon: 'fa-list-check' },
+        { label: '总任务数', value: workTasks.length, accent: '#0EA5E9', bg: '#F0F9FF', icon: 'fa-list-check' },
         { label: '已完成', value: completedTasks.length, accent: '#10B981', bg: '#F0FDF4', icon: 'fa-circle-check' },
         { label: '高优先级', value: highPriority.length, accent: '#F59E0B', bg: '#FFFBEB', icon: 'fa-bolt' },
       ];
@@ -5363,6 +5549,7 @@
               </div>
             </div>
             <div>
+              ${renderWorkbenchMilestoneSection()}
               <div class="wb-section-head">
                 <div class="wb-section-title">最近动态</div>
               </div>
@@ -5586,15 +5773,19 @@
       const includeDone = !!opts.includeDone;
       const mode = state.todoViewMode || 'all';
       const asOpenTodo = (list) => includeDone ? list : list.filter(t => !isExcludedFromTodo(t));
+      let list;
       if (state.taskScopeTab === 'dept' && canViewDeptTaskScope() && (mode === 'all' || mode === 'mine')) {
-        return asOpenTodo(getDeptScopeLeafTasks());
+        list = asOpenTodo(getDeptScopeLeafTasks());
+      } else if (mode === 'created') {
+        list = asOpenTodo(getMyCreatedLeafTasks());
+      } else if (mode === 'handled') {
+        list = asOpenTodo(getMyHandledLeafTasks());
+      } else if (mode === 'mine') {
+        list = includeDone ? getMyTodoLeafTasksIncludingDone() : getMyTodoLeafTasks();
+      } else {
+        list = getAllViewableLeafTasks({ includeDone });
       }
-      if (mode === 'created') return asOpenTodo(getMyCreatedLeafTasks());
-      if (mode === 'handled') return asOpenTodo(getMyHandledLeafTasks());
-      if (mode === 'mine') {
-        return includeDone ? getMyTodoLeafTasksIncludingDone() : getMyTodoLeafTasks();
-      }
-      return getAllViewableLeafTasks({ includeDone });
+      return (list || []).filter(t => !shouldHideMilestoneLikeTask(t));
     }
 
     function formatTodoBoardDate(dateStr) {
@@ -7684,6 +7875,45 @@
       return isInformCollaborator(task);
     }
 
+    /** 任务中心类型：项目 / 临时 / 告知协办 */
+    function getTodoTaskType(task) {
+      if (!task) return 'project';
+      if (isMyInformCollabTask(task)) return 'inform';
+      if (task.intake || task.type === 'temp' || !task.projectId) return 'temp';
+      return 'project';
+    }
+
+    function getTodoTaskTypeLabel(type) {
+      if (type === 'temp') return '临时任务';
+      if (type === 'inform') return '告知协办';
+      return '项目任务';
+    }
+
+    function matchesTodoDueFilter(task, dueFilter) {
+      if (!dueFilter || dueFilter === 'all') return true;
+      const due = normalizeDateStr(resolveTaskDueDate(task)) || normalizeDateStr(task.dueDate) || '';
+      if (dueFilter === 'overdue') return isOverdue(task) && task.status !== 'done' && task.status !== 'paused';
+      if (dueFilter === 'today') return !!due && due === todayStr() && task.status !== 'done';
+      if (dueFilter === 'week') {
+        const { start, end } = getCurrentWeekRange();
+        return !!due && due >= start && due <= end && task.status !== 'done';
+      }
+      return true;
+    }
+
+    /** 列表截止列旁的相对提示 */
+    function formatTodoDueRelative(task) {
+      if (!task || task.status === 'done' || task.status === 'abolished' || task.status === 'archived') {
+        return { text: '', cls: '' };
+      }
+      const due = normalizeDateStr(resolveTaskDueDate(task)) || normalizeDateStr(task.dueDate) || '';
+      if (!due) return { text: '', cls: '' };
+      if (isOverdue(task)) return { text: '已逾期', cls: 'is-overdue' };
+      if (due === todayStr()) return { text: '今天到期', cls: 'is-today' };
+      if (isDueSoon(task)) return { text: '即将到期', cls: 'is-soon' };
+      return { text: '', cls: '' };
+    }
+
     function sortTasksForCenter(list) {
       return list.slice().sort((a, b) => {
         if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
@@ -7985,7 +8215,7 @@
       const page = state.todoPage;
       const pageRows = list.slice((page - 1) * pageSize, page * pageSize);
 
-      const scopePool = (arr) => arr.filter(t => !isHiddenDoneSpecialTask(t));
+      const scopePool = (arr) => (arr || []).filter(t => !isHiddenDoneSpecialTask(t) && !shouldHideMilestoneLikeTask(t));
       const allScopeCount = scopePool(getAllViewableLeafTasks({ includeDone })).length;
       const mineCount = scopePool(includeDone ? getMyTodoLeafTasksIncludingDone() : getMyTodoLeafTasks()).length;
       const deptCount = canViewDeptTaskScope()
@@ -14793,7 +15023,7 @@
           assignee: project.manager,
           collaboratorEntries: [],
           status: 'todo',
-          priority: 'medium',
+          priority: 'normal',
           progress: 0,
           estimatedHours: 0,
           actualHours: 0,
@@ -14820,7 +15050,7 @@
           tasks.push(makeTask({
             parentId: milestone.id,
             title: '【里程碑】' + g,
-            priority: 'high',
+            priority: 'important',
           }));
         });
       });

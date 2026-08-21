@@ -12,6 +12,7 @@ const notificationsRoutes = require('./notifications');
 const intakeRoutes = require('./intake');
 const realtimeRoutes = require('./realtime');
 const workbuddyRoutes = require('./workbuddy');
+const externalRoutes = require('./external');
 
 const router = express.Router();
 
@@ -28,6 +29,7 @@ router.use(configRoutes);
 router.use(realtimeRoutes);
 router.use(intakeRoutes);
 router.use(workbuddyRoutes);
+router.use(externalRoutes);
 router.use(systemUpdatesRoutes);
 router.use(notificationsRoutes);
 router.use(workCalendarRoutes);
