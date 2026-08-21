@@ -1,0 +1,7 @@
+.page {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 48px 24px; min-height: 100vh; box-sizing: border-box;
+}
+.icon { font-size: 48px; margin-bottom: 16px; }
+.title { font-size: 18px; font-weight: 600; color: #1F2937; margin-bottom: 12px; }
+.msg { font-size: 14px; color: #6B7280; text-align: center; line-height: 1.6; }

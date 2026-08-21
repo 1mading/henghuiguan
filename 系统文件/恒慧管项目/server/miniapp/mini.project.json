@@ -1,0 +1,13 @@
+{
+  "format": 2,
+  "miniprogramRoot": "./",
+  "unknownConfig": {
+    "setting": {
+      "es7": true,
+      "es6": true,
+      "minifyJS": false,
+      "minifyWXML": false,
+      "minifyWXSS": false
+    }
+  }
+}

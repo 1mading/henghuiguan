@@ -1,0 +1,13 @@
+{
+  "version": "1.2.8",
+  "title": "Handa-OM 运维门户入口",
+  "releaseDate": "2026-08-20",
+  "summary": "管理员可从恒慧管新窗口打开 Handa-OM",
+  "items": [
+    {
+      "type": "feature",
+      "text": "管理员可从恒慧管新窗口打开 Handa-OM 运维门户（与 NCC 异常看板独立，不内嵌）"
+    }
+  ],
+  "createdAt": "2026-08-20T08:29:22.227Z"
+}

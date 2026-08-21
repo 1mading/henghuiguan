@@ -1,0 +1,40 @@
+{
+  "users": [
+    {
+      "id": "U001",
+      "name": "演示总经理",
+      "dept": "信息中心",
+      "role": "gm",
+      "position": "总经理",
+      "leaderId": "",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "demo_gm_001"
+    },
+    {
+      "id": "U002",
+      "name": "演示经理",
+      "dept": "实施交付部",
+      "role": "manager",
+      "position": "部门经理",
+      "leaderId": "U001",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "demo_mgr_002"
+    },
+    {
+      "id": "U003",
+      "name": "演示员工",
+      "dept": "实施交付部",
+      "role": "staff",
+      "position": "执行人员",
+      "leaderId": "U002",
+      "standardWeekHours": 60,
+      "dingTalkUserId": "demo_staff_003"
+    }
+  ],
+  "projects": [],
+  "tasks": [],
+  "taskDependencies": [],
+  "changeLogs": [],
+  "transferLogs": [],
+  "pushLogs": []
+}

@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>桌宠设置</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: #f4eee4;
+      color: #2c2416;
+      padding: 18px;
+      padding-bottom: 28px;
+    }
+    h1 { font-size: 16px; margin: 0 0 12px; }
+    label { display: block; font-size: 12px; color: #7a6a55; margin: 10px 0 4px; }
+    input, select, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(44,36,22,0.15);
+      font: inherit;
+      background: #fff;
+    }
+    textarea { min-height: 64px; resize: vertical; font-family: Consolas, "Courier New", monospace; font-size: 12px; }
+    .hint { font-size: 11px; color: #9a8b76; margin-top: 4px; line-height: 1.4; }
+    .row { display: flex; gap: 8px; margin-top: 14px; }
+    button {
+      flex: 1;
+      border: none;
+      border-radius: 8px;
+      padding: 9px 10px;
+      font: inherit;
+      cursor: pointer;
+      background: #2c2416;
+      color: #fffdf8;
+    }
+    button.ghost { background: transparent; color: #2c2416; border: 1px solid rgba(44,36,22,0.18); }
+    button.ok { background: #3d9a6a; }
+    .msg { margin-top: 12px; font-size: 12px; color: #7a6a55; min-height: 1.4em; white-space: pre-wrap; }
+    .msg.err { color: #d64545; }
+    .msg.ok { color: #3d9a6a; }
+    .section { margin-top: 16px; padding-top: 12px; border-top: 1px dashed rgba(44,36,22,0.12); }
+    .skin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+    .skin-btn {
+      border: 1px solid rgba(44,36,22,0.18);
+      background: #fff;
+      color: #2c2416;
+      border-radius: 10px;
+      padding: 10px 8px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .skin-btn.active {
+      border-color: #e89b2d;
+      background: #fff6e8;
+      box-shadow: inset 0 0 0 1px #e89b2d;
+      font-weight: 700;
+    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+    .check-row input { width: auto; }
+    details.advanced {
+      margin-top: 10px;
+      border: 1px solid rgba(44,36,22,0.12);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.55);
+    }
+    details.advanced summary {
+      cursor: pointer;
+      font-size: 12px;
+      color: #7a6a55;
+      user-select: none;
+    }
+    .preset-summary {
+      font-size: 11px;
+      color: #9a8b76;
+      line-height: 1.45;
+      margin-top: 6px;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.6);
+      border-radius: 8px;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>桌宠设置</h1>
+
+  <label>数据源预设</label>
+  <select id="presetId">
+    <option value="henghuiguan">恒慧管</option>
+    <option value="custom">自定义</option>
+  </select>
+  <div class="hint">选「恒慧管」会填入现网接口约定；改任意协议字段后可存为自定义。</div>
+  <div class="preset-summary" id="presetSummary"></div>
+  <div class="hint" style="margin-top:8px;color:#a65b2b;">
+    右边若打开主站却「项目全是 0」，只是本地壳子、还没拿到正式 Token。请填钉钉 userid 后点「正式登录」（不要用 U003 演示账号）。
+  </div>
+
+  <label>显示名称</label>
+  <input id="displayName" placeholder="恒慧管" />
+
+  <label>API 地址</label>
+  <input id="apiBase" placeholder="https://henghuiguan.handagroup.com/api" />
+  <label>主站地址</label>
+  <input id="appUrl" placeholder="https://henghuiguan.handagroup.com/app" />
+
+  <div class="section">
+    <label>钉钉 userid（正式登录用）</label>
+    <input id="dingTalkUserId" placeholder="669701617" />
+    <div class="hint">在钉钉/人员档案里可查。王元斌一般为 669701617。</div>
+
+    <label>系统用户 ID（演示登录备用）</label>
+    <input id="userId" placeholder="U018" />
+
+    <div class="row" style="margin-top:12px;">
+      <button class="ok" id="btnFormalLogin" type="button">正式登录</button>
+      <button class="ghost" id="btnLoginViaApp" type="button">打开主站导入</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <label>登录方式（高级）</label>
+    <select id="authMode">
+      <option value="dingTalkUserId">钉钉 userid 登录（推荐）</option>
+      <option value="demoLogin">演示登录（POST）</option>
+      <option value="pasteToken">粘贴 Token</option>
+      <option value="customPost">自定义登录（POST）</option>
+    </select>
+
+    <div id="tokenWrap" class="hidden">
+      <label>Token</label>
+      <textarea id="pasteToken" placeholder="粘贴访问令牌"></textarea>
+      <label>显示名（可选）</label>
+      <input id="pasteUserName" placeholder="用于角标旁提示" />
+    </div>
+
+    <div id="loginPathWrap">
+      <label>登录路径</label>
+      <input id="loginPath" placeholder="/auth/demo-login" />
+    </div>
+
+    <div id="bodyTemplateWrap">
+      <label>登录请求体（JSON，可用 {{userId}}）</label>
+      <textarea id="bodyTemplate" placeholder='{"userId":"{{userId}}"}'></textarea>
+    </div>
+
+    <details class="advanced" id="authAdvanced">
+      <summary>登录字段映射</summary>
+      <div class="grid2">
+        <div>
+          <label>Token 字段路径</label>
+          <input id="tokenPath" placeholder="token" />
+        </div>
+        <div>
+          <label>用户名字段路径</label>
+          <input id="userNamePath" placeholder="user.name" />
+        </div>
+      </div>
+      <label>Authorization 头模板</label>
+      <input id="authHeader" placeholder="Bearer {{token}}" />
+    </details>
+  </div>
+
+  <div class="section">
+    <label>通知列表路径</label>
+    <input id="listPath" placeholder="/notifications?limit=8" />
+
+    <div class="check-row">
+      <input type="checkbox" id="realtimeEnabled" checked />
+      <label for="realtimeEnabled" style="margin:0;color:inherit;">启用实时推送（SSE）</label>
+    </div>
+
+    <div id="realtimeWrap">
+      <label>SSE 路径</label>
+      <input id="realtimePath" placeholder="/realtime/events" />
+      <div class="grid2">
+        <div>
+          <label>事件名</label>
+          <input id="eventName" placeholder="change" />
+        </div>
+        <div>
+          <label>触发 type</label>
+          <input id="triggerType" placeholder="inbox.updated" />
+        </div>
+      </div>
+      <label>Token 查询参数名</label>
+      <input id="tokenQuery" placeholder="token" />
+    </div>
+
+    <label>轮询间隔（秒，无 SSE 或作兜底）</label>
+    <input id="pollSeconds" type="number" min="15" max="600" step="5" value="60" />
+
+    <details class="advanced" id="notifyAdvanced">
+      <summary>通知字段映射</summary>
+      <div class="grid2">
+        <div>
+          <label>未读数字段</label>
+          <input id="unreadPath" placeholder="unreadCount" />
+        </div>
+        <div>
+          <label>列表字段</label>
+          <input id="itemsPath" placeholder="items" />
+        </div>
+        <div>
+          <label>标题字段</label>
+          <input id="titlePath" placeholder="title" />
+        </div>
+        <div>
+          <label>正文字段</label>
+          <input id="bodyPath" placeholder="content" />
+        </div>
+        <div>
+          <label>类型字段</label>
+          <input id="eventTypePath" placeholder="eventType" />
+        </div>
+        <div>
+          <label>ID 字段</label>
+          <input id="idPath" placeholder="id" />
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <div class="section">
+    <label>造型</label>
+    <div class="skin-grid" id="skinGrid">
+      <button type="button" class="skin-btn" data-skin="amber">琥珀猫</button>
+      <button type="button" class="skin-btn" data-skin="ash">灰猫</button>
+      <button type="button" class="skin-btn" data-skin="snow">白猫</button>
+      <button type="button" class="skin-btn" data-skin="fox">小狐</button>
+    </div>
+    <div class="hint">也可在托盘右键「换造型」随时切换，会记住你的选择。</div>
+  </div>
+
+  <div class="section">
+    <label>不理它多久后开始溜达（分钟）</label>
+    <input id="wanderIdleMinutes" type="number" min="0.5" max="240" step="0.5" value="5" />
+    <div class="hint">点它、拖它、打开面板或打字都会重置计时；溜达不会走出屏幕工作区。可填 0.5～240。</div>
+  </div>
+
+  <div class="row">
+    <button class="ok" id="btnLogin" type="button">登录</button>
+    <button class="ghost" id="btnTest" type="button">测试连接</button>
+  </div>
+  <div class="row">
+    <button class="ghost" id="btnSave" type="button">保存设置</button>
+    <button class="ghost" id="btnClear" type="button">清除登录</button>
+  </div>
+  <div class="msg" id="msg"></div>
+
+  <script src="data-source.js"></script>
+  <script>
+    const msg = document.getElementById('msg');
+    function setMsg(text, cls) {
+      msg.className = 'msg' + (cls ? ' ' + cls : '');
+      msg.textContent = text || '';
+    }
+
+    let selectedSkin = 'amber';
+    let presetsById = {};
+    let applyingUi = false;
+    const SKIN_LABEL = { amber: '琥珀猫', ash: '灰猫', snow: '白猫', fox: '小狐' };
+
+    function syncSkinButtons() {
+      document.querySelectorAll('.skin-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.getAttribute('data-skin') === selectedSkin);
+      });
+    }
+
+    document.querySelectorAll('.skin-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        selectedSkin = btn.getAttribute('data-skin') || 'amber';
+        syncSkinButtons();
+      });
+    });
+
+    function readIdleMinutes() {
+      let n = Number(document.getElementById('wanderIdleMinutes').value);
+      if (!Number.isFinite(n) || n <= 0) n = 5;
+      n = Math.max(0.5, Math.min(240, n));
+      document.getElementById('wanderIdleMinutes').value = String(n);
+      return n;
+    }
+
+    function parseBodyTemplate(text) {
+      const raw = String(text || '').trim();
+      if (!raw) return { userId: '{{userId}}' };
+      try {
+        const obj = JSON.parse(raw);
+        if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+          throw new Error('请求体须为 JSON 对象');
+        }
+        return obj;
+      } catch (e) {
+        throw new Error('登录请求体 JSON 无效：' + (e.message || e));
+      }
+    }
+
+    function syncAuthModeUi() {
+      const mode = document.getElementById('authMode').value;
+      const paste = mode === 'pasteToken';
+      const post = mode === 'demoLogin' || mode === 'customPost' || mode === 'dingTalkUserId';
+      document.getElementById('tokenWrap').classList.toggle('hidden', !paste);
+      document.getElementById('loginPathWrap').classList.toggle('hidden', !post);
+      document.getElementById('bodyTemplateWrap').classList.toggle('hidden', !post);
+      const btnLogin = document.getElementById('btnLogin');
+      if (mode === 'pasteToken') btnLogin.textContent = '保存 Token';
+      else if (mode === 'customPost') btnLogin.textContent = '自定义登录';
+      else if (mode === 'dingTalkUserId') btnLogin.textContent = '钉钉 userid 登录';
+      else btnLogin.textContent = '演示登录';
+
+      if (mode === 'dingTalkUserId') {
+        document.getElementById('loginPath').value = document.getElementById('loginPath').value || '/dingtalk/auth/login-by-userid';
+        const bodyEl = document.getElementById('bodyTemplate');
+        try {
+          const cur = JSON.parse(bodyEl.value || '{}');
+          if (!cur.dingTalkUserId) {
+            bodyEl.value = JSON.stringify({ dingTalkUserId: '{{dingTalkUserId}}' }, null, 2);
+          }
+        } catch (_) {
+          bodyEl.value = JSON.stringify({ dingTalkUserId: '{{dingTalkUserId}}' }, null, 2);
+        }
+        if (!document.getElementById('loginPath').value || document.getElementById('loginPath').value === '/auth/demo-login') {
+          document.getElementById('loginPath').value = '/dingtalk/auth/login-by-userid';
+        }
+      }
+    }
+
+    function syncRealtimeUi() {
+      const on = document.getElementById('realtimeEnabled').checked;
+      document.getElementById('realtimeWrap').classList.toggle('hidden', !on);
+    }
+
+    function updatePresetSummary() {
+      const id = document.getElementById('presetId').value;
+      const el = document.getElementById('presetSummary');
+      if (id === 'henghuiguan') {
+        el.textContent = '恒慧管：用钉钉 userid 正式登录拉本人通知。Electron 里不能钉钉免登，勿指望空壳主站窗口有数据。';
+      } else {
+        el.textContent = '自定义：按下方地址、登录与通知路径对接任意兼容后端。';
+      }
+    }
+
+    function markCustomIfEdited() {
+      if (applyingUi) return;
+      if (document.getElementById('presetId').value !== 'custom') {
+        document.getElementById('presetId').value = 'custom';
+        updatePresetSummary();
+      }
+    }
+
+    [
+      'displayName', 'apiBase', 'appUrl', 'authMode', 'userId', 'dingTalkUserId', 'loginPath', 'bodyTemplate',
+      'tokenPath', 'userNamePath', 'authHeader', 'listPath', 'realtimeEnabled', 'realtimePath',
+      'eventName', 'triggerType', 'tokenQuery', 'pollSeconds', 'unreadPath', 'itemsPath',
+      'titlePath', 'bodyPath', 'eventTypePath', 'idPath', 'pasteToken', 'pasteUserName',
+    ].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('change', markCustomIfEdited);
+      el.addEventListener('input', markCustomIfEdited);
+    });
+
+    document.getElementById('authMode').addEventListener('change', syncAuthModeUi);
+    document.getElementById('realtimeEnabled').addEventListener('change', syncRealtimeUi);
+    document.getElementById('presetId').addEventListener('change', async () => {
+      const id = document.getElementById('presetId').value;
+      updatePresetSummary();
+      if (id === 'henghuiguan' && window.petBridge.applyPreset) {
+        try {
+          setMsg('正在应用恒慧管预设…');
+          const cfg = await window.petBridge.applyPreset('henghuiguan');
+          fillFromConfig(cfg);
+          setMsg('已应用恒慧管预设（登录状态保留，可点「演示登录」重连）', 'ok');
+        } catch (e) {
+          setMsg(e.message || String(e), 'err');
+        }
+      }
+    });
+
+    function fillFromConfig(cfg) {
+      applyingUi = true;
+      try {
+        document.getElementById('presetId').value = cfg.presetId === 'henghuiguan' ? 'henghuiguan' : 'custom';
+        document.getElementById('displayName').value = cfg.displayName || '';
+        document.getElementById('apiBase').value = cfg.apiBase || '';
+        document.getElementById('appUrl').value = cfg.appUrl || '';
+        document.getElementById('userId').value = cfg.userId || 'U018';
+        document.getElementById('dingTalkUserId').value = cfg.dingTalkUserId || '';
+        document.getElementById('wanderIdleMinutes').value = cfg.wanderIdleMinutes != null ? cfg.wanderIdleMinutes : 5;
+        selectedSkin = cfg.skinId || 'amber';
+        syncSkinButtons();
+
+        const auth = cfg.auth || {};
+        document.getElementById('authMode').value = auth.mode || 'dingTalkUserId';
+        document.getElementById('loginPath').value = auth.loginPath || '/dingtalk/auth/login-by-userid';
+        document.getElementById('bodyTemplate').value = JSON.stringify(
+          auth.bodyTemplate || { dingTalkUserId: '{{dingTalkUserId}}' },
+          null,
+          2
+        );
+        document.getElementById('tokenPath').value = auth.tokenPath || 'token';
+        document.getElementById('userNamePath').value = auth.userNamePath || 'user.name';
+        document.getElementById('authHeader').value = cfg.authHeader || 'Bearer {{token}}';
+        document.getElementById('pasteToken').value = cfg.token || '';
+        document.getElementById('pasteUserName').value = cfg.userName || '';
+
+        const notify = cfg.notify || {};
+        document.getElementById('listPath').value = notify.listPath || '/notifications?limit=8';
+        document.getElementById('unreadPath').value = notify.unreadPath || 'unreadCount';
+        document.getElementById('itemsPath').value = notify.itemsPath || 'items';
+        document.getElementById('titlePath').value = notify.titlePath || 'title';
+        document.getElementById('bodyPath').value = notify.bodyPath || 'content';
+        document.getElementById('eventTypePath').value = notify.eventTypePath || 'eventType';
+        document.getElementById('idPath').value = notify.idPath || 'id';
+
+        const rt = cfg.realtime || {};
+        document.getElementById('realtimeEnabled').checked = rt.enabled !== false;
+        document.getElementById('realtimePath').value = rt.path || '/realtime/events';
+        document.getElementById('eventName').value = rt.eventName || 'change';
+        document.getElementById('triggerType').value = rt.triggerType || 'inbox.updated';
+        document.getElementById('tokenQuery').value = rt.tokenQuery || 'token';
+        document.getElementById('pollSeconds').value = rt.pollSeconds != null ? rt.pollSeconds : 60;
+
+        syncAuthModeUi();
+        syncRealtimeUi();
+        updatePresetSummary();
+        if (cfg.token) setMsg('已登录：' + (cfg.userName || '已保存 token'), 'ok');
+      } finally {
+        applyingUi = false;
+      }
+    }
+
+    function readFormConfig(extra) {
+      const authMode = document.getElementById('authMode').value;
+      let poll = Number(document.getElementById('pollSeconds').value);
+      if (!Number.isFinite(poll) || poll < 15) poll = 60;
+      poll = Math.min(600, poll);
+
+      const patch = {
+        presetId: document.getElementById('presetId').value === 'henghuiguan' ? 'henghuiguan' : 'custom',
+        displayName: document.getElementById('displayName').value.trim() || '桌宠',
+        apiBase: document.getElementById('apiBase').value.trim().replace(/\/+$/, ''),
+        appUrl: document.getElementById('appUrl').value.trim(),
+        userId: document.getElementById('userId').value.trim() || 'U018',
+        dingTalkUserId: document.getElementById('dingTalkUserId').value.trim(),
+        wanderIdleMinutes: readIdleMinutes(),
+        skinId: selectedSkin,
+        authHeader: document.getElementById('authHeader').value.trim() || 'Bearer {{token}}',
+        auth: {
+          mode: authMode,
+          loginPath: document.getElementById('loginPath').value.trim()
+            || (authMode === 'dingTalkUserId' ? '/dingtalk/auth/login-by-userid' : '/auth/demo-login'),
+          bodyTemplate: parseBodyTemplate(document.getElementById('bodyTemplate').value),
+          tokenPath: document.getElementById('tokenPath').value.trim() || 'token',
+          userNamePath: document.getElementById('userNamePath').value.trim() || 'user.name',
+        },
+        notify: {
+          listPath: document.getElementById('listPath').value.trim() || '/notifications?limit=8',
+          unreadPath: document.getElementById('unreadPath').value.trim() || 'unreadCount',
+          itemsPath: document.getElementById('itemsPath').value.trim() || 'items',
+          titlePath: document.getElementById('titlePath').value.trim() || 'title',
+          bodyPath: document.getElementById('bodyPath').value.trim() || 'content',
+          eventTypePath: document.getElementById('eventTypePath').value.trim() || 'eventType',
+          idPath: document.getElementById('idPath').value.trim() || 'id',
+        },
+        realtime: {
+          enabled: document.getElementById('realtimeEnabled').checked,
+          path: document.getElementById('realtimePath').value.trim() || '/realtime/events',
+          tokenQuery: document.getElementById('tokenQuery').value.trim() || 'token',
+          eventName: document.getElementById('eventName').value.trim() || 'change',
+          triggerType: document.getElementById('triggerType').value.trim() || 'inbox.updated',
+          pollSeconds: poll,
+        },
+      };
+
+      if (authMode === 'pasteToken') {
+        patch.token = document.getElementById('pasteToken').value.trim();
+        patch.userName = document.getElementById('pasteUserName').value.trim();
+      }
+
+      return Object.assign(patch, extra || {});
+    }
+
+    async function fill() {
+      if (window.petBridge.getPresets) {
+        const list = await window.petBridge.getPresets();
+        (list || []).forEach((p) => { presetsById[p.id] = p; });
+      }
+      const cfg = await window.petBridge.getConfig();
+      fillFromConfig(cfg);
+    }
+
+    document.getElementById('btnSave').addEventListener('click', async () => {
+      try {
+        const patch = readFormConfig();
+        await window.petBridge.setConfig(patch);
+        setMsg('已保存：' + (SKIN_LABEL[selectedSkin] || selectedSkin) + ' · ' + (patch.displayName || ''), 'ok');
+      } catch (e) {
+        setMsg(e.message || String(e), 'err');
+      }
+    });
+
+    document.getElementById('btnClear').addEventListener('click', async () => {
+      await window.petBridge.setConfig({ token: '', userName: '' });
+      document.getElementById('pasteToken').value = '';
+      document.getElementById('pasteUserName').value = '';
+      setMsg('已清除登录', 'ok');
+    });
+
+    document.getElementById('btnLoginViaApp').addEventListener('click', async () => {
+      try {
+        const form = readFormConfig();
+        if (!form.dingTalkUserId) {
+          setMsg('请先填写钉钉 userid，再打开主站（Electron 不能钉钉免登）', 'err');
+          return;
+        }
+        await window.petBridge.setConfig({
+          apiBase: form.apiBase,
+          appUrl: form.appUrl,
+          displayName: form.displayName,
+          presetId: form.presetId,
+          dingTalkUserId: form.dingTalkUserId,
+          userId: form.userId,
+        });
+        setMsg('正在打开主站并带 userid 登录…');
+        const result = await window.petBridge.loginViaApp();
+        const cfg = await window.petBridge.getConfig();
+        fillFromConfig(cfg);
+        setMsg('已接入正式账号：' + (result.userName || result.userId || 'ok'), 'ok');
+      } catch (e) {
+        setMsg(e.message || String(e), 'err');
+      }
+    });
+
+    document.getElementById('btnFormalLogin').addEventListener('click', async () => {
+      try {
+        setMsg('正式登录中…');
+        const form = readFormConfig();
+        form.auth = Object.assign({}, form.auth, {
+          mode: 'dingTalkUserId',
+          loginPath: '/dingtalk/auth/login-by-userid',
+          bodyTemplate: { dingTalkUserId: '{{dingTalkUserId}}' },
+        });
+        if (!form.dingTalkUserId) {
+          throw new Error('请填写钉钉 userid（王元斌一般为 669701617）');
+        }
+        const result = await window.PetDataSource.login(form);
+        await window.petBridge.setConfig(Object.assign({}, form, {
+          token: result.token,
+          userName: result.userName,
+          userId: result.userId || form.userId,
+          auth: form.auth,
+        }));
+        document.getElementById('pasteToken').value = result.token;
+        document.getElementById('pasteUserName').value = result.userName || '';
+        document.getElementById('authMode').value = 'dingTalkUserId';
+        setMsg('正式登录成功：' + (result.userName || result.userId || 'ok') + ' —— 点开宠物看通知', 'ok');
+      } catch (e) {
+        setMsg(e.message || String(e), 'err');
+      }
+    });
+
+    document.getElementById('btnLogin').addEventListener('click', async () => {
+      try {
+        setMsg('登录中…');
+        const form = readFormConfig();
+        const result = await window.PetDataSource.login(form);
+        await window.petBridge.setConfig(Object.assign({}, form, {
+          token: result.token,
+          userName: result.userName,
+          userId: result.userId || form.userId,
+        }));
+        document.getElementById('pasteToken').value = result.token;
+        document.getElementById('pasteUserName').value = result.userName || '';
+        setMsg('登录成功：' + (result.userName || 'ok'), 'ok');
+      } catch (e) {
+        setMsg(e.message || String(e), 'err');
+      }
+    });
+
+    document.getElementById('btnTest').addEventListener('click', async () => {
+      try {
+        setMsg('测试中…');
+        const form = readFormConfig();
+        if (form.auth.mode === 'pasteToken' && !form.token) {
+          form.token = document.getElementById('pasteToken').value.trim();
+        }
+        const result = await window.PetDataSource.testConnection(form);
+        await window.petBridge.setConfig(Object.assign({}, form, {
+          token: result.token,
+          userName: result.userName,
+        }));
+        document.getElementById('pasteToken').value = result.token;
+        document.getElementById('pasteUserName').value = result.userName || '';
+        const sample = result.sampleTitle ? ('；样例：' + result.sampleTitle) : '';
+        setMsg('连接成功：未读 ' + result.unreadCount + ' · 条目 ' + result.itemCount + sample, 'ok');
+      } catch (e) {
+        setMsg(e.message || String(e), 'err');
+      }
+    });
+
+    fill();
+  </script>
+</body>
+</html>

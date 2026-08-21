@@ -1,0 +1,341 @@
+﻿<html xmlns:o="urn:schemas-microsoft-com:office:office"
+xmlns:w="urn:schemas-microsoft-com:office:word"
+xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>跨基地采购面料 · SRM×MES 对接泳道图</title>
+<style>
+body { font-family: "微软雅黑", SimSun, sans-serif; font-size: 11pt; color: #222; }
+h1 { font-size: 18pt; }
+h2 { font-size: 14pt; margin-top: 22pt; border-bottom: 1px solid #999; padding-bottom: 4pt; }
+h3 { font-size: 12pt; margin-top: 16pt; color: #333; }
+p, li { line-height: 1.5; }
+.note { background: #f3f6fa; border: 1px solid #c5d0dc; padding: 8pt 10pt; margin: 10pt 0; }
+table.swim { border-collapse: collapse; width: 100%; margin: 8pt 0 16pt 0; font-size: 9pt; }
+table.swim th, table.swim td { border: 1px solid #666; padding: 6pt 4pt; vertical-align: top; text-align: center; }
+table.swim th { background: #e8eef5; font-weight: bold; }
+table.swim td.lane { background: #f0f0f0; font-weight: bold; text-align: left; width: 90pt; white-space: nowrap; }
+table.swim td.act { background: #fff8e8; }
+table.swim td.empty { background: #fafafa; color: #bbb; }
+table.data { border-collapse: collapse; width: 100%; margin: 8pt 0 16pt 0; font-size: 10pt; }
+table.data th, table.data td { border: 1px solid #666; padding: 6pt; vertical-align: top; text-align: left; }
+table.data th { background: #e8eef5; }
+.flow { font-family: Consolas, "Courier New", monospace; font-size: 9.5pt; background: #f7f7f7; border: 1px solid #ddd; padding: 8pt; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+
+<h1>跨基地采购面料 · SRM × MES 系统对接泳道图</h1>
+<p><b>业务前提：</b>云南恒田抬头采购面料，实物先入无锡工厂；集团一套 SRM，各工厂独立 MES。</p>
+<p><b>设计原则：</b>货权公司、物理仓、业务形态（代收 / 调拨 / 受托 WIP）三元组贯通 SRM 与两套 MES。</p>
+
+<div class="note">
+<b>读图说明：</b>下表为泳道图。左侧列为责任系统，横向为时间步骤；有色单元格表示该系统在该步骤执行的动作；空白表示本步骤不涉及该系统。箭头链路见每节下方「流转顺序」。
+</div>
+
+<h2>一、场景 A：无锡代收 → 整料转运云南</h2>
+
+<h3>1.1 物流流转视角（泳道图）</h3>
+<table class="swim">
+<tr>
+  <th>系统泳道</th>
+  <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th>
+</tr>
+<tr>
+  <td class="lane">集团 SRM</td>
+  <td class="act">采购订单<br/>抬头=云南恒田</td>
+  <td class="act">ASN/送货单<br/>收货地址=无锡</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">收货回写 GR<br/>货权记云南</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">无锡 MES</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">扫码代收<br/>代收主体=云南</td>
+  <td class="empty">—</td>
+  <td class="act">调拨出库<br/>无锡→云南</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">实物物流</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">面料送达无锡<br/>实物到厂</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">整料转运<br/>在途</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">云南 MES</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">调拨入库<br/>扫码签收</td>
+  <td class="act">可投产库存<br/>云南可用</td>
+</tr>
+</table>
+<div class="flow">流转顺序：
+PO → ASN → 面料送达无锡 → 扫码代收 → 收货回写GR（接口回传）→ 调拨出库 → 整料转运 → 调拨入库 → 可投产</div>
+
+<h3>1.2 审计合规视角（泳道图）</h3>
+<table class="swim">
+<tr>
+  <th>系统泳道</th>
+  <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th>
+</tr>
+<tr>
+  <td class="lane">授权/单据</td>
+  <td class="act">代收授权<br/>跨法人许可</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">内部调拨单<br/>审批留痕</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">集团 SRM</td>
+  <td class="empty">—</td>
+  <td class="act">PO权属校验<br/>法人=云南</td>
+  <td class="act">三单匹配<br/>PO/ASN/实物</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">在途对账<br/>出=途=入</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">无锡 MES</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">账实分离<br/>货锡/账滇</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">财务/ERP</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">云南账面入库<br/>应付/存货</td>
+  <td class="act">发票校验<br/>抬头=云南</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">云南 MES</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">签收闭环<br/>批次可追溯</td>
+</tr>
+</table>
+<div class="flow">控制链：
+代收授权 → PO权属校验 → 三单匹配 → 账实分离 → 云南账面入库 → 发票校验
+                         ↘ 内部调拨单 → 在途对账 → 签收闭环（审计证据闭环）</div>
+
+<h3>1.3 场景 A 关键交接接口</h3>
+<table class="data">
+<tr><th>交接点</th><th>发送方</th><th>接收方</th><th>关键报文</th><th>硬性规则</th></tr>
+<tr><td>代收入库</td><td>无锡 MES</td><td>集团 SRM</td><td>PO、ASN、卷号、实收数、代收仓、货权=云南</td><td>收货法人≠物理仓须带代收标记+授权单号</td></tr>
+<tr><td>调拨出库</td><td>无锡 MES</td><td>SRM + 云南 MES</td><td>调拨单、实发数、承运、在途、批次码</td><td>出库进在途；未签收不得计云南可用</td></tr>
+<tr><td>调拨入库</td><td>云南 MES</td><td>SRM + 无锡 MES</td><td>实收数、差异、签收人、关单</td><td>差异超阈值双方复核</td></tr>
+</table>
+
+<h2>二、场景 B：无锡裁剪 → 衣片发云南</h2>
+
+<h3>2.1 物流流转视角（泳道图）</h3>
+<table class="swim">
+<tr>
+  <th>系统泳道</th>
+  <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>10</th>
+</tr>
+<tr>
+  <td class="lane">集团 SRM</td>
+  <td class="act">采购订单<br/>抬头=云南</td>
+  <td class="act">ASN/送货单<br/>地址=无锡</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">无锡 MES</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">扫码代收<br/>受托可用</td>
+  <td class="act">裁剪投产<br/>领料→裁床</td>
+  <td class="act">衣片捆包<br/>床次绑定</td>
+  <td class="act">衣片发运<br/>半成品出库</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">实物物流</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">面料送达无锡</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">衣片转运<br/>锡→滇</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">云南 MES</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">衣片接收<br/>半成品入库</td>
+  <td class="act">继续缝制<br/>后续工序</td>
+</tr>
+</table>
+<div class="flow">流转顺序：
+PO → ASN → 面料送达 → 扫码代收 → 裁剪投产 → 衣片捆包 → 衣片发运 → 衣片转运 → 衣片接收 → 继续缝制</div>
+
+<h3>2.2 审计合规视角（泳道图）</h3>
+<table class="swim">
+<tr>
+  <th>系统泳道</th>
+  <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th>
+</tr>
+<tr>
+  <td class="lane">授权/单据</td>
+  <td class="act">代收+加工协议<br/>受托授权</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">半成品移交单<br/>捆包清单</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">集团 SRM</td>
+  <td class="empty">—</td>
+  <td class="act">PO权属校验<br/>法人=云南</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">全链路追溯<br/>PO→卷→捆</td>
+</tr>
+<tr>
+  <td class="lane">无锡 MES</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">受托领用<br/>货权不变</td>
+  <td class="act">裁损留痕<br/>实裁vs标准</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">财务/ERP</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">云南账面收货<br/>发票主体</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">加工费结算<br/>锡→滇对账</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+</tr>
+<tr>
+  <td class="lane">云南 MES</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="empty">—</td>
+  <td class="act">接收确认<br/>质/数签收</td>
+  <td class="empty">—</td>
+</tr>
+</table>
+<div class="flow">控制链：
+代收+加工协议 → PO权属校验 → 云南账面收货
+              ↘ 受托领用 → 裁损留痕 → 半成品移交单 → 接收确认
+                         ↘ 加工费结算 → 全链路追溯闭环</div>
+
+<h3>2.3 场景 B 关键交接接口</h3>
+<table class="data">
+<tr><th>交接点</th><th>发送方</th><th>接收方</th><th>关键报文</th><th>硬性规则</th></tr>
+<tr><td>代收入库</td><td>无锡 MES</td><td>集团 SRM</td><td>同代收；形态=面料，货权=云南</td><td>锁定为受托加工可用</td></tr>
+<tr><td>裁剪领用</td><td>无锡 MES</td><td>SRM/财务</td><td>工单、批次、理论/实发用量</td><td>领用不改货权；记受托 WIP</td></tr>
+<tr><td>衣片移交</td><td>无锡 MES</td><td>云南 MES + SRM</td><td>捆包码、款号、床次、件数、面料追溯</td><td>移交单必含来源面料批次</td></tr>
+<tr><td>签收续产</td><td>云南 MES</td><td>SRM/财务</td><td>签收数、不良、工单接续、加工费依据</td><td>签收释放无锡在制并触发对账</td></tr>
+</table>
+
+<h2>三、两场景审计控制对照</h2>
+<table class="data">
+<tr><th>控制点</th><th>场景A 整料转运</th><th>场景B 裁剪发衣片</th></tr>
+<tr><td>货权与物理仓分离</td><td>账面公司=云南，仓位=无锡代收仓</td><td>面料/WIP 货权始终=云南</td></tr>
+<tr><td>跨法人授权</td><td>代收授权书 + 调拨审批</td><td>代收授权 + 受托加工协议 + 加工费定价</td></tr>
+<tr><td>匹配与对账</td><td>PO-ASN-GR-调出-调入</td><td>PO-ASN-GR-领料-捆包-移交-签收</td></tr>
+<tr><td>发票主体</td><td>面料发票抬头=云南恒田</td><td>面料发票=云南；加工费=无锡→云南</td></tr>
+</table>
+
+<h2>四、泳道职责说明</h2>
+<ul>
+<li><b>集团 SRM：</b>订单、ASN、收货回写、跨基地调拨主档与对账。</li>
+<li><b>无锡 MES：</b>代收扫码、调拨出库 / 裁剪捆包发运（执行端）。</li>
+<li><b>云南 MES：</b>调拨入库或衣片签收，后续投产（货权归属地）。</li>
+<li><b>实物物流：</b>承运与在途。</li>
+<li><b>财务/单据：</b>法人账、发票、授权与移交证据。</li>
+</ul>
+
+<p><i>说明：场景 A 是库存位置变更（面料形态不变）；场景 B 是形态变更 + 受托加工，应按半成品移交 + 加工费处理，不可简单按调拨面料记账。</i></p>
+
+</body>
+</html>

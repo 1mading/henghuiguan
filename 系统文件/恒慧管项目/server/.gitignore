@@ -1,0 +1,13 @@
+node_modules/
+data/*.db
+data/*.json
+data/*.json.tmp
+data/backups/
+data/uploads/
+.env
+.env.*
+!.env.example
+*.log
+miniapp/config.js
+src/db/seed-data.json
+src/db/seed-data.local.json

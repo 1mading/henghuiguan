@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>棱镜项目工作台 · 演示</title>
+  <style>
+    :root {
+      --bg: #1b2220;
+      --panel: rgba(38, 48, 44, 0.92);
+      --glass-border: rgba(180, 210, 190, 0.14);
+      --neon: #3ddc6a;
+      --neon-dim: rgba(61, 220, 106, 0.16);
+      --danger: #ff6b6e;
+      --text: #eef5f0;
+      --muted: #9aaba0;
+      --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(980px 520px at 82% 0%, rgba(61, 220, 106, 0.12), transparent 55%),
+        radial-gradient(820px 480px at 8% 100%, rgba(90, 140, 220, 0.08), transparent 50%),
+        linear-gradient(165deg, #222a27 0%, #181e1c 48%, #141a18 100%);
+    }
+    button, input { font: inherit; color: inherit; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .neon { color: var(--neon); }
+    .neon-btn {
+      background: linear-gradient(180deg, #52e87a, #2bc85a);
+      color: #062010;
+      border: none;
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(61,220,106,.28);
+    }
+    .layout {
+      display: flex;
+      height: 100%;
+      overflow: hidden;
+    }
+    .side {
+      width: 220px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--glass-border);
+      background: rgba(42,52,48,.78);
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+    }
+    .brand-title { font-size: 16px; font-weight: 700; }
+    .brand-sub { margin-top: 4px; font-size: 11px; color: var(--muted); }
+    .nav { margin-top: 24px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+    .nav button {
+      text-align: left;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 14px;
+      padding: 10px 12px;
+      cursor: pointer;
+    }
+    .nav button.active, .nav button:hover {
+      background: var(--neon-dim);
+      color: var(--neon);
+    }
+    .user {
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255,255,255,.05);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--neon-dim); color: var(--neon);
+      display: grid; place-items: center; font-size: 12px;
+    }
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .top {
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+      padding: 16px 20px; border-bottom: 1px solid var(--glass-border);
+      background: rgba(0,0,0,.15);
+    }
+    .top h1 { margin: 0; font-size: 22px; }
+    .top p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+    .search {
+      flex: 1; min-width: 220px; max-width: 520px; margin: 0 auto;
+      border-radius: 999px; border: 1px solid var(--glass-border);
+      background: rgba(255,255,255,.05); padding: 10px 16px; outline: none;
+    }
+    .notice {
+      margin: 12px 20px 0;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(61,220,106,.25);
+      background: rgba(61,220,106,.08);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .content {
+      flex: 1; min-height: 0; overflow: auto;
+      padding: 16px 20px 20px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .stat { padding: 14px 16px; }
+    .stat .label { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; }
+    .stat .num { margin-top: 8px; font-size: 28px; font-weight: 700; }
+    .mid {
+      display: grid;
+      grid-template-columns: 0.95fr 1.05fr 0.9fr;
+      gap: 16px;
+      min-height: 360px;
+    }
+    .col { padding: 12px; overflow: hidden; display: flex; flex-direction: column; min-height: 360px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 12px; font-size: 12px; }
+    .tab {
+      border-radius: 999px; padding: 4px 12px; color: var(--muted);
+    }
+    .tab.on { background: var(--neon-dim); color: var(--neon); }
+    .group-title { display: flex; justify-content: space-between; font-size: 13px; margin: 10px 0 6px; }
+    .task {
+      width: 100%; text-align: left; cursor: pointer;
+      border: 1px solid var(--glass-border); background: rgba(255,255,255,.05);
+      border-radius: 14px; padding: 8px 12px; margin-bottom: 6px;
+    }
+    .task.active { border-color: var(--neon); background: var(--neon-dim); }
+    .task .row { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--neon); flex-shrink: 0; }
+    .dot.danger { background: var(--danger); }
+    .meta { margin-top: 4px; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+    .stack-wrap { position: relative; flex: 1; overflow: hidden; perspective: 1200px; }
+    .card {
+      position: absolute; left: 50%; top: 50%; width: 200px;
+      transform: translate(-50%, -50%);
+      border-radius: 20px; padding: 16px;
+      border: 1px solid var(--glass-border);
+      background: rgba(255,255,255,.06);
+      transition: transform .25s ease, opacity .25s ease;
+      cursor: pointer;
+    }
+    .card.active {
+      background: linear-gradient(180deg, #52e87a, #2bc85a);
+      color: #062010;
+      border-color: transparent;
+      z-index: 5;
+    }
+    .card .pct { margin-top: 16px; font-size: 28px; font-weight: 700; }
+    .detail h2 { margin: 8px 0 0; font-size: 18px; }
+    .detail .desc { color: var(--muted); font-size: 13px; margin-top: 10px; }
+    .kv {
+      margin-top: 8px; display: flex; justify-content: space-between;
+      border: 1px solid var(--glass-border); background: rgba(255,255,255,.05);
+      border-radius: 12px; padding: 8px 12px; font-size: 13px;
+    }
+    .ai {
+      margin-top: 12px; flex: 1;
+      border: 1px solid var(--glass-border); background: var(--neon-dim);
+      border-radius: 14px; padding: 12px; font-size: 12px; color: var(--muted);
+    }
+    .actions { margin-top: 12px; display: flex; gap: 8px; }
+    .ghost {
+      border: 1px solid var(--glass-border); background: rgba(255,255,255,.05);
+      border-radius: 12px; padding: 8px 14px; color: var(--muted); cursor: pointer;
+    }
+    .timeline { padding: 16px; }
+    .tl-row { display: grid; grid-template-columns: 140px 1fr; gap: 12px; align-items: center; margin-top: 8px; }
+    .bar { height: 28px; border-radius: 999px; background: rgba(255,255,255,.08); position: relative; }
+    .bar > span {
+      position: absolute; top: 6px; height: 16px; border-radius: 999px; background: var(--neon);
+    }
+    .bar > span.danger { background: var(--danger); }
+    .hidden { display: none !important; }
+    .placeholder {
+      padding: 40px 28px;
+    }
+    @media (max-width: 1100px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .mid { grid-template-columns: 1fr; }
+      .side { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="side">
+      <div>
+        <div class="brand-title"><span class="neon">棱镜</span>项目工作台</div>
+        <div class="brand-sub">Prism · 本地多项目管理</div>
+      </div>
+      <nav class="nav" id="nav">
+        <button class="active" data-page="tasks">任务管理</button>
+        <button data-page="projects">项目总览</button>
+        <button data-page="archive">文件归档</button>
+        <button data-page="schedule">日程管理</button>
+        <button data-page="alerts">智能分析</button>
+        <button data-page="settings">设置</button>
+      </nav>
+      <div class="user">
+        <div class="avatar">WY</div>
+        <div>
+          <div style="font-size:13px">本地用户</div>
+          <div style="font-size:11px;color:var(--muted)">Private Workspace</div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="top">
+        <div>
+          <h1 id="pageTitle">任务管理</h1>
+          <p id="pageSub">高效规划 · 智能协同 · 结果导向</p>
+        </div>
+        <input class="search" placeholder="搜索任务 / 项目 / 文件" />
+        <button class="neon-btn" type="button">+ 新增任务</button>
+      </header>
+
+      <div class="notice">
+        这是<strong>离线演示页</strong>（Mock 数据）。可拷到其他电脑双击打开。真实读写 SQLite / Hermes 请用本机工程的 <code>npm run dev</code>。
+      </div>
+
+      <div class="content" id="page-tasks">
+        <div class="stats" id="stats"></div>
+        <div class="mid">
+          <section class="panel col">
+            <div class="tabs">
+              <span class="tab on">全部任务</span>
+              <span class="tab">我负责的</span>
+              <span class="tab">我参与的</span>
+            </div>
+            <div id="taskBoard" style="overflow:auto;flex:1"></div>
+          </section>
+
+          <section class="panel col">
+            <div style="display:flex;justify-content:space-between;align-items:end;margin-bottom:8px">
+              <div>
+                <div style="font-size:11px;color:var(--muted);letter-spacing:.18em">PROJECT STACK</div>
+                <div style="font-weight:700">横向 3D 项目堆叠</div>
+              </div>
+              <div style="font-size:11px;color:var(--muted)" id="stackMeta"></div>
+            </div>
+            <div class="stack-wrap" id="stack"></div>
+          </section>
+
+          <aside class="panel col detail" id="detail"></aside>
+        </div>
+
+        <section class="panel timeline">
+          <div style="display:flex;justify-content:space-between;align-items:end">
+            <div>
+              <div style="font-size:11px;color:var(--muted);letter-spacing:.18em">TIMELINE</div>
+              <div style="font-weight:700;font-size:18px">项目时间线</div>
+            </div>
+            <div style="font-size:11px;color:var(--muted)">2026-07 → 08</div>
+          </div>
+          <div id="timeline" style="margin-top:12px"></div>
+        </section>
+      </div>
+
+      <div class="content hidden" id="page-projects"></div>
+      <div class="content hidden" id="page-archive">
+        <div class="panel placeholder">
+          <div style="font-size:11px;color:var(--muted);letter-spacing:.2em">COMING SOON</div>
+          <h2 style="margin:8px 0 0">文件归档</h2>
+          <p style="color:var(--muted)">演示页占位。正式版将接入 project_files。</p>
+        </div>
+      </div>
+      <div class="content hidden" id="page-schedule">
+        <div class="panel placeholder">
+          <div style="font-size:11px;color:var(--muted);letter-spacing:.2em">COMING SOON</div>
+          <h2 style="margin:8px 0 0">日程管理</h2>
+          <p style="color:var(--muted)">演示页占位。正式版将接入 calendar_events。</p>
+        </div>
+      </div>
+      <div class="content hidden" id="page-alerts"></div>
+      <div class="content hidden" id="page-settings">
+        <div class="panel placeholder">
+          <div style="font-size:11px;color:var(--muted);letter-spacing:.2em">DEMO</div>
+          <h2 style="margin:8px 0 0">设置</h2>
+          <p style="color:var(--muted)">离线演示不连接 daemon。正式版可查看 Hermes 心跳与 job_runs。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const projects = [
+      { id: "p-1", name: "个人知识库重构", description: "整理笔记结构与本地检索。", progress: 62, color: "#38bdf8", status: "active" },
+      { id: "p-2", name: "棱镜项目工作台", description: "Cursor + Hermes 本地私有化工具。", progress: 78, color: "#818cf8", status: "active" },
+      { id: "p-3", name: "年度复盘看板", description: "逾期、冲突与周复盘汇总。", progress: 15, color: "#34d399", status: "paused" },
+    ];
+
+    const tasks = [
+      { id: "t-1", project_id: "p-1", title: "迁移旧笔记到统一目录", status: "done", due_at: "2026-07-25", is_overdue: 0, priority: 2 },
+      { id: "t-2", project_id: "p-1", title: "设计标签与检索规则", status: "in_progress", due_at: "2026-07-30", is_overdue: 0, priority: 3 },
+      { id: "t-3", project_id: "p-2", title: "完成界面演示页", status: "done", due_at: "2026-07-30", is_overdue: 0, priority: 5 },
+      { id: "t-4", project_id: "p-2", title: "接入 SQLite 联调", status: "in_progress", due_at: "2026-07-31", is_overdue: 0, priority: 4 },
+      { id: "t-5", project_id: "p-3", title: "起草复盘指标清单", status: "todo", due_at: "2026-07-20", is_overdue: 1, priority: 1 },
+    ];
+
+    const alerts = [
+      { id: "a-1", title: "任务已逾期", message: "「起草复盘指标清单」已超过 due_at", severity: "high", project_id: "p-3" },
+      { id: "a-2", title: "排期偏紧", message: "建议优先完成联调后再推进新需求", severity: "medium", project_id: "p-2" },
+    ];
+
+    const pageMeta = {
+      tasks: ["任务管理", "高效规划 · 智能协同 · 结果导向"],
+      projects: ["项目总览", "本地多项目进度与状态"],
+      archive: ["文件归档", "演示占位页"],
+      schedule: ["日程管理", "演示占位页"],
+      alerts: ["智能分析", "Mock 预警列表"],
+      settings: ["设置", "离线演示说明"],
+    };
+
+    let activeProjectId = projects[0].id;
+    let selectedTaskId = tasks.find(t => t.status === "in_progress")?.id || tasks[0].id;
+
+    function projectName(id) {
+      return projects.find(p => p.id === id)?.name || id;
+    }
+
+    function statusText(s) {
+      return ({ todo: "待办", in_progress: "进行中", done: "已完成", cancelled: "已取消" })[s] || s;
+    }
+
+    function renderStats() {
+      const cards = [
+        ["今日待办", tasks.filter(t => t.status === "todo").length, "muted"],
+        ["进行中", tasks.filter(t => t.status === "in_progress").length, "muted"],
+        ["已完成", tasks.filter(t => t.status === "done").length, "neon"],
+        ["逾期任务", tasks.filter(t => t.is_overdue === 1).length, "danger"],
+      ];
+      document.getElementById("stats").innerHTML = cards.map(([label, num, tone]) => `
+        <div class="panel stat">
+          <div class="label"><span>${label}</span><span style="color:${tone === "danger" ? "var(--danger)" : tone === "neon" ? "var(--neon)" : "var(--muted)"}">●</span></div>
+          <div class="num">${num}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">演示数据</div>
+        </div>
+      `).join("");
+    }
+
+    function renderBoard() {
+      const cols = [
+        ["todo", "待办规划"],
+        ["in_progress", "推进执行"],
+        ["done", "已完成"],
+      ];
+      document.getElementById("taskBoard").innerHTML = cols.map(([key, title]) => {
+        const list = tasks.filter(t => t.status === key).slice(0, 4);
+        return `
+          <div class="group-title"><strong>${title}</strong><span style="color:var(--muted)">${list.length}</span></div>
+          ${list.map(t => `
+            <button class="task ${t.id === selectedTaskId ? "active" : ""}" data-task="${t.id}">
+              <div class="row">
+                <span>${t.title}</span>
+                <span class="dot ${t.is_overdue ? "danger" : ""}"></span>
+              </div>
+              <div class="meta"><span>${t.id}</span><span>${t.due_at}</span></div>
+            </button>
+          `).join("")}
+        `;
+      }).join("");
+
+      document.querySelectorAll("[data-task]").forEach(btn => {
+        btn.onclick = () => {
+          selectedTaskId = btn.getAttribute("data-task");
+          renderAllTasksPage();
+        };
+      });
+    }
+
+    function renderStack() {
+      const activeIndex = Math.max(0, projects.findIndex(p => p.id === activeProjectId));
+      document.getElementById("stackMeta").textContent = `${alerts.length} alerts · ${projects.length} projects`;
+      document.getElementById("stack").innerHTML = projects.map((p, index) => {
+        const offset = index - activeIndex;
+        const abs = Math.abs(offset);
+        const active = p.id === activeProjectId;
+        const transform = `translate(calc(-50% + ${offset * 64}px), calc(-50% + ${abs * 3}px)) rotateY(${offset * -12}deg) scale(${active ? 1.04 : Math.max(0.82, 0.95 - abs * 0.05)})`;
+        return `
+          <div class="card ${active ? "active" : ""}" data-project="${p.id}" style="transform:${transform};z-index:${active ? 5 : Math.max(1, 4 - abs)};opacity:${abs > 2 ? 0 : active ? 1 : Math.max(0.45, 0.9 - abs * 0.18)}">
+            <div style="display:flex;justify-content:space-between;font-size:10px;opacity:.8">
+              <span>项目文档</span><span style="width:8px;height:8px;border-radius:50%;background:${active ? "#062010" : p.color}"></span>
+            </div>
+            <div style="margin-top:8px;font-weight:700">${p.name}</div>
+            <div class="pct" style="${active ? "" : "color:var(--neon)"}">${p.progress}%</div>
+            <div style="font-size:11px;opacity:.85">完成度</div>
+          </div>
+        `;
+      }).join("");
+
+      document.querySelectorAll("[data-project]").forEach(card => {
+        card.onclick = () => {
+          activeProjectId = card.getAttribute("data-project");
+          const first = tasks.find(t => t.project_id === activeProjectId);
+          if (first) selectedTaskId = first.id;
+          renderAllTasksPage();
+        };
+      });
+    }
+
+    function renderDetail() {
+      const task = tasks.find(t => t.id === selectedTaskId);
+      const el = document.getElementById("detail");
+      if (!task) {
+        el.innerHTML = `<div style="font-size:11px;color:var(--muted);letter-spacing:.2em">智能详情</div><h2>暂无选中任务</h2>`;
+        return;
+      }
+      el.innerHTML = `
+        <div style="display:flex;justify-content:space-between;gap:8px">
+          <div>
+            <div style="font-size:11px;color:var(--muted);letter-spacing:.2em">智能详情</div>
+            <h2>${task.title}</h2>
+          </div>
+          <span style="border:1px solid var(--glass-border);border-radius:999px;padding:4px 8px;font-size:10px;color:var(--muted);height:fit-content">${task.id}</span>
+        </div>
+        <div class="desc">本地演示任务详情。正式版将对接 SQLite 与 Hermes 预警字段。</div>
+        <div class="kv"><span style="color:var(--muted)">所属项目</span><span>${projectName(task.project_id)}</span></div>
+        <div class="kv"><span style="color:var(--muted)">优先级</span><span style="${task.priority >= 4 || task.is_overdue ? "color:var(--danger)" : ""}">${task.priority >= 4 ? "高" : task.priority >= 2 ? "中" : "低"}</span></div>
+        <div class="kv"><span style="color:var(--muted)">状态</span><span class="${task.status === "in_progress" ? "neon" : ""}">${statusText(task.status)}</span></div>
+        <div class="kv"><span style="color:var(--muted)">截止</span><span>${task.due_at}</span></div>
+        <div class="ai">
+          <div class="neon" style="margin-bottom:6px">AI 助手建议</div>
+          <div>· 建议优先处理逾期项，再推进当前任务。</div>
+          <div>· 可将相关文档归档到项目文件，便于复盘。</div>
+        </div>
+        <div class="actions">
+          <button class="ghost" type="button">编辑任务</button>
+          <button class="neon-btn" type="button" style="border-radius:12px">完成任务</button>
+        </div>
+      `;
+    }
+
+    function renderTimeline() {
+      const start = new Date("2026-07-10").getTime();
+      const end = new Date("2026-08-10").getTime();
+      const span = end - start;
+      document.getElementById("timeline").innerHTML = tasks.slice(0, 5).map(t => {
+        const s = start + (tasks.indexOf(t) * 4 + 1) * 86400000;
+        const e = s + 5 * 86400000;
+        const left = Math.max(0, ((s - start) / span) * 100);
+        const width = Math.max(8, ((e - s) / span) * 100);
+        return `
+          <div class="tl-row">
+            <div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.title}</div>
+            <div class="bar"><span class="${t.is_overdue ? "danger" : ""}" style="left:${left}%;width:${width}%"></span></div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderProjectsPage() {
+      document.getElementById("page-projects").innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+          ${projects.map(p => `
+            <div class="panel" style="padding:18px">
+              <div style="display:flex;justify-content:space-between">
+                <span style="width:10px;height:10px;border-radius:50%;background:${p.color}"></span>
+                <span style="font-size:11px;color:var(--muted)">${p.status}</span>
+              </div>
+              <div style="margin-top:10px;font-size:18px;font-weight:700">${p.name}</div>
+              <div style="margin-top:8px;color:var(--muted);font-size:13px">${p.description}</div>
+              <div style="margin-top:16px;font-size:11px;color:var(--muted);display:flex;justify-content:space-between">
+                <span>进度</span><span class="neon">${p.progress}%</span>
+              </div>
+              <div style="margin-top:6px;height:8px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden">
+                <div style="height:100%;width:${p.progress}%;background:var(--neon)"></div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderAlertsPage() {
+      document.getElementById("page-alerts").innerHTML = alerts.map(a => `
+        <div class="panel" style="padding:16px;margin-bottom:12px">
+          <div style="font-size:12px;color:var(--muted)">${a.severity} · ${projectName(a.project_id)}</div>
+          <div style="margin-top:6px;font-size:18px;font-weight:700">${a.title}</div>
+          <div style="margin-top:6px;color:var(--muted);font-size:13px">${a.message}</div>
+        </div>
+      `).join("");
+    }
+
+    function renderAllTasksPage() {
+      renderStats();
+      renderBoard();
+      renderStack();
+      renderDetail();
+      renderTimeline();
+    }
+
+    document.getElementById("nav").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-page]");
+      if (!btn) return;
+      const page = btn.getAttribute("data-page");
+      document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("active", b === btn));
+      document.querySelectorAll(".content").forEach(p => p.classList.add("hidden"));
+      document.getElementById("page-" + page).classList.remove("hidden");
+      document.getElementById("pageTitle").textContent = pageMeta[page][0];
+      document.getElementById("pageSub").textContent = pageMeta[page][1];
+      if (page === "projects") renderProjectsPage();
+      if (page === "alerts") renderAlertsPage();
+    });
+
+    renderAllTasksPage();
+  </script>
+</body>
+</html>

@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>恒慧管 · 桌宠演示 V0</title>
+  <style>
+    :root {
+      --desk: #c4a574;
+      --desk-dark: #8b6914;
+      --wall: #f0ebe3;
+      --ink: #2c2416;
+      --muted: #7a6a55;
+      --accent: #e89b2d;
+      --danger: #d64545;
+      --ok: #3d9a6a;
+      --bubble: #fffdf8;
+      --shadow: rgba(44, 36, 22, 0.18);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse at 70% 0%, #fff8ec 0%, transparent 55%),
+        linear-gradient(180deg, #e8dfd0 0%, var(--wall) 42%, #d9cbb8 100%);
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .chrome {
+      position: relative;
+      z-index: 5;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-start;
+      justify-content: space-between;
+      padding: 18px 22px 0;
+      pointer-events: none;
+    }
+    .chrome > * { pointer-events: auto; }
+
+    .brand {
+      background: rgba(255, 253, 248, 0.88);
+      border: 1px solid rgba(44, 36, 22, 0.08);
+      border-radius: 14px;
+      padding: 12px 16px;
+      box-shadow: 0 8px 24px var(--shadow);
+      max-width: 420px;
+    }
+    .brand h1 {
+      font-size: 18px;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand h1 span.tag {
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+      background: var(--accent);
+      border-radius: 999px;
+      padding: 2px 8px;
+    }
+    .brand p { margin-top: 6px; font-size: 13px; color: var(--muted); line-height: 1.45; }
+
+    .panel {
+      background: rgba(255, 253, 248, 0.92);
+      border: 1px solid rgba(44, 36, 22, 0.08);
+      border-radius: 14px;
+      padding: 12px 14px;
+      box-shadow: 0 8px 24px var(--shadow);
+      min-width: 280px;
+      max-width: 360px;
+    }
+    .panel h2 { font-size: 13px; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+    .row:last-child { margin-bottom: 0; }
+    input, select, button {
+      font: inherit;
+      border-radius: 10px;
+      border: 1px solid rgba(44, 36, 22, 0.15);
+      padding: 8px 10px;
+      background: #fff;
+      color: var(--ink);
+    }
+    input, select { flex: 1; min-width: 0; }
+    button {
+      cursor: pointer;
+      background: var(--ink);
+      color: #fffdf8;
+      border-color: transparent;
+      white-space: nowrap;
+    }
+    button.ghost {
+      background: transparent;
+      color: var(--ink);
+      border-color: rgba(44, 36, 22, 0.18);
+    }
+    button.warn { background: var(--danger); }
+    button.ok { background: var(--ok); }
+    button.accent { background: var(--accent); color: #2c2416; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .status-line {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #b8a890;
+      display: inline-block;
+    }
+    .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(61, 154, 106, 0.2); }
+    .dot.err { background: var(--danger); }
+    .hint { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+    .stage {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+
+    .window-glow {
+      position: absolute;
+      top: 12%;
+      right: 8%;
+      width: min(320px, 36vw);
+      height: min(220px, 28vh);
+      background: linear-gradient(160deg, rgba(255, 220, 150, 0.55), rgba(255, 255, 255, 0.08));
+      border-radius: 12px;
+      border: 6px solid rgba(120, 90, 50, 0.25);
+      box-shadow: inset 0 0 40px rgba(255, 200, 100, 0.25);
+      pointer-events: none;
+    }
+
+    .floor {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 22%;
+      background:
+        repeating-linear-gradient(90deg, rgba(44,36,22,0.04) 0 28px, transparent 28px 56px),
+        linear-gradient(180deg, #b89562 0%, var(--desk) 40%, #a67c42 100%);
+      border-top: 3px solid var(--desk-dark);
+      box-shadow: 0 -12px 40px rgba(44, 36, 22, 0.12);
+    }
+
+    .pet-wrap {
+      position: absolute;
+      bottom: 18%;
+      left: 12%;
+      width: 120px;
+      height: 140px;
+      transform: translateX(0);
+      transition: filter 0.3s;
+      cursor: pointer;
+      z-index: 3;
+    }
+    .pet-wrap.flip { transform: scaleX(-1); }
+    .pet-wrap.flip .bubble,
+    .pet-wrap.flip .badge { transform: scaleX(-1); }
+    .pet-wrap.anxious { filter: saturate(1.2) hue-rotate(-8deg); }
+    .pet-wrap.sleep { filter: brightness(0.92); }
+
+    .bubble {
+      position: absolute;
+      left: 50%;
+      bottom: 118%;
+      transform: translateX(-50%);
+      background: var(--bubble);
+      border: 2px solid rgba(44, 36, 22, 0.12);
+      border-radius: 14px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      max-width: 220px;
+      box-shadow: 0 6px 18px var(--shadow);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .bubble.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-4px);
+    }
+    .bubble::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -8px;
+      width: 12px; height: 12px;
+      background: var(--bubble);
+      border-right: 2px solid rgba(44, 36, 22, 0.12);
+      border-bottom: 2px solid rgba(44, 36, 22, 0.12);
+      transform: translateX(-50%) rotate(45deg);
+    }
+
+    .badge {
+      position: absolute;
+      top: 8px;
+      right: 4px;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: var(--danger);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(214, 69, 69, 0.45);
+      z-index: 4;
+    }
+    .badge.show { display: flex; }
+
+    .pet {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+    .body {
+      position: absolute;
+      left: 22px; top: 42px;
+      width: 76px; height: 70px;
+      background: radial-gradient(circle at 35% 30%, #ffe2a8, #f0a84b 55%, #d88928);
+      border-radius: 42% 42% 38% 38%;
+      box-shadow: inset -8px -10px 0 rgba(0,0,0,0.06), 0 10px 0 rgba(44,36,22,0.08);
+    }
+    .ear {
+      position: absolute;
+      top: 22px;
+      width: 28px; height: 34px;
+      background: #f0a84b;
+      border-radius: 50% 50% 40% 40%;
+    }
+    .ear.l { left: 24px; transform: rotate(-18deg); }
+    .ear.r { right: 24px; transform: rotate(18deg); }
+    .ear::after {
+      content: "";
+      position: absolute;
+      left: 7px; top: 10px;
+      width: 12px; height: 16px;
+      background: #ffd9a8;
+      border-radius: 50%;
+    }
+    .face {
+      position: absolute;
+      left: 34px; top: 58px;
+      width: 52px; height: 36px;
+      z-index: 2;
+    }
+    .eye {
+      position: absolute;
+      top: 6px;
+      width: 10px; height: 12px;
+      background: #2c2416;
+      border-radius: 50%;
+    }
+    .eye.l { left: 8px; }
+    .eye.r { right: 8px; }
+    .eye::before {
+      content: "";
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 3px; height: 3px;
+      background: #fff;
+      border-radius: 50%;
+    }
+    .mouth {
+      position: absolute;
+      left: 50%;
+      bottom: 4px;
+      width: 16px; height: 8px;
+      border: 2px solid #2c2416;
+      border-top: none;
+      border-radius: 0 0 12px 12px;
+      transform: translateX(-50%);
+    }
+    .cheek {
+      position: absolute;
+      top: 16px;
+      width: 10px; height: 6px;
+      background: rgba(255, 120, 100, 0.45);
+      border-radius: 50%;
+    }
+    .cheek.l { left: 0; }
+    .cheek.r { right: 0; }
+    .foot {
+      position: absolute;
+      bottom: 8px;
+      width: 22px; height: 14px;
+      background: #c97a20;
+      border-radius: 10px 10px 8px 8px;
+    }
+    .foot.l { left: 28px; }
+    .foot.r { right: 28px; }
+
+    /* moods */
+    .mood-happy .mouth { width: 18px; height: 10px; }
+    .mood-anxious .eye { height: 8px; border-radius: 4px; top: 8px; }
+    .mood-anxious .mouth {
+      width: 10px; height: 10px; border-radius: 50%;
+      border: 2px solid #2c2416; background: #2c2416;
+      bottom: 2px;
+    }
+    .mood-sleep .eye {
+      height: 3px; border-radius: 2px; top: 10px;
+      background: #2c2416;
+    }
+    .mood-sleep .eye::before { display: none; }
+    .mood-sleep .mouth { width: 8px; height: 4px; border-radius: 4px; border-width: 0; background: #2c2416; }
+    .mood-surprise .eye { width: 12px; height: 14px; }
+    .mood-surprise .mouth {
+      width: 12px; height: 12px; border-radius: 50%;
+      border: 2px solid #2c2416; bottom: 0;
+    }
+    .mood-celebrate .body { animation: bounce 0.45s ease infinite; }
+    .mood-celebrate .mouth { width: 20px; height: 12px; }
+
+    .zzz {
+      position: absolute;
+      right: 8px; top: 18px;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--muted);
+      opacity: 0;
+      letter-spacing: 1px;
+    }
+    .mood-sleep .zzz { opacity: 1; animation: floatZ 1.6s ease-in-out infinite; }
+
+    .exclaim {
+      position: absolute;
+      left: 8px; top: 12px;
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--danger);
+      opacity: 0;
+    }
+    .mood-anxious .exclaim { opacity: 1; animation: pulse 0.8s ease infinite; }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    @keyframes floatZ {
+      0%, 100% { transform: translate(0, 0); opacity: 0.4; }
+      50% { transform: translate(6px, -8px); opacity: 1; }
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15); }
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+    .pet-wrap.shake .pet { animation: shake 0.35s ease; }
+
+    .shadow {
+      position: absolute;
+      left: 30px; bottom: 2px;
+      width: 60px; height: 10px;
+      background: rgba(44, 36, 22, 0.18);
+      border-radius: 50%;
+      filter: blur(1px);
+    }
+
+    .toast-log {
+      position: absolute;
+      left: 22px;
+      bottom: 24%;
+      z-index: 6;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 320px;
+      pointer-events: none;
+    }
+    .toast {
+      background: rgba(44, 36, 22, 0.88);
+      color: #fffdf8;
+      font-size: 12px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: 0.25s;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    .mini-list {
+      margin-top: 8px;
+      max-height: 120px;
+      overflow: auto;
+      font-size: 12px;
+      border-top: 1px dashed rgba(44,36,22,0.12);
+      padding-top: 8px;
+    }
+    .mini-list div {
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(44,36,22,0.06);
+      color: var(--muted);
+    }
+    .mini-list strong { color: var(--ink); font-weight: 600; }
+
+    @media (max-width: 720px) {
+      .chrome { flex-direction: column; }
+      .panel, .brand { max-width: 100%; width: 100%; }
+      .window-glow { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="chrome">
+    <div class="brand">
+      <h1>恒慧管桌宠 <span class="tag">V0 演示</span></h1>
+      <p>先点「自动演示」看完整效果；接上后端后可用演示账号登录，实时吃站内通知。</p>
+    </div>
+    <div class="panel">
+      <h2>模拟演示（无需登录）</h2>
+      <div class="row">
+        <button class="accent" id="btnAuto" type="button">自动演示</button>
+        <button class="ghost" id="btnIdle" type="button">发呆/睡觉</button>
+      </div>
+      <div class="row">
+        <button type="button" data-sim="task_assigned">新任务</button>
+        <button type="button" data-sim="task_overdue">逾期</button>
+        <button type="button" data-sim="task_completed">完成</button>
+        <button type="button" data-sim="task_comment_mention">被提及</button>
+      </div>
+      <div class="hint">效果：气泡文案 · 表情切换 · 走动/跳跃 · 未读角标</div>
+    </div>
+    <div class="panel">
+      <h2>真实 API（可选）</h2>
+      <div class="row">
+        <input id="apiBase" value="/api" title="API 根路径" />
+        <input id="userId" value="U003" placeholder="演示 userId" />
+      </div>
+      <div class="row">
+        <button class="ok" id="btnLogin" type="button">演示登录</button>
+        <button class="ghost" id="btnRefresh" type="button" disabled>刷新通知</button>
+        <button class="ghost" id="btnLogout" type="button" disabled>断开</button>
+      </div>
+      <div class="status-line">
+        <span class="dot" id="sseDot"></span>
+        <span id="connText">未连接</span>
+        <span id="userText"></span>
+      </div>
+      <div class="mini-list" id="notifList"><div>登录后显示最近通知</div></div>
+    </div>
+  </div>
+
+  <div class="stage" aria-hidden="true">
+    <div class="window-glow"></div>
+    <div class="floor"></div>
+    <div class="pet-wrap mood-happy" id="petWrap" title="点击戳一下">
+      <div class="bubble" id="bubble">你好～</div>
+      <div class="badge" id="badge">0</div>
+      <div class="shadow"></div>
+      <div class="pet">
+        <div class="ear l"></div>
+        <div class="ear r"></div>
+        <div class="body"></div>
+        <div class="face">
+          <div class="eye l"></div>
+          <div class="eye r"></div>
+          <div class="cheek l"></div>
+          <div class="cheek r"></div>
+          <div class="mouth"></div>
+        </div>
+        <div class="foot l"></div>
+        <div class="foot r"></div>
+        <div class="zzz">Zzz</div>
+        <div class="exclaim">!</div>
+      </div>
+    </div>
+  </div>
+  <div class="toast-log" id="toastLog"></div>
+
+  <script>
+    (function () {
+      const EVENT_MAP = {
+        task_assigned: { mood: 'surprise', text: '有新任务派给你啦！', walk: true, unreadDelta: 1 },
+        project_assigned: { mood: 'surprise', text: '新项目找上门～', walk: true, unreadDelta: 1 },
+        task_transfer: { mood: 'surprise', text: '有人把任务转给你了', walk: true, unreadDelta: 1 },
+        task_overdue: { mood: 'anxious', text: '有任务逾期了…快看看', walk: true, unreadDelta: 1 },
+        task_due_soon: { mood: 'anxious', text: '截止日期快到了！', walk: true, unreadDelta: 1 },
+        task_completed: { mood: 'celebrate', text: '又完成一件，真棒！', walk: false, unreadDelta: 0 },
+        task_paused: { mood: 'anxious', text: '有任务被暂停了', walk: false, unreadDelta: 1 },
+        task_rejected: { mood: 'anxious', text: '任务被驳回了', walk: true, unreadDelta: 1 },
+        task_comment_mention: { mood: 'happy', text: '有人在留言里提到你', walk: true, unreadDelta: 1 },
+        idle: { mood: 'sleep', text: '没事做，先眯一会…', walk: false, unreadDelta: 0 },
+        poke: { mood: 'happy', text: '嘿！我在呢', walk: false, unreadDelta: 0 },
+      };
+
+      const petWrap = document.getElementById('petWrap');
+      const bubble = document.getElementById('bubble');
+      const badge = document.getElementById('badge');
+      const toastLog = document.getElementById('toastLog');
+      const sseDot = document.getElementById('sseDot');
+      const connText = document.getElementById('connText');
+      const userText = document.getElementById('userText');
+      const notifList = document.getElementById('notifList');
+
+      let unread = 0;
+      let moodTimer = null;
+      let bubbleTimer = null;
+      let walkRaf = null;
+      let walkX = 12;
+      let walkDir = 1;
+      let walking = false;
+      let token = '';
+      let me = null;
+      let es = null;
+      let autoTimer = null;
+
+      function setMood(mood) {
+        petWrap.classList.remove('mood-happy', 'mood-anxious', 'mood-sleep', 'mood-surprise', 'mood-celebrate', 'anxious', 'sleep');
+        petWrap.classList.add('mood-' + mood);
+        if (mood === 'anxious') petWrap.classList.add('anxious');
+        if (mood === 'sleep') petWrap.classList.add('sleep');
+      }
+
+      function setUnread(n) {
+        unread = Math.max(0, n);
+        if (unread > 0) {
+          badge.textContent = unread > 99 ? '99+' : String(unread);
+          badge.classList.add('show');
+        } else {
+          badge.classList.remove('show');
+        }
+      }
+
+      function showBubble(text, ms) {
+        bubble.textContent = text;
+        bubble.classList.add('show');
+        clearTimeout(bubbleTimer);
+        bubbleTimer = setTimeout(() => bubble.classList.remove('show'), ms || 2800);
+      }
+
+      function toast(text) {
+        const el = document.createElement('div');
+        el.className = 'toast';
+        el.textContent = text;
+        toastLog.prepend(el);
+        requestAnimationFrame(() => el.classList.add('show'));
+        setTimeout(() => {
+          el.classList.remove('show');
+          setTimeout(() => el.remove(), 300);
+        }, 3200);
+        while (toastLog.children.length > 4) toastLog.lastChild.remove();
+      }
+
+      function stopWalk() {
+        walking = false;
+        if (walkRaf) cancelAnimationFrame(walkRaf);
+        walkRaf = null;
+      }
+
+      function startWalk(durationMs) {
+        stopWalk();
+        walking = true;
+        const end = Date.now() + (durationMs || 4000);
+        const step = () => {
+          if (!walking) return;
+          walkX += walkDir * 0.12;
+          if (walkX > 72) { walkX = 72; walkDir = -1; petWrap.classList.add('flip'); }
+          if (walkX < 8) { walkX = 8; walkDir = 1; petWrap.classList.remove('flip'); }
+          petWrap.style.left = walkX + '%';
+          if (Date.now() < end) walkRaf = requestAnimationFrame(step);
+          else walking = false;
+        };
+        if (walkDir < 0) petWrap.classList.add('flip');
+        else petWrap.classList.remove('flip');
+        walkRaf = requestAnimationFrame(step);
+      }
+
+      function react(eventType, extraText) {
+        const cfg = EVENT_MAP[eventType] || EVENT_MAP.poke;
+        const text = extraText || cfg.text;
+        clearTimeout(moodTimer);
+        setMood(cfg.mood);
+        showBubble(text);
+        toast((eventType || 'event') + ' · ' + text);
+        petWrap.classList.remove('shake');
+        void petWrap.offsetWidth;
+        petWrap.classList.add('shake');
+        if (cfg.unreadDelta) setUnread(unread + cfg.unreadDelta);
+        if (cfg.walk) startWalk(3500);
+        else stopWalk();
+        const hold = cfg.mood === 'celebrate' ? 2200 : cfg.mood === 'sleep' ? 6000 : 3200;
+        moodTimer = setTimeout(() => {
+          if (unread >= 5) setMood('anxious');
+          else if (unread === 0) setMood('happy');
+          else setMood('happy');
+        }, hold);
+      }
+
+      function runAutoDemo() {
+        clearTimeout(autoTimer);
+        const steps = [
+          () => react('poke', '我是恒慧管桌宠，开始演示～'),
+          () => react('task_assigned'),
+          () => react('task_comment_mention'),
+          () => react('task_overdue'),
+          () => react('task_completed'),
+          () => { setUnread(0); react('idle'); },
+          () => { setMood('happy'); showBubble('演示结束，点按钮可再玩'); toast('自动演示结束'); },
+        ];
+        let i = 0;
+        const tick = () => {
+          if (i >= steps.length) return;
+          steps[i++]();
+          autoTimer = setTimeout(tick, 2200);
+        };
+        tick();
+      }
+
+      document.querySelectorAll('[data-sim]').forEach((btn) => {
+        btn.addEventListener('click', () => react(btn.getAttribute('data-sim')));
+      });
+      document.getElementById('btnAuto').addEventListener('click', runAutoDemo);
+      document.getElementById('btnIdle').addEventListener('click', () => react('idle'));
+      petWrap.addEventListener('click', () => react('poke'));
+
+      async function api(path, opts) {
+        const base = document.getElementById('apiBase').value.replace(/\/+$/, '') || '/api';
+        const headers = Object.assign({ 'Content-Type': 'application/json' }, (opts && opts.headers) || {});
+        if (token) headers.Authorization = 'Bearer ' + token;
+        const res = await fetch(base + path, Object.assign({}, opts, { headers }));
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+          throw new Error(data.message || ('HTTP ' + res.status));
+        }
+        return data;
+      }
+
+      function setConn(state, text) {
+        sseDot.classList.remove('on', 'err');
+        if (state === 'on') sseDot.classList.add('on');
+        if (state === 'err') sseDot.classList.add('err');
+        connText.textContent = text;
+      }
+
+      function stopSse() {
+        if (es) { try { es.close(); } catch (e) {} es = null; }
+      }
+
+      function connectSse() {
+        stopSse();
+        if (!token) return;
+        const base = document.getElementById('apiBase').value.replace(/\/+$/, '') || '/api';
+        const url = base + '/realtime/events?token=' + encodeURIComponent(token);
+        es = new EventSource(url);
+        es.addEventListener('hello', () => setConn('on', 'SSE 已连接'));
+        es.addEventListener('change', (ev) => {
+          let data = {};
+          try { data = JSON.parse(ev.data || '{}'); } catch (e) {}
+          if (data.type === 'inbox.updated') {
+            const ids = (data.userIds || []).map(String);
+            if (me && ids.length && !ids.includes(String(me.id))) return;
+            refreshNotifications(true);
+          } else if (data.type === 'data.sync' || String(data.type || '').startsWith('task.')) {
+            toast('收到变更 hint：' + (data.type || 'change'));
+          }
+        });
+        es.onerror = () => {
+          setConn('err', 'SSE 断开，将自动重试');
+        };
+      }
+
+      async function refreshNotifications(fromSse) {
+        if (!token) return;
+        const data = await api('/notifications?limit=8');
+        setUnread(Number(data.unreadCount) || 0);
+        const items = data.items || [];
+        if (!items.length) {
+          notifList.innerHTML = '<div>暂无通知</div>';
+        } else {
+          notifList.innerHTML = items.map((n) => {
+            const t = n.title || n.eventType || '通知';
+            const body = n.body || n.content || '';
+            return '<div><strong>' + escapeHtml(t) + '</strong> ' + escapeHtml(String(body).slice(0, 40)) + '</div>';
+          }).join('');
+        }
+        if (fromSse && items[0]) {
+          const et = items[0].eventType || 'task_assigned';
+          react(et, items[0].title || undefined);
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      document.getElementById('btnLogin').addEventListener('click', async () => {
+        try {
+          const userId = document.getElementById('userId').value.trim() || 'U003';
+          const data = await api('/auth/demo-login', {
+            method: 'POST',
+            body: JSON.stringify({ userId }),
+          });
+          token = data.token || '';
+          me = data.user || null;
+          if (!token) throw new Error('登录响应无 token');
+          userText.textContent = me ? ('· ' + (me.name || me.id)) : '';
+          document.getElementById('btnRefresh').disabled = false;
+          document.getElementById('btnLogout').disabled = false;
+          connectSse();
+          await refreshNotifications(false);
+          react('poke', '已登录，等待通知…');
+          setMood('happy');
+        } catch (e) {
+          setConn('err', '登录失败');
+          toast('登录失败：' + e.message);
+          alert('登录失败：' + e.message + '\n请确认后端已启动，且 ALLOW_DEMO_LOGIN 未关闭。');
+        }
+      });
+
+      document.getElementById('btnRefresh').addEventListener('click', async () => {
+        try {
+          await refreshNotifications(false);
+          toast('已刷新通知');
+        } catch (e) {
+          toast('刷新失败：' + e.message);
+        }
+      });
+
+      document.getElementById('btnLogout').addEventListener('click', () => {
+        stopSse();
+        token = '';
+        me = null;
+        userText.textContent = '';
+        document.getElementById('btnRefresh').disabled = true;
+        document.getElementById('btnLogout').disabled = true;
+        setConn('', '未连接');
+        notifList.innerHTML = '<div>已断开</div>';
+        react('idle');
+      });
+
+      // 入场：轻微走动 + 提示
+      setTimeout(() => {
+        showBubble('点右上角「自动演示」看效果');
+        startWalk(2500);
+        setMood('happy');
+      }, 400);
+    })();
+  </script>
+</body>
+</html>

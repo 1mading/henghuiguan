@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>桌宠</title>
+  <link rel="stylesheet" href="pet.css" />
+</head>
+<body>
+  <div class="widget" id="widget">
+    <div class="pet-wrap mood-happy skin-amber" id="petWrap">
+      <div class="bubble" id="bubble">你好～</div>
+      <div class="badge" id="badge">0</div>
+      <div class="shadow"></div>
+      <div class="pet">
+        <div class="ear l"></div>
+        <div class="ear r"></div>
+        <div class="body"></div>
+        <div class="face">
+          <div class="eye l"><i></i></div>
+          <div class="eye r"><i></i></div>
+          <div class="cheek l"></div>
+          <div class="cheek r"></div>
+          <div class="mouth"></div>
+          <div class="brow l"></div>
+          <div class="brow r"></div>
+        </div>
+        <div class="foot l"></div>
+        <div class="foot r"></div>
+        <div class="keyboard" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="paw l"></div>
+        <div class="paw r"></div>
+        <div class="fx heart">♥</div>
+        <div class="fx spark">✦</div>
+        <div class="fx spark2">✧</div>
+        <div class="fx sweat">💧</div>
+        <div class="zzz">Zzz</div>
+        <div class="exclaim">!</div>
+      </div>
+    </div>
+    <div class="hint" id="hint">右键托盘可模拟</div>
+  </div>
+  <div class="panel" id="panel" hidden>
+    <div class="panel-head">
+      <span>最新消息</span>
+      <button type="button" id="btnClosePanel">×</button>
+    </div>
+    <div class="panel-body" id="panelBody">暂无</div>
+    <div class="panel-actions">
+      <button type="button" id="btnOpenApp">打开主站</button>
+      <button type="button" class="ghost" id="btnMarkRead">全部已读</button>
+    </div>
+    <div class="resize-handle" id="resizeHandle" title="拖拽调整大小"></div>
+  </div>
+  <script src="data-source.js"></script>
+  <script src="pet.js"></script>
+</body>
+</html>
