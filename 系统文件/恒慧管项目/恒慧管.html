@@ -5702,6 +5702,20 @@
         .replace(/"/g, '&quot;');
     }
 
+    /** 列表为空时的占位（项目/任务等页依赖此函数，缺失会导致 render 抛错、点击无反应） */
+    function renderEmptyState(opts) {
+      const icon = (opts && opts.icon) || 'fa-inbox';
+      const title = (opts && opts.title) || '暂无数据';
+      const hint = (opts && opts.hint) || '';
+      const panel = opts && opts.panel;
+      return `
+      <div class="empty-state${panel ? ' empty-state--panel' : ''}">
+        <div class="empty-state-icon"><i class="fas ${icon}"></i></div>
+        <div class="empty-state-title">${escapeHtml(title)}</div>
+        ${hint ? `<div class="empty-state-hint">${escapeHtml(hint)}</div>` : ''}
+      </div>`;
+    }
+
     function isImageMime(mime) {
       return /^image\//i.test(mime || '');
     }
