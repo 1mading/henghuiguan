@@ -3946,6 +3946,7 @@
         if (Array.isArray(data.tasks)) {
           tasks = data.tasks.slice();
           normalizeAllTaskCollaborators();
+          normalizeDoneTaskProgress(tasks);
         }
         backfillTaskAttachmentsToProjectsLocal();
         if (Array.isArray(data.taskDependencies)) taskDependencies = data.taskDependencies.slice();
@@ -4321,6 +4322,7 @@
     }
 
     function save(opts = {}) {
+      normalizeDoneTaskProgress(tasks);
       persistLocalCache();
       if (ApiConfig.enabled && authSession.token) {
         if (opts.immediateSync) {
@@ -4404,12 +4406,32 @@
       if (children.length === 0) {
         const t = tasks.find(x => x.id === taskId);
         if (!t || t.status === 'abolished') return 0;
-        if (t.status === 'done') return 100;
-        return Math.max(0, Math.min(100, t.progress || 0));
+        if (t.status === 'done' || t.status === 'archived') return 100;
+        return Math.max(0, Math.min(100, Number(t.progress) || 0));
       }
       let total = 0;
       children.forEach(c => { total += calcProgress(c.id, visited); });
       return Math.round(total / children.length);
+    }
+
+    /** 界面展示用进度：已完成/已归档按 100%；有子任务按子项汇总 */
+    function getDisplayProgress(task) {
+      if (!task) return 0;
+      if (task.status === 'done' || task.status === 'archived') return 100;
+      return calcProgress(task.id);
+    }
+
+    /** 纠正已完成但 progress 未写满的脏数据 */
+    function normalizeDoneTaskProgress(list = tasks) {
+      let changed = 0;
+      (list || []).forEach(t => {
+        if (!t) return;
+        if ((t.status === 'done' || t.status === 'archived') && Number(t.progress) !== 100) {
+          t.progress = 100;
+          changed += 1;
+        }
+      });
+      return changed;
     }
 
     /** 标记完成时的进度与工时字段（实际完成日始终记为当天，避免旧值导致「本周已完成」漏计） */
@@ -5296,6 +5318,57 @@
       return shouldHideMilestoneLikeTask(task);
     }
 
+    /**
+     * 项目任务所属「一级目录」：挂在阶段里程碑下的第一层任务；
+     * 若无里程碑父级，则取项目内最顶层祖先。
+     */
+    function getProjectFirstLevelDirectory(task) {
+      if (!task || !task.projectId || task.type === 'temp') return null;
+      let cur = task;
+      let firstLevel = task;
+      const visited = new Set();
+      while (cur && cur.parentId && cur.parentId !== cur.id && !visited.has(cur.id)) {
+        visited.add(cur.id);
+        const parent = tasks.find(t => t.id === cur.parentId);
+        if (!parent || parent.projectId !== task.projectId) break;
+        if (isMilestoneTask(parent)) {
+          firstLevel = cur;
+          break;
+        }
+        firstLevel = parent;
+        cur = parent;
+      }
+      if (isMilestoneTask(firstLevel)) return null;
+      return firstLevel;
+    }
+
+    /**
+     * 工作台待办：项目任务所属一级目录仍为「待开始」时不展示
+     *（含一级目录自身；临时任务不受影响）
+     * 所属阶段里程碑仍为待开始时同样隐藏。
+     */
+    function shouldHideWorkbenchTodoUnderUnstartedFirstLevel(task) {
+      if (!task || !task.projectId || task.type === 'temp') return false;
+      if (shouldHideMilestoneLikeTask(task)) return false;
+
+      let cur = task;
+      const visited = new Set();
+      while (cur && cur.parentId && cur.parentId !== cur.id && !visited.has(cur.id)) {
+        visited.add(cur.id);
+        const parent = tasks.find(t => t.id === cur.parentId);
+        if (!parent || parent.projectId !== task.projectId) break;
+        if (isMilestoneTask(parent)) {
+          if ((parent.status || 'todo') === 'todo') return true;
+          break;
+        }
+        cur = parent;
+      }
+
+      const firstLevel = getProjectFirstLevelDirectory(task);
+      if (!firstLevel) return false;
+      return (firstLevel.status || 'todo') === 'todo';
+    }
+
     /** 项目阶段里程碑（根级 isMilestone），按标题/创建时间排序 */
     function getOrderedProjectMilestones(project) {
       if (!project) return [];
@@ -5488,10 +5561,11 @@
       );
       let myTodos = [];
       try {
-        myTodos = sortTasksForCenter(
+        myTodos = sortWorkbenchTodos(
           getMyTodoLeafTasks()
             .filter(t => t.status !== 'done' && t.status !== 'abolished' && t.status !== 'archived')
             .filter(t => !shouldHideFromWorkbenchTodos(t))
+            .filter(t => !shouldHideWorkbenchTodoUnderUnstartedFirstLevel(t))
         );
       } catch { myTodos = []; }
       const overdueCount = myTodos.filter(t => isOverdue(t)).length;
@@ -7174,7 +7248,7 @@
       const st = statusMap[displayStatus] || statusMap[task.status];
       const pr = priorityMap[task.priority];
       const isTemp = task.type === 'temp';
-      const progress = task.parentId ? task.progress : calcProgress(task.id);
+      const progress = getDisplayProgress(task);
 
       // 获取子任务
       const children = tasks.filter(t => t.parentId === task.id);
@@ -7921,6 +7995,22 @@
         if (isOverdue(a) && !isOverdue(b)) return -1;
         if (isOverdue(b) && !isOverdue(a)) return 1;
         return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
+      });
+    }
+
+    /** 工作台待办：临时任务置顶，组内及其他任务均按截止时间升序（无日期靠后） */
+    function sortWorkbenchTodos(list) {
+      const dueKey = (task) => {
+        const due = normalizeDateStr(resolveTaskDueDate(task)) || normalizeDateStr(task?.dueDate) || '';
+        return due || '9999-12-31';
+      };
+      return list.slice().sort((a, b) => {
+        const aTemp = getTodoTaskType(a) === 'temp' ? 0 : 1;
+        const bTemp = getTodoTaskType(b) === 'temp' ? 0 : 1;
+        if (aTemp !== bTemp) return aTemp - bTemp;
+        const byDue = dueKey(a).localeCompare(dueKey(b));
+        if (byDue !== 0) return byDue;
+        return String(a.title || '').localeCompare(String(b.title || ''), 'zh-CN');
       });
     }
 
@@ -8676,7 +8766,7 @@
       const st = statusMap[displayStatus] || statusMap[task.status];
       const pr = priorityMap[task.priority];
       const children = allTasks.filter(t => t.parentId === task.id && !isMilestoneTask(t));
-      const progress = children.length ? calcProgress(task.id) : (task.progress || 0);
+      const progress = getDisplayProgress(task);
       const indent = level * 24;
       const isAncestorOnly = !!(mineIds && !mineIds.has(task.id));
 
@@ -12211,7 +12301,7 @@
     function renderKanbanCard(task) {
       const displayStatus = getTaskDisplayStatus(task);
       const st = statusMap[displayStatus] || statusMap[task.status];
-      const progress = task.parentId ? task.progress : calcProgress(task.id);
+      const progress = getDisplayProgress(task);
       return `
         <div class="kanban-card" onclick="viewTaskFromTeamKanban('${task.id}')" style="${isOverdue(task) ? 'border-color:#FECACA;background:#FFFBFB;' : ''}">
           ${renderTaskCardContext(task)}
@@ -13019,7 +13109,7 @@
       const project = projects.find(p => p.id === task.projectId);
       const parent = task.parentId ? tasks.find(t => t.id === task.parentId) : null;
       const children = tasks.filter(t => t.parentId === task.id);
-      const progress = task.parentId ? task.progress : calcProgress(task.id);
+      const progress = getDisplayProgress(task);
       const detailTab = state.taskDetailTab || 'info';
       const commentCount = Array.isArray(task.comments) ? task.comments.length : 0;
 
