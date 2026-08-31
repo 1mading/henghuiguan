@@ -15,6 +15,7 @@ const {
   setWorkCalendar,
   getWorkCalendar,
   appendChangeLogs,
+  normalizeProjectRecord,
 } = require('../db/database');
 const { emitChange } = require('./realtime');
 
@@ -206,6 +207,9 @@ function createProject(body = {}) {
     id,
     name,
     desc: String(body.desc || body.description || '').trim(),
+    nextPlan: String(body.nextPlan || '').trim(),
+    blocker: String(body.blocker || '').trim(),
+    currentPhase: String(body.currentPhase || '').trim(),
     dept: String(body.dept || '').trim(),
     manager,
     teamMembers: sanitizeTeamMembers(manager, Array.isArray(body.teamMembers) ? body.teamMembers.map(resolvePersonName) : []),
@@ -221,7 +225,7 @@ function createProject(body = {}) {
   if (!project.externalMeta) delete project.externalMeta;
 
   const store = getDb();
-  store.projects.push(project);
+  store.projects.push(normalizeProjectRecord(project));
   let templateTasks = [];
   if (body.withTemplate !== false && body.withTemplate !== 'false') {
     templateTasks = createDefaultPhaseMilestones(project, creator);
@@ -240,6 +244,9 @@ function updateProject(id, body = {}) {
 
   if (body.name != null) next.name = String(body.name).trim() || prev.name;
   if (body.desc != null || body.description != null) next.desc = String(body.desc ?? body.description ?? '').trim();
+  if (body.nextPlan != null) next.nextPlan = String(body.nextPlan).trim();
+  if (body.blocker != null) next.blocker = String(body.blocker).trim();
+  if (body.currentPhase != null) next.currentPhase = String(body.currentPhase).trim();
   if (body.dept != null) next.dept = String(body.dept).trim();
   if (body.manager != null) next.manager = resolvePersonName(body.manager) || prev.manager;
   if (Array.isArray(body.teamMembers)) {
@@ -262,7 +269,7 @@ function updateProject(id, body = {}) {
   }
 
   next.teamMembers = sanitizeTeamMembers(next.manager, next.teamMembers);
-  store.projects[idx] = next;
+  store.projects[idx] = normalizeProjectRecord(next);
   persistOrThrow();
   emitEntityChange('project.updated', 'project', next, resolvePersonName(body.operator) || 'external-api');
   return { project: next };
@@ -751,6 +758,11 @@ function getCatalog() {
   return {
     auth: 'Header X-Api-Key（环境变量 API_KEY）',
     base: '/api/external',
+    projectFields: {
+      currentPhase: '当前阶段（手动维护的项目推进状态）',
+      nextPlan: '下一步计划',
+      blocker: '当前卡点',
+    },
     endpoints: [
       { method: 'GET', path: '/external/health', desc: '连通性' },
       { method: 'GET', path: '/external/catalog', desc: '接口目录' },

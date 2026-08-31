@@ -53,6 +53,8 @@ Base：`{PUBLIC_BASE_URL}/api`
 
 失败时 `code` 为 HTTP 状态码，`message` 为原因。
 
+项目对象在查询结果中会包含推进字段：`currentPhase`（当前阶段）、`nextPlan`（下一步计划）、`blocker`（当前卡点），以及 `desc` 等项目基本信息。
+
 ## 调用示例
 
 ```bash

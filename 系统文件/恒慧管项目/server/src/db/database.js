@@ -65,6 +65,9 @@ function normalizeProjectRecord(project) {
   }
   if (!Array.isArray(project.teamMembers)) project.teamMembers = [];
   project.teamMembers = sanitizeProjectTeamMembers(project.manager, project.teamMembers);
+  project.currentPhase = String(project.currentPhase || '').trim();
+  project.nextPlan = String(project.nextPlan || '').trim();
+  project.blocker = String(project.blocker || '').trim();
   return project;
 }
 
@@ -521,13 +524,13 @@ function mergeProjectsById(existing, incoming, predicate, options = {}) {
     if (p?.id) incomingIds.add(p.id);
     const prev = map.get(p.id);
     if (prev) {
-      map.set(p.id, {
+      map.set(p.id, normalizeProjectRecord({
         ...prev,
         ...p,
         documents: mergeProjectDocuments(prev.documents, p.documents),
-      });
+      }));
     } else {
-      map.set(p.id, p);
+      map.set(p.id, normalizeProjectRecord({ ...p }));
     }
   }
   if (removeMissing) {
@@ -615,6 +618,7 @@ module.exports = {
   replaceAllData,
   mergeTasksById,
   mergeProjectsById,
+  normalizeProjectRecord,
   mergeTaskDependenciesById,
   mergeChangeLogsById,
   mergeTransferLogsById,
