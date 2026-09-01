@@ -13,6 +13,7 @@ const intakeRoutes = require('./intake');
 const realtimeRoutes = require('./realtime');
 const workbuddyRoutes = require('./workbuddy');
 const externalRoutes = require('./external');
+const kpiPlansRoutes = require('./kpiPlans');
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.use(realtimeRoutes);
 router.use(intakeRoutes);
 router.use(workbuddyRoutes);
 router.use(externalRoutes);
+router.use(kpiPlansRoutes);
 router.use(systemUpdatesRoutes);
 router.use(notificationsRoutes);
 router.use(workCalendarRoutes);

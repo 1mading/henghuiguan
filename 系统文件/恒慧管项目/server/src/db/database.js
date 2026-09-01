@@ -24,6 +24,7 @@ const DEFAULT_STORE = {
   performanceCycles: [],
   performanceAssessments: [],
   workReports: [],
+  kpiPlans: [],
   staffDeptCatalog: defaultStaffDeptCatalog(),
 };
 

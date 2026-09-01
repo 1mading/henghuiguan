@@ -696,6 +696,68 @@
     }
     .sql-tool-output.is-empty { color: #94A3B8; background: #F8FAFC; border: 1px dashed #CBD5E1; }
     .sql-tool-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .kpi-plan-wrap { width: 100%; }
+    .kpi-plan-toolbar {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px;
+    }
+    .kpi-plan-table-card {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      overflow: visible;
+    }
+    .kpi-plan-table-card .todo-table-wrap {
+      overflow-x: auto;
+      overflow-y: visible;
+      max-height: none;
+    }
+    .kpi-plan-table { width: 100%; border-collapse: collapse; min-width: 1280px; table-layout: fixed; }
+    .kpi-plan-table thead th {
+      position: sticky; top: 0; z-index: 2;
+      background: #FAFAFA; box-shadow: 0 1px 0 var(--border-light);
+    }
+    .kpi-plan-table th, .kpi-plan-table td {
+      padding: 10px 12px; border-bottom: 1px solid var(--border-light);
+      font-size: 12px; vertical-align: middle; text-align: left;
+      word-break: break-word; overflow-wrap: anywhere;
+    }
+    .kpi-plan-table th:nth-child(1), .kpi-plan-table td:nth-child(1) { width: 72px; white-space: nowrap; }
+    .kpi-plan-table th:nth-child(2), .kpi-plan-table td:nth-child(2) { width: 140px; }
+    .kpi-plan-table th:nth-child(3), .kpi-plan-table td:nth-child(3) { width: 160px; }
+    .kpi-plan-table th:nth-child(4), .kpi-plan-table td:nth-child(4) { width: 220px; }
+    .kpi-plan-table th:nth-child(5), .kpi-plan-table td:nth-child(5) { width: 170px; white-space: nowrap; }
+    .kpi-plan-table th:nth-child(6), .kpi-plan-table td:nth-child(6) { width: 88px; white-space: nowrap; }
+    .kpi-plan-table th:nth-child(7), .kpi-plan-table td:nth-child(7) { width: 64px; white-space: nowrap; }
+    .kpi-plan-table th:nth-child(8), .kpi-plan-table td:nth-child(8) { width: 110px; white-space: nowrap; }
+    .kpi-plan-table th:nth-child(9), .kpi-plan-table td:nth-child(9) { width: 56px; white-space: nowrap; }
+    .kpi-plan-deliverable { line-height: 1.45; color: #374151; }
+    .kpi-plan-table th { background: #FAFAFA; color: var(--text-muted); font-weight: 600; }
+    .kpi-plan-table tr:hover td { background: #FAFAFA; }
+    .kpi-plan-row-child td:nth-child(3) { padding-left: 20px; }
+    .kpi-plan-tag {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600;
+      white-space: nowrap; flex-shrink: 0; line-height: 1.4;
+    }
+    .kpi-plan-tag.is-fixed { background: #EEF2FF; color: #4338CA; }
+    .kpi-plan-tag.is-custom { background: #FEF3C7; color: #B45309; }
+    .kpi-result-quick {
+      appearance: none; -webkit-appearance: none;
+      border: 1px solid transparent; border-radius: 999px;
+      padding: 3px 22px 3px 10px; font-size: 11px; font-weight: 600;
+      font-family: inherit; cursor: pointer; line-height: 1.4;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%236B7280' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 8px center;
+      min-width: 88px;
+    }
+    .kpi-result-quick:disabled { opacity: 0.6; cursor: wait; }
+    .kpi-result-quick.is-not_done { background-color: #F3F4F6; color: #6B7280; border-color: #E5E7EB; }
+    .kpi-result-quick.is-doing { background-color: #DBEAFE; color: #2563EB; border-color: #BFDBFE; }
+    .kpi-result-quick.is-paused { background-color: #FEF3C7; color: #D97706; border-color: #FDE68A; }
+    .kpi-result-quick.is-done { background-color: #D1FAE5; color: #059669; border-color: #A7F3D0; }
+    .kpi-plan-log-list { display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow: auto; }
+    .kpi-plan-log-item {
+      padding: 8px 10px; border: 1px solid var(--border-light); border-radius: 8px; font-size: 12px;
+    }
     .page-head {
       display: flex; align-items: flex-end; justify-content: space-between;
       gap: 16px; margin-bottom: 16px; flex-wrap: wrap;
@@ -2367,54 +2429,95 @@
     }
 
     const INFO_CENTER_DEPT = '信息中心';
+    const KPI_DEPT_NAME = '实施交付部';
+    const KPI_EXTRA_MEMBER_NAMES = ['陈璇'];
+
+    function kpiPersonNameCore(name) {
+      const s = String(name || '').trim();
+      if (!s) return '';
+      const cn = s.match(/^([\u4e00-\u9fff]+)/);
+      if (cn) return cn[1];
+      return s.split(/\s+/)[0];
+    }
+
+    function isKpiExtraMember(user = currentUser) {
+      if (!user) return false;
+      const core = kpiPersonNameCore(user.name);
+      return KPI_EXTRA_MEMBER_NAMES.some(n => core === n || String(user.name || '').includes(n));
+    }
+
+    function canAccessKpiPlans(user = currentUser) {
+      if (!user?.id || isContactProfile(user)) return false;
+      return isFullAccess(user.role) || user.dept === KPI_DEPT_NAME || isKpiExtraMember(user);
+    }
+
+    function canViewAllKpiPlans(user = currentUser) {
+      return canAccessKpiPlans(user) && (
+        isFullAccess(user.role) || (user.role === 'manager' && user.dept === KPI_DEPT_NAME)
+      );
+    }
 
     function isInfoCenterMember(user = currentUser) {
       return !!(user && user.dept === INFO_CENTER_DEPT);
     }
 
     function canViewAllProjects(user = currentUser) {
-      return !!(user && user.id);
+      if (!user?.id) return false;
+      return isFullAccess(user.role) || user.role === 'manager';
     }
 
     /** 是否与项目相关（负责人/创建人/团队成员，或参与其下任务） */
     function isRelatedToProject(project) {
       if (!project) return false;
-      if (project.manager === currentUser.name || project.creator === currentUser.name) return true;
-      if (Array.isArray(project.teamMembers) && project.teamMembers.includes(currentUser.name)) return true;
+      if (isSamePersonName(project.manager, currentUser.name) || isSamePersonName(project.creator, currentUser.name)) return true;
+      if (Array.isArray(project.teamMembers) && project.teamMembers.some(n => isSamePersonName(n, currentUser.name))) return true;
       return getMyRelatedTasks().some(t => t.projectId === project.id);
     }
 
-    /** 当前用户可查看的项目（未归档）— 全员可见全公司项目 */
+    /** 当前用户可查看的项目（未归档） */
     function getViewableProjects() {
-      return getAllActiveProjects();
+      const all = getAllActiveProjects();
+      if (canViewAllProjects()) return all;
+      return all.filter(p => isRelatedToProject(p));
     }
 
     /** 当前用户可查看的已归档项目 */
     function getViewableArchivedProjects() {
-      return projects.filter(p => isProjectArchived(p));
+      const all = projects.filter(p => isProjectArchived(p));
+      if (canViewAllProjects()) return all;
+      return all.filter(p => isRelatedToProject(p));
     }
 
     function canViewProject(project) {
-      return !!project;
+      if (!project) return false;
+      if (canViewAllProjects()) return true;
+      return isRelatedToProject(project);
     }
 
-    /** 能否打开任务详情（查看）。项目任务全员可读；无项目临时任务仅相关人 */
+    /** 能否打开任务详情（查看） */
     function canViewTask(task) {
       if (!task) return false;
       if (task.type === 'temp' && !task.projectId) {
         return isRelatedToTask(task);
       }
       if (task.projectId) {
-        return !!projects.find(p => p.id === task.projectId);
+        const project = projects.find(p => p.id === task.projectId);
+        if (project) return canViewProject(project);
+        return isRelatedToTask(task);
       }
       return isRelatedToTask(task);
     }
 
     function getProjectsPageIntro() {
       const count = getViewableProjects().length;
-      const base = isFullAccess(currentUser.role)
-        ? '管理全公司项目与任务。'
-        : '您可查看全公司所有项目及项目下全部任务；仅可编辑本人负责或参与的项目与任务。';
+      let base;
+      if (isFullAccess(currentUser.role)) {
+        base = '管理全公司项目与任务。';
+      } else if (currentUser.role === 'manager') {
+        base = '查看全公司项目与任务；可管理本人负责的项目。';
+      } else {
+        base = '仅显示与您相关的项目（负责人、成员或参与任务）。';
+      }
       return `${base}（当前 ${count} 个未归档项目）`;
     }
 
@@ -3910,6 +4013,9 @@
       }
       if (!Array.isArray(project.teamMembers)) project.teamMembers = [];
       project.teamMembers = sanitizeProjectTeamMembers(project.manager, project.teamMembers);
+      project.currentPhase = String(project.currentPhase || '').trim();
+      project.nextPlan = String(project.nextPlan || '').trim();
+      project.blocker = String(project.blocker || '').trim();
       return project;
     }
 
@@ -4008,6 +4114,17 @@
       uiSections: {},
       sqlToolGuids: '',
       sqlToolIsClearing: '0',
+      kpiYearMonth: (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      })(),
+      kpiPlans: [],
+      kpiPlansLoading: false,
+      kpiCanViewAll: false,
+      kpiMonthOptions: ['2026-08'],
+      kpiAssigneeFilter: null,
+      kpiFirstBootstrapMonth: '2026-08',
+      kpiPlanLogs: [],
     };
 
     let authSession = {
@@ -4042,7 +4159,18 @@
       applyServerPayload(data, opts = {}) {
         const mergeUsers = opts.mergeUsers === true;
         if (Array.isArray(data.projects)) {
-          projects = data.projects.slice();
+          const localById = new Map(projects.map(p => [p.id, p]));
+          const pendingLocalSave = !!(this._saveTimer || this._syncing);
+          projects = data.projects.map(p => {
+            const local = localById.get(p.id);
+            const merged = normalizeProjectRecord(local ? { ...local, ...p } : { ...p });
+            if (local && pendingLocalSave && canUserSyncProject(local)) {
+              merged.currentPhase = String(local.currentPhase || '').trim();
+              merged.nextPlan = String(local.nextPlan || '').trim();
+              merged.blocker = String(local.blocker || '').trim();
+            }
+            return merged;
+          });
           normalizeAllProjects();
         }
         if (Array.isArray(data.tasks)) {
@@ -4713,7 +4841,7 @@
     }
 
     function isLiteMorePage(page) {
-      return ['more', 'staff', 'archive', 'import', 'systemUpdates', 'sqlTools'].includes(page);
+      return ['more', 'staff', 'archive', 'import', 'systemUpdates', 'kpiPlans'].includes(page);
     }
 
     function isProjectNavPage(page) {
@@ -4733,7 +4861,7 @@
     }
 
     function getSettingsMenuItems() {
-      return getLiteMoreNavItems().filter(item => item.key !== 'team');
+      return getLiteMoreNavItems().filter(item => item.key !== 'team' && item.key !== 'kpiPlans');
     }
 
     function toggleNavGroup(key) {
@@ -4840,8 +4968,6 @@
           { key: 'staff', icon: 'fa-address-book', label: '人员档案', desc: '通讯录与角色' },
           { key: 'archive', icon: 'fa-archive', label: '归档管理', desc: '已归档项目' },
           { key: 'import', icon: 'fa-file-import', label: '数据导入', desc: 'Excel 导入' },
-          { key: 'sqlTools', icon: 'fa-code', label: 'SQL脚本', desc: '入库单 GUID 脚本' },
-          { key: 'handaOm', icon: 'fa-server', label: 'Handa-OM', desc: '新窗口打开运维门户' },
           { key: 'systemUpdates', icon: 'fa-bullhorn', label: '更新记录', desc: '版本说明' },
         ];
       }
@@ -4928,6 +5054,13 @@
           onclick: "goTo('tasks')",
         },
       ];
+      if (canAccessKpiPlans()) {
+        primary.push({
+          key: 'kpiPlans', label: 'KPI 计划', icon: 'fa-bullseye',
+          active: state.page === 'kpiPlans',
+          onclick: "goTo('kpiPlans')",
+        });
+      }
       if (showTeam) {
         primary.push({
           key: 'team', label: '团队', icon: 'fa-users',
@@ -5198,6 +5331,7 @@
         dashboard: '工作台',
         nccMonitor: 'NCC异常看板',
         sqlTools: 'SQL脚本生成',
+        kpiPlans: 'KPI 计划',
         tasks: getTodoViewTitle(),
         more: '更多',
         projects: '项目列表',
@@ -5260,6 +5394,7 @@
         team: '团队管理',
         import: '数据导入',
         sqlTools: 'SQL脚本生成',
+        kpiPlans: 'KPI 计划',
         systemUpdates: '更新记录',
         projectDetail: '项目详情',
       };
@@ -5268,6 +5403,7 @@
         case 'dashboard': return renderWorkbenchHome();
         case 'nccMonitor': return renderNccMonitor();
         case 'sqlTools': body = renderSqlTools(); break;
+        case 'kpiPlans': body = renderKpiPlans(); break;
         case 'tasks': body = renderTasks(); break;
         case 'more': body = renderMorePage(); break;
         case 'projects': body = renderProjects(); break;
@@ -5439,6 +5575,387 @@
             <h3>生成结果</h3>
             <div class="sql-tool-desc">输入 GUID 后实时生成，可直接复制到 SSMS 执行。</div>
             <pre id="sqlToolOutput" class="sql-tool-output${output ? '' : ' is-empty'}">${escapeHtml(output || '（请输入 InputGuid 后自动生成）')}</pre>
+          </div>
+        </div>
+      `;
+    }
+
+    // ========== KPI 计划（实施交付部）==========
+    const kpiMonthlyResultMap = {
+      not_done: { label: '未完成', color: '#6B7280', bg: '#F3F4F6' },
+      doing: { label: '进行中', color: '#2563EB', bg: '#DBEAFE' },
+      paused: { label: '暂停中', color: '#D97706', bg: '#FEF3C7' },
+      done: { label: '已完成', color: '#059669', bg: '#D1FAE5' },
+    };
+
+    function kpiMonthlyResultLabel(key) {
+      return kpiMonthlyResultMap[key]?.label || kpiMonthlyResultMap.not_done.label;
+    }
+
+    function renderKpiMonthlyResultTag(monthlyResult) {
+      const key = monthlyResult || 'not_done';
+      const st = kpiMonthlyResultMap[key] || kpiMonthlyResultMap.not_done;
+      return `<span class="kpi-plan-tag" style="background:${st.bg};color:${st.color};">${st.label}</span>`;
+    }
+
+    function renderKpiMonthlyResultQuick(plan) {
+      const key = plan.monthlyResult || 'not_done';
+      const opts = Object.entries(kpiMonthlyResultMap).map(([k, v]) =>
+        `<option value="${k}" ${key === k ? 'selected' : ''}>${v.label}</option>`
+      ).join('');
+      return `<select class="kpi-result-quick is-${key}" title="快速切换完成结果"
+        onchange="quickSetKpiMonthlyResult('${plan.id}', this.value, this)">
+        ${opts}
+      </select>`;
+    }
+
+    async function quickSetKpiMonthlyResult(planId, monthlyResult, selectEl) {
+      if (!ApiConfig.enabled || !authSession.token) {
+        alert('请连接服务端');
+        if (selectEl) KpiPlanService.load(state.kpiYearMonth);
+        return;
+      }
+      const prev = (state.kpiPlans || []).find(p => p.id === planId)?.monthlyResult || 'not_done';
+      if (selectEl) selectEl.disabled = true;
+      try {
+        const body = { monthlyResult };
+        if (monthlyResult === 'done') body.progress = 100;
+        const res = await fetch(ApiConfig.baseUrl + '/kpi-plans/' + encodeURIComponent(planId), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || '状态更新失败');
+        const updated = data.data?.plan;
+        if (updated) {
+          state.kpiPlans = (state.kpiPlans || []).map(p => p.id === planId ? { ...p, ...updated } : p);
+          render();
+        } else {
+          await KpiPlanService.load(state.kpiYearMonth);
+        }
+      } catch (e) {
+        if (selectEl) {
+          selectEl.value = prev;
+          selectEl.className = `kpi-result-quick is-${prev}`;
+          selectEl.disabled = false;
+        }
+        alert(e.message || '状态更新失败');
+      }
+    }
+
+    const FIXED_KPI_TEMPLATE_ORDER = [
+      'monthly_review', 'monthly_plan', 'task_closure', 'doc_archive',
+      'issue_risk', 'responsibility', 'weekly_report',
+    ];
+
+    function currentKpiYearMonth() {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    function compareKpiPlansInList(a, b) {
+      if (a.type !== b.type) {
+        if (a.type === 'fixed') return -1;
+        if (b.type === 'fixed') return 1;
+      }
+      if (a.type === 'fixed' && b.type === 'fixed') {
+        const ia = FIXED_KPI_TEMPLATE_ORDER.indexOf(a.templateKey || '');
+        const ib = FIXED_KPI_TEMPLATE_ORDER.indexOf(b.templateKey || '');
+        if (ia !== ib) return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+        return (a.weekIndex ?? -1) - (b.weekIndex ?? -1);
+      }
+      const sa = String(a.planStartDate || '');
+      const sb = String(b.planStartDate || '');
+      if (sa !== sb) return sa.localeCompare(sb);
+      return String(a.taskName || '').localeCompare(String(b.taskName || ''), 'zh-CN');
+    }
+
+    function getDefaultKpiAssigneeFilter() {
+      return currentUser?.id || 'all';
+    }
+
+    function getFilteredKpiPlans() {
+      let list = (state.kpiPlans || []).slice();
+      const filterId = state.kpiAssigneeFilter ?? getDefaultKpiAssigneeFilter();
+      if (filterId && filterId !== 'all') {
+        const member = (state.kpiMembers || []).find(u => u.id === filterId);
+        list = list.filter(p =>
+          p.assigneeId === filterId ||
+          p.assignee === filterId ||
+          (member && p.assignee === member.name)
+        );
+      }
+      return list.filter(p => !p.isParent).sort(compareKpiPlansInList);
+    }
+
+    function renderKpiPlans() {
+      if (!canAccessKpiPlans()) {
+        return `<div class="panel"><div class="panel-body" style="padding:24px;color:#9CA3AF;">仅实施交付部成员可使用 KPI 计划</div></div>`;
+      }
+      const list = getFilteredKpiPlans();
+      const monthOpts = (state.kpiMonthOptions || [state.kpiYearMonth]).map(ym =>
+        `<option value="${escapeHtml(ym)}" ${state.kpiYearMonth === ym ? 'selected' : ''}>${escapeHtml(ym)}</option>`
+      ).join('');
+      const assigneeFilter = state.kpiAssigneeFilter ?? getDefaultKpiAssigneeFilter();
+      const assigneeOpts = state.kpiCanViewAll
+        ? `<select class="select" onchange="state.kpiAssigneeFilter=this.value;render()">
+            <option value="all" ${assigneeFilter === 'all' ? 'selected' : ''}>全部责任人</option>
+            ${(state.kpiMembers || []).map(u => `<option value="${escapeHtml(u.id)}" ${assigneeFilter === u.id ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('')}
+          </select>`
+        : '';
+      return `
+        <div class="kpi-plan-wrap">
+          <p class="content-intro" style="margin-bottom:12px;">
+            实施交付部 KPI 计划。首套从 ${escapeHtml(state.kpiFirstBootstrapMonth || '2026-08')} 起；下月计划在当月「计划安排」开始日（25 日）后自动生成。
+            周汇报固定 4 段：首段从当月第一个周一起（若月初空档 ≥3 天则从 1 号起并入首段），月末剩余天数并入第四段；仅 1~2 天空档由「项目整体节点主动汇报」父任务覆盖。
+          </p>
+          <div class="kpi-plan-toolbar">
+            <select class="select" onchange="KpiPlanService.load(this.value)">
+              ${monthOpts}
+            </select>
+            ${assigneeOpts}
+            <button type="button" class="btn btn-ghost btn-sm" onclick="KpiPlanService.load(state.kpiYearMonth)"><i class="fas fa-rotate-right"></i> 刷新</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="openKpiPlanCreate()"><i class="fas fa-plus"></i> 自定义计划</button>
+          </div>
+          ${state.kpiPlansLoading ? '<p style="color:#9CA3AF;font-size:13px;">加载中…</p>' : ''}
+          <div class="kpi-plan-table-card">
+            <div class="todo-table-wrap">
+              <table class="kpi-plan-table">
+                <thead>
+                  <tr>
+                    <th>类型</th>
+                    <th>项目名称</th>
+                    <th>专项任务</th>
+                    <th>任务目标 & 交付物</th>
+                    <th>计划周期</th>
+                    <th>责任人</th>
+                    <th>进度</th>
+                    <th>完成结果</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${list.length ? list.map(p => `
+                    <tr class="${p.parentId ? 'kpi-plan-row-child' : ''}">
+                      <td><span class="kpi-plan-tag ${p.type === 'custom' ? 'is-custom' : 'is-fixed'}">${p.type === 'custom' ? '自定义' : '固定'}</span></td>
+                      <td>${escapeHtml(p.projectName || '')}</td>
+                      <td>${escapeHtml(p.taskName || '')}</td>
+                      <td class="kpi-plan-deliverable">${escapeHtml(p.targetDeliverable || '')}</td>
+                      <td>${escapeHtml((p.planStartDate || '-') + ' ~ ' + (p.planEndDate || '-'))}</td>
+                      <td>${escapeHtml(p.assignee || '')}</td>
+                      <td>${p.progress ?? 0}%</td>
+                      <td>${renderKpiMonthlyResultQuick(p)}</td>
+                      <td><button type="button" class="btn btn-ghost btn-sm" onclick="openKpiPlanEdit('${p.id}')"><i class="fas fa-edit"></i></button></td>
+                    </tr>
+                  `).join('') : `<tr><td colspan="9" style="padding:24px;color:#9CA3AF;text-align:center;">暂无计划，请选择月份或等待系统自动生成</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function openKpiPlanEdit(planId) {
+      if (!ApiConfig.enabled || !authSession.token) { alert('请连接服务端'); return; }
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/kpi-plans/' + encodeURIComponent(planId), {
+          headers: { ...AuthService.getAuthHeaders() },
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || '加载失败');
+        state.form = { ...data.data.plan };
+        state.kpiPlanLogs = data.data.logs || [];
+        state.showModal = 'kpiPlanEdit';
+        render();
+      } catch (e) {
+        alert(e.message || '加载失败');
+      }
+    }
+
+    function openKpiPlanCreate() {
+      state.form = {
+        yearMonth: state.kpiYearMonth,
+        projectName: '',
+        taskName: '',
+        targetDeliverable: '',
+        planStartDate: '',
+        planEndDate: '',
+        assigneeId: currentUser.id,
+        assignee: currentUser.name,
+        collaborators: [],
+        riskMitigation: '',
+        desc: '',
+        progress: 0,
+        monthlyResult: 'not_done',
+      };
+      state.kpiPlanLogs = [];
+      state.showModal = 'kpiPlanCreate';
+      render();
+    }
+
+    async function saveKpiPlanEdit() {
+      const plan = state.form;
+      if (!plan?.id) return;
+      try {
+        const body = collectKpiPlanFormFromDom(plan);
+        const res = await fetch(ApiConfig.baseUrl + '/kpi-plans/' + encodeURIComponent(plan.id), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || '保存失败');
+        closeModal();
+        await KpiPlanService.load(state.kpiYearMonth);
+      } catch (e) {
+        alert(e.message || '保存失败');
+      }
+    }
+
+    async function saveKpiPlanCreate() {
+      const body = collectKpiPlanFormFromDom(state.form || {});
+      if (!body.taskName) { alert('请填写专项任务名称'); return; }
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/kpi-plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || '创建失败');
+        closeModal();
+        await KpiPlanService.load(state.kpiYearMonth);
+      } catch (e) {
+        alert(e.message || '创建失败');
+      }
+    }
+
+    function collectKpiPlanFormFromDom(plan) {
+      const get = id => document.getElementById(id)?.value;
+      const collRaw = get('kpiCollaborators');
+      return {
+        ...plan,
+        projectName: get('kpiProjectName') ?? plan.projectName,
+        taskName: get('kpiTaskName') ?? plan.taskName,
+        targetDeliverable: get('kpiTargetDeliverable') ?? plan.targetDeliverable,
+        planStartDate: get('kpiPlanStartDate') ?? plan.planStartDate,
+        planEndDate: get('kpiPlanEndDate') ?? plan.planEndDate,
+        assignee: get('kpiAssignee') ?? plan.assignee,
+        collaborators: collRaw ? collRaw.split(/[,，、;；\n]/).map(s => s.trim()).filter(Boolean) : (plan.collaborators || []),
+        riskMitigation: get('kpiRiskMitigation') ?? plan.riskMitigation,
+        desc: get('kpiDesc') ?? plan.desc,
+        actualStartDate: get('kpiActualStartDate') || null,
+        actualEndDate: get('kpiActualEndDate') || null,
+        progress: (() => {
+          const monthlyResult = get('kpiMonthlyResult') ?? plan.monthlyResult ?? 'not_done';
+          if (monthlyResult === 'done') return 100;
+          return parseInt(get('kpiProgress'), 10) || 0;
+        })(),
+        monthlyResult: get('kpiMonthlyResult') ?? plan.monthlyResult ?? 'not_done',
+        yearMonth: get('kpiYearMonth') ?? plan.yearMonth,
+      };
+    }
+
+    function onKpiMonthlyResultChange() {
+      const sel = document.getElementById('kpiMonthlyResult');
+      const progress = document.getElementById('kpiProgress');
+      if (sel?.value === 'done' && progress) progress.value = '100';
+    }
+
+    function renderKpiPlanFormFields(plan, opts = {}) {
+      const isCustom = opts.isCustom || plan.type === 'custom';
+      const dateReadonly = !isCustom && !canViewAllKpiPlans();
+      const coll = (plan.collaborators || []).join('、');
+      return `
+        <div class="form-group"><label class="form-label">归属月份</label>
+          <input class="input" id="kpiYearMonth" style="width:100%;" value="${escapeHtml(plan.yearMonth || state.kpiYearMonth || '')}" ${isCustom ? '' : 'readonly'}></div>
+        <div class="form-group"><label class="form-label">项目名称</label>
+          <input class="input" id="kpiProjectName" style="width:100%;" value="${escapeHtml(plan.projectName || '')}" ${isCustom ? '' : 'readonly'}></div>
+        <div class="form-group"><label class="form-label">专项任务名称（核心工作）</label>
+          <input class="input" id="kpiTaskName" style="width:100%;" value="${escapeHtml(plan.taskName || '')}" ${isCustom ? '' : 'readonly'}></div>
+        <div class="form-group"><label class="form-label">任务目标 & 交付物</label>
+          <textarea class="textarea" id="kpiTargetDeliverable" style="width:100%;min-height:64px;" ${isCustom ? '' : 'readonly'}>${escapeHtml(plan.targetDeliverable || '')}</textarea></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group"><label class="form-label">计划开始日期</label>
+            <input class="input" type="date" id="kpiPlanStartDate" style="width:100%;" value="${escapeHtml(plan.planStartDate || '')}" ${dateReadonly ? 'readonly' : ''}></div>
+          <div class="form-group"><label class="form-label">计划截止日期</label>
+            <input class="input" type="date" id="kpiPlanEndDate" style="width:100%;" value="${escapeHtml(plan.planEndDate || '')}" ${dateReadonly ? 'readonly' : ''}></div>
+        </div>
+        <div class="form-group"><label class="form-label">责任人</label>
+          <input class="input" id="kpiAssignee" style="width:100%;" value="${escapeHtml(plan.assignee || '')}" readonly></div>
+        <div class="form-group"><label class="form-label">协同人（逗号分隔）</label>
+          <input class="input" id="kpiCollaborators" style="width:100%;" value="${escapeHtml(coll)}"></div>
+        <div class="form-group"><label class="form-label">风险预判 & 应对措施</label>
+          <textarea class="textarea" id="kpiRiskMitigation" style="width:100%;min-height:64px;">${escapeHtml(plan.riskMitigation || '')}</textarea></div>
+        <div class="form-group"><label class="form-label">说明</label>
+          <textarea class="textarea" id="kpiDesc" style="width:100%;min-height:64px;">${escapeHtml(plan.desc || '')}</textarea></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group"><label class="form-label">实际开始日期</label>
+            <input class="input" type="date" id="kpiActualStartDate" style="width:100%;" value="${escapeHtml(plan.actualStartDate || '')}"></div>
+          <div class="form-group"><label class="form-label">实际结束日期</label>
+            <input class="input" type="date" id="kpiActualEndDate" style="width:100%;" value="${escapeHtml(plan.actualEndDate || '')}"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group"><label class="form-label">完成百分比</label>
+            <input class="input" type="number" min="0" max="100" id="kpiProgress" style="width:100%;" value="${plan.progress ?? 0}"></div>
+          <div class="form-group"><label class="form-label">月度实际完成结果</label>
+            <select class="select" id="kpiMonthlyResult" style="width:100%;" onchange="onKpiMonthlyResultChange()">
+              ${Object.entries(kpiMonthlyResultMap).map(([k, v]) => `
+                <option value="${k}" ${(plan.monthlyResult || 'not_done') === k ? 'selected' : ''}>${v.label}</option>
+              `).join('')}
+            </select></div>
+        </div>
+        ${(state.kpiPlanLogs || []).length ? `
+          <div class="form-group">
+            <label class="form-label">变更记录</label>
+            <div class="kpi-plan-log-list">
+              ${state.kpiPlanLogs.map(l => `
+                <div class="kpi-plan-log-item">
+                  <div style="color:#6B7280;margin-bottom:4px;">${escapeHtml(l.operator || '')} · ${escapeHtml(l.operateTime || '')}</div>
+                  <div>${escapeHtml(l.before || '')} → ${escapeHtml(l.after || '')}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+      `;
+    }
+
+    function renderKpiPlanEditModal() {
+      const plan = state.form || {};
+      return `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal-box" style="max-width:640px;max-height:90vh;overflow:auto;" onclick="event.stopPropagation()">
+            <div class="modal-header">
+              <h3 class="modal-title"><i class="fas fa-bullseye" style="color:var(--brand);margin-right:8px;"></i>编辑 KPI 计划</h3>
+              <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:18px;"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">${renderKpiPlanFormFields(plan)}</div>
+            <div class="modal-footer">
+              <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+              <button class="btn btn-primary" onclick="saveKpiPlanEdit()"><i class="fas fa-save"></i> 保存</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderKpiPlanCreateModal() {
+      const plan = state.form || {};
+      return `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal-box" style="max-width:640px;max-height:90vh;overflow:auto;" onclick="event.stopPropagation()">
+            <div class="modal-header">
+              <h3 class="modal-title"><i class="fas fa-plus" style="color:var(--brand);margin-right:8px;"></i>新建自定义 KPI 计划</h3>
+              <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:18px;"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">${renderKpiPlanFormFields(plan, { isCustom: true })}</div>
+            <div class="modal-footer">
+              <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+              <button class="btn btn-primary" onclick="saveKpiPlanCreate()"><i class="fas fa-save"></i> 创建</button>
+            </div>
           </div>
         </div>
       `;
@@ -5642,6 +6159,31 @@
         nextPlan: String(project?.nextPlan || '').trim(),
         blocker: String(project?.blocker || '').trim(),
       };
+    }
+
+    function applyProjectFocusFields(project, fields) {
+      if (!project || !fields) return project;
+      project.currentPhase = String(fields.currentPhase ?? project.currentPhase ?? '').trim();
+      project.nextPlan = String(fields.nextPlan ?? project.nextPlan ?? '').trim();
+      project.blocker = String(fields.blocker ?? project.blocker ?? '').trim();
+      return project;
+    }
+
+    /** 从 DOM 读取推进字段；editSuffix 传 'Edit' 对应编辑弹窗 */
+    function readProjectFocusFromDom(editSuffix = '') {
+      const prefix = 'project' + (editSuffix || '');
+      return {
+        currentPhase: (document.getElementById(prefix + 'CurrentPhase')?.value || '').trim(),
+        nextPlan: (document.getElementById(prefix + 'NextPlan')?.value || '').trim(),
+        blocker: (document.getElementById(prefix + 'Blocker')?.value || '').trim(),
+      };
+    }
+
+    function syncProjectFocusToForm(projectId) {
+      if (state.form?.projectId !== projectId && state.form?.id !== projectId) return;
+      const project = projects.find(p => p.id === projectId);
+      if (!project) return;
+      applyProjectFocusFields(state.form, getProjectFocusFields(project));
     }
 
     function renderProjectFocusRows(project, rowClass = 'wb-project-focus-row') {
@@ -8773,13 +9315,9 @@
         alert('仅项目负责人或创建人可编辑');
         return;
       }
-      const currentPhaseEl = document.getElementById('projectCurrentPhase');
-      const nextPlanEl = document.getElementById('projectNextPlan');
-      const blockerEl = document.getElementById('projectBlocker');
-      project.currentPhase = currentPhaseEl ? currentPhaseEl.value.trim() : '';
-      project.nextPlan = nextPlanEl ? nextPlanEl.value.trim() : '';
-      project.blocker = blockerEl ? blockerEl.value.trim() : '';
-      save();
+      applyProjectFocusFields(project, readProjectFocusFromDom());
+      syncProjectFocusToForm(projectId);
+      save({ immediateSync: true });
       render();
     }
 
@@ -13197,6 +13735,8 @@
         case 'projectDetail': return renderProjectDetailModal();
         case 'projectCreate': return renderProjectCreateModal();
         case 'projectEdit': return renderProjectEditModal();
+        case 'kpiPlanEdit': return renderKpiPlanEditModal();
+        case 'kpiPlanCreate': return renderKpiPlanCreateModal();
         case 'reject': return renderRejectModal();
         case 'transfer': return renderTransferModal();
         case 'archive': return renderArchiveModal();
@@ -13779,15 +14319,15 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label">当前阶段</label>
-                  <input class="input" style="width:100%;" value="${escapeHtml(project.currentPhase || '')}" onchange="state.form.currentPhase=this.value" placeholder="项目当前处于哪个阶段？">
+                  <input class="input" id="projectEditCurrentPhase" style="width:100%;" value="${escapeHtml(project.currentPhase || '')}" oninput="state.form.currentPhase=this.value" placeholder="项目当前处于哪个阶段？">
                 </div>
                 <div class="form-group">
                   <label class="form-label">下一步计划</label>
-                  <input class="input" style="width:100%;" value="${escapeHtml(project.nextPlan || '')}" onchange="state.form.nextPlan=this.value" placeholder="下一步要做什么？">
+                  <input class="input" id="projectEditNextPlan" style="width:100%;" value="${escapeHtml(project.nextPlan || '')}" oninput="state.form.nextPlan=this.value" placeholder="下一步要做什么？">
                 </div>
                 <div class="form-group">
                   <label class="form-label">当前卡点</label>
-                  <input class="input" style="width:100%;" value="${escapeHtml(project.blocker || '')}" onchange="state.form.blocker=this.value" placeholder="卡在哪儿？没有可留空">
+                  <input class="input" id="projectEditBlocker" style="width:100%;" value="${escapeHtml(project.blocker || '')}" oninput="state.form.blocker=this.value" placeholder="卡在哪儿？没有可留空">
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                   <div class="form-group">
@@ -13878,6 +14418,7 @@
       }
 
       const oldManager = existing.manager;
+      applyProjectFocusFields(state.form, readProjectFocusFromDom('Edit'));
       projects[idx] = {
         ...projects[idx],
         ...state.form,
@@ -13886,11 +14427,13 @@
           state.form.teamMembers
         ),
       };
+      normalizeProjectRecord(projects[idx]);
+      syncProjectFocusToForm(projects[idx].id);
       syncProjectPauseCascade(projects[idx], oldStatus);
       if (state.form.manager && state.form.manager !== oldManager) {
         notifyProjectManagerAssigned(projects[idx]);
       }
-      save();
+      save({ immediateSync: true });
       closeModal();
     }
 
@@ -14441,10 +14984,18 @@
       if (page === 'sqlTools' && !isFullAccess(currentUser.role)) {
         page = 'dashboard';
       }
+      if (page === 'kpiPlans' && !canAccessKpiPlans()) {
+        page = 'dashboard';
+      }
       state.page = page;
       state.settingsOpen = false;
+      if (page === 'kpiPlans' && ApiConfig.enabled && authSession.token) {
+        await KpiPlanService.load(state.kpiYearMonth);
+      }
       if (page === 'projects' && ApiConfig.enabled && authSession.token && !opts.skipReload) {
-        await DataService.loadFromServer();
+        if (!DataService._saveTimer && !DataService._syncing) {
+          await DataService.loadFromServer();
+        }
       }
       if (page === 'systemUpdates' && ApiConfig.enabled && authSession.token) {
         await SystemUpdateService.loadAll();
@@ -16485,6 +17036,39 @@
       link.click();
     }
 
+    const KpiPlanService = {
+      async load(yearMonth) {
+        if (!ApiConfig.enabled || !authSession.token || !canAccessKpiPlans()) return false;
+        const ym = yearMonth || state.kpiYearMonth || currentKpiYearMonth();
+        state.kpiPlansLoading = true;
+        state.kpiYearMonth = ym;
+        try {
+          const res = await fetch(ApiConfig.baseUrl + '/kpi-plans?yearMonth=' + encodeURIComponent(ym), {
+            headers: { ...AuthService.getAuthHeaders() },
+          });
+          const data = await res.json();
+          if (!data.success) throw new Error(data.message || '加载失败');
+          const payload = data.data || {};
+          state.kpiPlans = payload.plans || [];
+          state.kpiMonthOptions = payload.monthOptions || [ym];
+          state.kpiCanViewAll = !!payload.canViewAll;
+          state.kpiMembers = payload.members || [];
+          state.kpiFirstBootstrapMonth = payload.firstBootstrapMonth || '2026-08';
+          if (state.kpiAssigneeFilter == null) {
+            state.kpiAssigneeFilter = getDefaultKpiAssigneeFilter();
+          }
+          render();
+          return true;
+        } catch (e) {
+          console.warn('[KPI]', e);
+          alert(e.message || 'KPI 计划加载失败');
+          return false;
+        } finally {
+          state.kpiPlansLoading = false;
+        }
+      },
+    };
+
     const SystemUpdateService = {
       async loadAll() {
         if (!ApiConfig.enabled || !authSession.token) return [];
@@ -16719,7 +17303,8 @@
         return (projects || []).map(p => {
           const docs = (p.documents || []).map(d => d.fileId || d.id || '').join(',');
           const team = (p.teamMembers || []).join(',');
-          return `${p.id}|${p.status || ''}|${p.archived ? 1 : 0}|${p.manager || ''}|${team}|${docs}`;
+          const focus = getProjectFocusFields(p);
+          return `${p.id}|${p.status || ''}|${p.archived ? 1 : 0}|${p.manager || ''}|${team}|${docs}|${focus.currentPhase}|${focus.nextPlan}|${focus.blocker}`;
         }).join(';');
       },
 

@@ -6,8 +6,10 @@ function isInfoCenterMember(user) {
   return !!(user && user.dept === INFO_CENTER_DEPT);
 }
 
+/** 总经理/管理员/部门经理可见全公司项目；执行人员仅可见相关项目 */
 function canViewAllProjects(user) {
-  return !!(user && user.id);
+  if (!user?.id) return false;
+  return isFullAccess(user.role) || user.role === 'manager';
 }
 
 function filterProjectsForUser(user, projects, allTasks) {

@@ -10,6 +10,7 @@
     "seed": "node src/db/seed.js",
     "prepare-share-demo": "node scripts/prepare-share-demo.js",
     "simulate-intake": "node scripts/simulate-aitable-intake.js",
+    "import-kpi-custom": "node scripts/import-kpi-custom-plans.js",
     "record-change": "node scripts/record-change.js",
     "publish-release": "node scripts/publish-release.js",
     "ops-reminder": "node scripts/ops-reminder.js",
