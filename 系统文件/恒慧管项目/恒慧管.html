@@ -2430,31 +2430,14 @@
 
     const INFO_CENTER_DEPT = '信息中心';
     const KPI_DEPT_NAME = '实施交付部';
-    const KPI_EXTRA_MEMBER_NAMES = ['陈璇'];
-
-    function kpiPersonNameCore(name) {
-      const s = String(name || '').trim();
-      if (!s) return '';
-      const cn = s.match(/^([\u4e00-\u9fff]+)/);
-      if (cn) return cn[1];
-      return s.split(/\s+/)[0];
-    }
-
-    function isKpiExtraMember(user = currentUser) {
-      if (!user) return false;
-      const core = kpiPersonNameCore(user.name);
-      return KPI_EXTRA_MEMBER_NAMES.some(n => core === n || String(user.name || '').includes(n));
-    }
 
     function canAccessKpiPlans(user = currentUser) {
       if (!user?.id || isContactProfile(user)) return false;
-      return isFullAccess(user.role) || user.dept === KPI_DEPT_NAME || isKpiExtraMember(user);
+      return isFullAccess(user.role) || user.dept === KPI_DEPT_NAME;
     }
 
     function canViewAllKpiPlans(user = currentUser) {
-      return canAccessKpiPlans(user) && (
-        isFullAccess(user.role) || (user.role === 'manager' && user.dept === KPI_DEPT_NAME)
-      );
+      return canAccessKpiPlans(user) && (isFullAccess(user.role) || user.role === 'manager');
     }
 
     function isInfoCenterMember(user = currentUser) {
@@ -3139,7 +3122,7 @@
       { id: 'U040', name: 'AI应用工程师备用号', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: 'U009', standardWeekHours: 60, dingTalkUserId: '361546098' },
       { id: 'U041', name: 'AI应用工程师备用号2', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: 'U009', standardWeekHours: 60, dingTalkUserId: '398947776' },
       { id: 'U042', name: '龙涛 AI应用工程师', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: 'U009', standardWeekHours: 60, dingTalkUserId: '480907618' },
-      { id: 'U043', name: '陈璇  Chenxuan', dept: '项目管控部', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '418924990' },
+      { id: 'U043', name: '陈璇  Chenxuan', dept: '项目管控部', role: 'admin', position: '管理员', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '418924990' },
       { id: 'U044', name: '缪蕾', dept: '财务部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '18023059101043348' },
       { id: 'U045', name: '柳敏', dept: '账务管理组', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '2262615565850876' },
       { id: 'U046', name: '陆敏明', dept: '账务管理组', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '181122176937799781' },
