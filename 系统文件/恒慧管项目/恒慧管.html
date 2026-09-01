@@ -710,7 +710,7 @@
       overflow-y: visible;
       max-height: none;
     }
-    .kpi-plan-table { width: 100%; border-collapse: collapse; min-width: 1280px; table-layout: fixed; }
+    .kpi-plan-table { width: 100%; border-collapse: collapse; min-width: 1380px; table-layout: fixed; }
     .kpi-plan-table thead th {
       position: sticky; top: 0; z-index: 2;
       background: #FAFAFA; box-shadow: 0 1px 0 var(--border-light);
@@ -719,20 +719,23 @@
       padding: 10px 12px; border-bottom: 1px solid var(--border-light);
       font-size: 12px; vertical-align: middle; text-align: left;
       word-break: break-word; overflow-wrap: anywhere;
+      overflow: hidden; text-overflow: ellipsis;
     }
-    .kpi-plan-table th:nth-child(1), .kpi-plan-table td:nth-child(1) { width: 72px; white-space: nowrap; }
-    .kpi-plan-table th:nth-child(2), .kpi-plan-table td:nth-child(2) { width: 140px; }
-    .kpi-plan-table th:nth-child(3), .kpi-plan-table td:nth-child(3) { width: 160px; }
-    .kpi-plan-table th:nth-child(4), .kpi-plan-table td:nth-child(4) { width: 220px; }
-    .kpi-plan-table th:nth-child(5), .kpi-plan-table td:nth-child(5) { width: 170px; white-space: nowrap; }
-    .kpi-plan-table th:nth-child(6), .kpi-plan-table td:nth-child(6) { width: 88px; white-space: nowrap; }
-    .kpi-plan-table th:nth-child(7), .kpi-plan-table td:nth-child(7) { width: 64px; white-space: nowrap; }
-    .kpi-plan-table th:nth-child(8), .kpi-plan-table td:nth-child(8) { width: 110px; white-space: nowrap; }
-    .kpi-plan-table th:nth-child(9), .kpi-plan-table td:nth-child(9) { width: 56px; white-space: nowrap; }
+    .kpi-plan-table .kpi-col-dept { width: 110px; white-space: nowrap; }
+    .kpi-plan-table .kpi-col-type { width: 72px; white-space: nowrap; }
+    .kpi-plan-table .kpi-col-project { width: 120px; }
+    .kpi-plan-table .kpi-col-task { width: 140px; }
+    .kpi-plan-table .kpi-col-deliverable { width: 200px; }
+    .kpi-plan-table .kpi-col-period { width: 118px; white-space: normal; line-height: 1.35; }
+    .kpi-plan-table .kpi-col-assignee { width: 88px; white-space: nowrap; }
+    .kpi-plan-table .kpi-col-progress { width: 56px; white-space: nowrap; }
+    .kpi-plan-table .kpi-col-result { width: 110px; white-space: nowrap; overflow: visible; }
+    .kpi-plan-table .kpi-col-actions { width: 56px; white-space: nowrap; }
+    .kpi-plan-period-range { display: block; font-variant-numeric: tabular-nums; }
     .kpi-plan-deliverable { line-height: 1.45; color: #374151; }
     .kpi-plan-table th { background: #FAFAFA; color: var(--text-muted); font-weight: 600; }
     .kpi-plan-table tr:hover td { background: #FAFAFA; }
-    .kpi-plan-row-child td:nth-child(3) { padding-left: 20px; }
+    .kpi-plan-row-child .kpi-col-task { padding-left: 20px; }
     .kpi-plan-tag {
       display: inline-flex; align-items: center; justify-content: center;
       padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600;
@@ -2430,12 +2433,16 @@
 
     const INFO_CENTER_DEPT = '信息中心';
     const KPI_DEPT_NAME = '实施交付部';
+    const KPI_DEPT_PMO_NAME = '项目管控部';
+    const KPI_DEPT_NAMES = [KPI_DEPT_NAME, KPI_DEPT_PMO_NAME];
 
+    /** 实施交付部/项目管控部成员，或部门经理/管理员/总经理 */
     function canAccessKpiPlans(user = currentUser) {
       if (!user?.id || isContactProfile(user)) return false;
-      return isFullAccess(user.role) || user.dept === KPI_DEPT_NAME;
+      return isFullAccess(user.role) || user.role === 'manager' || KPI_DEPT_NAMES.includes(user.dept);
     }
 
+    /** 部门经理/管理员/总经理可查看全部部门计划 */
     function canViewAllKpiPlans(user = currentUser) {
       return canAccessKpiPlans(user) && (isFullAccess(user.role) || user.role === 'manager');
     }
@@ -3082,47 +3089,44 @@
     // 用户数据 - 信息中心组织架构
     let users = [
       { id: 'U001', name: '魏海波', dept: '信息中心', role: 'gm', position: '信息中心总经理', leaderId: '', standardWeekHours: 60, dingTalkUserId: '084918593839104986' },
-      { id: 'U002', name: '信息中心助理', dept: '信息中心', role: 'manager', position: '部门管理执行人员', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '763409435' },
-      { id: 'U003', name: '运营助理备用', dept: '信息中心', role: 'manager', position: '部门管理执行人员', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '215997906' },
-      { id: 'U004', name: '明秀丽  项目申报专员', dept: '信息中心', role: 'manager', position: '部门管理执行人员', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '385496097' },
-      { id: 'U005', name: '刘易', dept: '规划建设部', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '3534416912677627' },
-      { id: 'U006', name: '黄艳-信息中心', dept: '实施交付部', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '21043656561293359' },
-      { id: 'U007', name: '吴志伟', dept: '研发集成部', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '093551554921496156' },
-      { id: 'U008', name: '张俊官', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '081324474424058926' },
-      { id: 'U009', name: '钱广', dept: 'AI创新部', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '0164024035201204206' },
-      { id: 'U010', name: '陈璇', dept: '信息中心', role: 'manager', position: '部门经理', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '24623338601222463' },
-      { id: 'U011', name: '吕腾飞', dept: '规划建设部', role: 'staff', position: '执行人员', leaderId: 'U005', standardWeekHours: 60, dingTalkUserId: '010338552721752309' },
-      { id: 'U012', name: '薛钧益  需求分析师', dept: '规划建设部', role: 'staff', position: '执行人员', leaderId: 'U005', standardWeekHours: 60, dingTalkUserId: '979368583' },
-      { id: 'U013', name: '谢易琳-需求分析师', dept: '规划建设部', role: 'staff', position: '执行人员', leaderId: 'U005', standardWeekHours: 60, dingTalkUserId: '581487488' },
-      { id: 'U014', name: '江寒赟 数据中心供应链分析师', dept: '规划建设部', role: 'staff', position: '执行人员', leaderId: 'U005', standardWeekHours: 60, dingTalkUserId: '777234315' },
-      { id: 'U015', name: '殷酉荣', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: 'U006', standardWeekHours: 60, dingTalkUserId: '3042226827686193' },
-      { id: 'U016', name: '章志红', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: 'U006', standardWeekHours: 60, dingTalkUserId: '112655254031022219' },
-      { id: 'U017', name: '陈吴越', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: 'U006', standardWeekHours: 60, dingTalkUserId: '086520641637676062' },
-      { id: 'U018', name: '王元斌 Martin', dept: '实施交付部', role: 'admin', position: '执行人员/管理员', leaderId: 'U006', standardWeekHours: 60, dingTalkUserId: '669701617' },
-      { id: 'U020', name: '叶栋 软件实施工程师', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: 'U006', standardWeekHours: 60, dingTalkUserId: '361543173' },
-      { id: 'U021', name: '刘硕 专属钉钉实施', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: 'U006', standardWeekHours: 60, dingTalkUserId: '868189020' },
-      { id: 'U022', name: '魏宗斌   软件实施工程师', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: 'U006', standardWeekHours: 60, dingTalkUserId: '262793598' },
-      { id: 'U023', name: '苗治国', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: 'U006', standardWeekHours: 60, dingTalkUserId: '958962376' },
-      { id: 'U024', name: '张书铖', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: 'U007', standardWeekHours: 60, dingTalkUserId: '216703090124062544' },
-      { id: 'U025', name: '钱月-后端研发', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: 'U007', standardWeekHours: 60, dingTalkUserId: '135329713' },
-      { id: 'U026', name: '马明晶', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: 'U007', standardWeekHours: 60, dingTalkUserId: '085040485938826388' },
-      { id: 'U027', name: '张政 后台工程师', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: 'U007', standardWeekHours: 60, dingTalkUserId: '686062681' },
-      { id: 'U028', name: '任双   前端研发', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: 'U007', standardWeekHours: 60, dingTalkUserId: '538187641' },
-      { id: 'U029', name: '季橙成', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '180206100123351674' },
-      { id: 'U030', name: '李天硕   网络管理员', dept: '网络运维部', role: 'manager', position: '部门经理', leaderId: '', standardWeekHours: 60, dingTalkUserId: '980952307' },
-      { id: 'U031', name: '朱磊  网络管理员', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '49642046' },
-      { id: 'U032', name: '孙坤毫 网络管理员', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '733909115' },
-      { id: 'U033', name: '周骋骋 网络管理员', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '454227911' },
-      { id: 'U034', name: '李明海  网络管理员', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '82849151' },
-      { id: 'U035', name: '刘俊豪  AI应用工程师', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: 'U009', standardWeekHours: 60, dingTalkUserId: '484147694' },
-      { id: 'U036', name: '陈运来', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: 'U009', standardWeekHours: 60, dingTalkUserId: '204240620' },
-      { id: 'U037', name: '朱贵乔 Joe', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: 'U006', standardWeekHours: 60, dingTalkUserId: '136334158' },
-      { id: 'U038', name: '曹燚炜 软件实施工程师', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: 'U006', standardWeekHours: 60, dingTalkUserId: '265783602' },
-      { id: 'U039', name: '网络管理', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: 'U030', standardWeekHours: 60, dingTalkUserId: '110128080638312931' },
-      { id: 'U040', name: 'AI应用工程师备用号', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: 'U009', standardWeekHours: 60, dingTalkUserId: '361546098' },
-      { id: 'U041', name: 'AI应用工程师备用号2', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: 'U009', standardWeekHours: 60, dingTalkUserId: '398947776' },
-      { id: 'U042', name: '龙涛 AI应用工程师', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: 'U009', standardWeekHours: 60, dingTalkUserId: '480907618' },
-      { id: 'U043', name: '陈璇  Chenxuan', dept: '项目管控部', role: 'admin', position: '管理员', leaderId: 'U001', standardWeekHours: 60, dingTalkUserId: '418924990' },
+      { id: 'U002', name: '葛鸿玮 信息中心助理', dept: '信息中心', role: 'manager', position: '部门管理执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '763409435' },
+      { id: 'U003', name: '运营助理备用', dept: '信息中心', role: 'manager', position: '部门管理执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '215997906' },
+      { id: 'U004', name: '明秀丽  项目申报专员', dept: '信息中心', role: 'manager', position: '部门管理执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '385496097' },
+      { id: 'U005', name: '刘易', dept: '规划建设部', role: 'manager', position: '部门经理', leaderId: '', standardWeekHours: 60, dingTalkUserId: '3534416912677627' },
+      { id: 'U006', name: '黄艳-信息中心', dept: '实施交付部', role: 'manager', position: '部门经理', leaderId: '', standardWeekHours: 60, dingTalkUserId: '21043656561293359' },
+      { id: 'U007', name: '吴志伟', dept: '研发集成部', role: 'manager', position: '部门经理', leaderId: '', standardWeekHours: 60, dingTalkUserId: '093551554921496156' },
+      { id: 'U008', name: '张俊官', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '081324474424058926' },
+      { id: 'U009', name: '钱广', dept: 'AI创新部', role: 'manager', position: '部门经理', leaderId: '', standardWeekHours: 60, dingTalkUserId: '0164024035201204206' },
+      { id: 'U010', name: '陈璇', dept: '信息中心', role: 'admin', position: '管理员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '24623338601222463' },
+      { id: 'U011', name: '吕腾飞', dept: '规划建设部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '010338552721752309' },
+      { id: 'U012', name: '薛钧益  需求分析师', dept: '规划建设部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '979368583' },
+      { id: 'U013', name: '谢易琳-需求分析师', dept: '规划建设部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '581487488' },
+      { id: 'U014', name: '江寒赟 数据中心供应链分析师', dept: '规划建设部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '777234315' },
+      { id: 'U015', name: '殷酉荣', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '3042226827686193' },
+      { id: 'U016', name: '章志红', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '112655254031022219' },
+      { id: 'U017', name: '陈吴越', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '086520641637676062' },
+      { id: 'U018', name: '王元斌 Martin', dept: '实施交付部', role: 'admin', position: '执行人员/管理员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '669701617' },
+      { id: 'U020', name: '叶栋 软件实施工程师', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '361543173' },
+      { id: 'U021', name: '专属钉钉实施', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '868189020' },
+      { id: 'U022', name: '魏宗斌   软件实施工程师', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '262793598' },
+      { id: 'U023', name: '苗治国', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '958962376' },
+      { id: 'U024', name: '张书铖', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '216703090124062544' },
+      { id: 'U025', name: '钱月-后端研发', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '135329713' },
+      { id: 'U026', name: '马明晶', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '085040485938826388' },
+      { id: 'U027', name: '张政 后台工程师', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '686062681' },
+      { id: 'U028', name: '任双   前端研发', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '538187641' },
+      { id: 'U029', name: '季橙成', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '180206100123351674' },
+      { id: 'U030', name: '网络管理', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '110128080638312931' },
+      { id: 'U031', name: '网络管理员备用号', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '49642046' },
+      { id: 'U032', name: '孙坤毫 网络管理员', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '733909115' },
+      { id: 'U033', name: '周骋骋 网络管理员', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '454227911' },
+      { id: 'U034', name: '李明海  网络管理员', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '82849151' },
+      { id: 'U035', name: 'AI应用工程师', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '484147694' },
+      { id: 'U036', name: '陈运来', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '204240620' },
+      { id: 'U037', name: '朱贵乔', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '01063938154126527408' },
+      { id: 'U038', name: '曹燚炜 软件实施工程师', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '265783602' },
+      { id: 'U040', name: 'AI应用工程师备用号', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '361546098' },
+      { id: 'U042', name: '龙涛 AI应用工程师', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '480907618' },
       { id: 'U044', name: '缪蕾', dept: '财务部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '18023059101043348' },
       { id: 'U045', name: '柳敏', dept: '账务管理组', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '2262615565850876' },
       { id: 'U046', name: '陆敏明', dept: '账务管理组', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '181122176937799781' },
@@ -3167,6 +3171,12 @@
       { id: 'U085', name: '胡洁', dept: '财务核算组', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '18314236511050688' },
       { id: 'U086', name: '徐群英', dept: '财务核算组', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '204416250324556381' },
       { id: 'U087', name: '冯小红', dept: '财务核算组', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '343811453120858466' },
+      { id: 'U088', name: 'AI应用工程师备用号2', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '398947776' },
+      { id: 'U089', name: '朱贵乔 Joe', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '136334158' },
+      { id: 'U090', name: '陈璇  Chenxuan', dept: '项目管控部', role: 'admin', position: '副科长', leaderId: '', standardWeekHours: 60, dingTalkUserId: '418924990' },
+      { id: 'U091', name: '钱华杰 后端研发', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '379939783' },
+      { id: 'U092', name: '李天硕   网络管理员', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '980952307' },
+      { id: 'U093', name: '孙应敏 系统运维', dept: '网络运维部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '730191909' },
     ];
     /** 人员档案全量（协办人选人等场景用，不受角色/部门页签限制） */
     let allStaffUsers = users.slice();
@@ -4106,6 +4116,8 @@
       kpiCanViewAll: false,
       kpiMonthOptions: ['2026-08'],
       kpiAssigneeFilter: null,
+      kpiDeptFilter: 'all',
+      kpiDepts: [],
       kpiFirstBootstrapMonth: '2026-08',
       kpiPlanLogs: [],
     };
@@ -5638,6 +5650,8 @@
     }
 
     function compareKpiPlansInList(a, b) {
+      const deptCmp = String(a.dept || '').localeCompare(String(b.dept || ''), 'zh-CN');
+      if (deptCmp !== 0) return deptCmp;
       if (a.type !== b.type) {
         if (a.type === 'fixed') return -1;
         if (b.type === 'fixed') return 1;
@@ -5660,6 +5674,10 @@
 
     function getFilteredKpiPlans() {
       let list = (state.kpiPlans || []).slice();
+      const deptFilter = state.kpiDeptFilter || 'all';
+      if (canViewAllKpiPlans() && deptFilter && deptFilter !== 'all') {
+        list = list.filter(p => (p.dept || '') === deptFilter);
+      }
       const filterId = state.kpiAssigneeFilter ?? getDefaultKpiAssigneeFilter();
       if (filterId && filterId !== 'all') {
         const member = (state.kpiMembers || []).find(u => u.id === filterId);
@@ -5674,29 +5692,67 @@
 
     function renderKpiPlans() {
       if (!canAccessKpiPlans()) {
-        return `<div class="panel"><div class="panel-body" style="padding:24px;color:#9CA3AF;">仅实施交付部成员可使用 KPI 计划</div></div>`;
+        return `<div class="panel"><div class="panel-body" style="padding:24px;color:#9CA3AF;">仅实施交付部成员及部门经理/管理员/总经理可使用 KPI 计划</div></div>`;
       }
       const list = getFilteredKpiPlans();
       const monthOpts = (state.kpiMonthOptions || [state.kpiYearMonth]).map(ym =>
         `<option value="${escapeHtml(ym)}" ${state.kpiYearMonth === ym ? 'selected' : ''}>${escapeHtml(ym)}</option>`
       ).join('');
       const assigneeFilter = state.kpiAssigneeFilter ?? getDefaultKpiAssigneeFilter();
-      const assigneeOpts = state.kpiCanViewAll
-        ? `<select class="select" onchange="state.kpiAssigneeFilter=this.value;render()">
-            <option value="all" ${assigneeFilter === 'all' ? 'selected' : ''}>全部责任人</option>
-            ${(state.kpiMembers || []).map(u => `<option value="${escapeHtml(u.id)}" ${assigneeFilter === u.id ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('')}
+      const deptFilter = state.kpiDeptFilter || 'all';
+      const depts = (state.kpiDepts && state.kpiDepts.length)
+        ? state.kpiDepts
+        : [...new Set((state.kpiPlans || []).map(p => p.dept).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+      const membersForAssignee = (state.kpiMembers || []).filter(u =>
+        deptFilter === 'all' || (u.dept || '') === deptFilter
+      );
+      const deptOpts = state.kpiCanViewAll
+        ? `<select class="select" onchange="state.kpiDeptFilter=this.value;if(!state._kpiAssigneeTouched)state.kpiAssigneeFilter=getDefaultKpiAssigneeFilter();render()">
+            <option value="all" ${deptFilter === 'all' ? 'selected' : ''}>全部部门</option>
+            ${depts.map(d => `<option value="${escapeHtml(d)}" ${deptFilter === d ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}
           </select>`
         : '';
+      const assigneeOpts = state.kpiCanViewAll
+        ? `<select class="select" onchange="state.kpiAssigneeFilter=this.value;state._kpiAssigneeTouched=true;render()">
+            <option value="${escapeHtml(currentUser?.id || '')}" ${assigneeFilter === currentUser?.id ? 'selected' : ''}>我（${escapeHtml(currentUser?.name || '')}）</option>
+            <option value="all" ${assigneeFilter === 'all' ? 'selected' : ''}>全部责任人</option>
+            ${membersForAssignee.filter(u => u.id !== currentUser?.id).map(u => `<option value="${escapeHtml(u.id)}" ${assigneeFilter === u.id ? 'selected' : ''}>${escapeHtml(u.dept ? `${u.name}（${u.dept}）` : u.name)}</option>`).join('')}
+          </select>`
+        : '';
+      const showDeptCol = !!state.kpiCanViewAll;
+      const colSpan = showDeptCol ? 10 : 9;
+      let lastDept = null;
+      const rowsHtml = list.length ? list.map(p => {
+        let deptHeader = '';
+        if (showDeptCol && deptFilter === 'all' && p.dept && p.dept !== lastDept) {
+          lastDept = p.dept;
+          deptHeader = `<tr class="kpi-plan-dept-group"><td colspan="${colSpan}" style="background:#F8FAFC;font-weight:600;color:#334155;padding:10px 12px;">${escapeHtml(p.dept)}</td></tr>`;
+        }
+        return `${deptHeader}
+          <tr class="${p.parentId ? 'kpi-plan-row-child' : ''}">
+            ${showDeptCol ? `<td class="kpi-col-dept">${escapeHtml(p.dept || '')}</td>` : ''}
+            <td class="kpi-col-type"><span class="kpi-plan-tag ${p.type === 'custom' ? 'is-custom' : 'is-fixed'}">${p.type === 'custom' ? '自定义' : '固定'}</span></td>
+            <td class="kpi-col-project">${escapeHtml(p.projectName || '')}</td>
+            <td class="kpi-col-task">${escapeHtml(p.taskName || '')}</td>
+            <td class="kpi-col-deliverable kpi-plan-deliverable">${escapeHtml(p.targetDeliverable || '')}</td>
+            <td class="kpi-col-period"><span class="kpi-plan-period-range">${escapeHtml(p.planStartDate || '-')}</span><span class="kpi-plan-period-range">~ ${escapeHtml(p.planEndDate || '-')}</span></td>
+            <td class="kpi-col-assignee" title="${escapeHtml(p.assignee || '')}">${escapeHtml(p.assignee || '')}</td>
+            <td class="kpi-col-progress">${p.progress ?? 0}%</td>
+            <td class="kpi-col-result">${renderKpiMonthlyResultQuick(p)}</td>
+            <td class="kpi-col-actions"><button type="button" class="btn btn-ghost btn-sm" onclick="openKpiPlanEdit('${p.id}')"><i class="fas fa-edit"></i></button></td>
+          </tr>`;
+      }).join('') : `<tr><td colspan="${colSpan}" style="padding:24px;color:#9CA3AF;text-align:center;">暂无计划，请选择月份或等待系统自动生成</td></tr>`;
       return `
         <div class="kpi-plan-wrap">
           <p class="content-intro" style="margin-bottom:12px;">
-            实施交付部 KPI 计划。首套从 ${escapeHtml(state.kpiFirstBootstrapMonth || '2026-08')} 起；下月计划在当月「计划安排」开始日（25 日）后自动生成。
+            KPI 计划按责任人部门区分。实施交付部首套从 ${escapeHtml(state.kpiFirstBootstrapMonth || '2026-08')} 起，项目管控部从 ${escapeHtml(state.kpiFirstBootstrapMonthPmo || '2026-09')} 起；部门经理/管理员/总经理可查看全部部门。
             周汇报固定 4 段：首段从当月第一个周一起（若月初空档 ≥3 天则从 1 号起并入首段），月末剩余天数并入第四段；仅 1~2 天空档由「项目整体节点主动汇报」父任务覆盖。
           </p>
           <div class="kpi-plan-toolbar">
             <select class="select" onchange="KpiPlanService.load(this.value)">
               ${monthOpts}
             </select>
+            ${deptOpts}
             ${assigneeOpts}
             <button type="button" class="btn btn-ghost btn-sm" onclick="KpiPlanService.load(state.kpiYearMonth)"><i class="fas fa-rotate-right"></i> 刷新</button>
             <button type="button" class="btn btn-primary btn-sm" onclick="openKpiPlanCreate()"><i class="fas fa-plus"></i> 自定义计划</button>
@@ -5707,31 +5763,20 @@
               <table class="kpi-plan-table">
                 <thead>
                   <tr>
-                    <th>类型</th>
-                    <th>项目名称</th>
-                    <th>专项任务</th>
-                    <th>任务目标 & 交付物</th>
-                    <th>计划周期</th>
-                    <th>责任人</th>
-                    <th>进度</th>
-                    <th>完成结果</th>
-                    <th>操作</th>
+                    ${showDeptCol ? '<th class="kpi-col-dept">部门</th>' : ''}
+                    <th class="kpi-col-type">类型</th>
+                    <th class="kpi-col-project">项目名称</th>
+                    <th class="kpi-col-task">专项任务</th>
+                    <th class="kpi-col-deliverable">任务目标 & 交付物</th>
+                    <th class="kpi-col-period">计划周期</th>
+                    <th class="kpi-col-assignee">责任人</th>
+                    <th class="kpi-col-progress">进度</th>
+                    <th class="kpi-col-result">完成结果</th>
+                    <th class="kpi-col-actions">操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${list.length ? list.map(p => `
-                    <tr class="${p.parentId ? 'kpi-plan-row-child' : ''}">
-                      <td><span class="kpi-plan-tag ${p.type === 'custom' ? 'is-custom' : 'is-fixed'}">${p.type === 'custom' ? '自定义' : '固定'}</span></td>
-                      <td>${escapeHtml(p.projectName || '')}</td>
-                      <td>${escapeHtml(p.taskName || '')}</td>
-                      <td class="kpi-plan-deliverable">${escapeHtml(p.targetDeliverable || '')}</td>
-                      <td>${escapeHtml((p.planStartDate || '-') + ' ~ ' + (p.planEndDate || '-'))}</td>
-                      <td>${escapeHtml(p.assignee || '')}</td>
-                      <td>${p.progress ?? 0}%</td>
-                      <td>${renderKpiMonthlyResultQuick(p)}</td>
-                      <td><button type="button" class="btn btn-ghost btn-sm" onclick="openKpiPlanEdit('${p.id}')"><i class="fas fa-edit"></i></button></td>
-                    </tr>
-                  `).join('') : `<tr><td colspan="9" style="padding:24px;color:#9CA3AF;text-align:center;">暂无计划，请选择月份或等待系统自动生成</td></tr>`}
+                  ${rowsHtml}
                 </tbody>
               </table>
             </div>
@@ -5866,6 +5911,8 @@
           <div class="form-group"><label class="form-label">计划截止日期</label>
             <input class="input" type="date" id="kpiPlanEndDate" style="width:100%;" value="${escapeHtml(plan.planEndDate || '')}" ${dateReadonly ? 'readonly' : ''}></div>
         </div>
+        <div class="form-group"><label class="form-label">部门</label>
+          <input class="input" id="kpiDept" style="width:100%;" value="${escapeHtml(plan.dept || '')}" readonly></div>
         <div class="form-group"><label class="form-label">责任人</label>
           <input class="input" id="kpiAssignee" style="width:100%;" value="${escapeHtml(plan.assignee || '')}" readonly></div>
         <div class="form-group"><label class="form-label">协同人（逗号分隔）</label>
@@ -12449,7 +12496,7 @@
               </p>
               ` : `
               <p style="font-size:12px;color:#6B7280;line-height:1.6;margin-bottom:12px;">
-                点选部门查看本级人员；业务/联系人在「编辑人员 → 档案类型」设置。日常同步：勾选部门 → 设同步默认类型 → 预览 → 确认。
+                点选部门查看本级人员；业务/联系人在「编辑人员 → 档案类型」设置。日常同步：勾选部门 → 设同步默认类型 → 预览 → 确认。手工停用的账号同步时不会更新或恢复。
               </p>
               `}
               ${NotificationService.getRecentLogs(5).length ? `
@@ -12641,6 +12688,9 @@
         const names = (a.locals || []).map(l => l.name).join('、');
         lines.push(`?重名跳过 ${a.name} → 本地：${names}`);
       });
+      if (preview.skippedManualInactive) {
+        lines.push(`○跳过已停用 ${preview.skippedManualInactive} 人（手工停用不做处理）`);
+      }
       return lines.join('\n');
     }
 
@@ -17036,10 +17086,13 @@
           state.kpiMonthOptions = payload.monthOptions || [ym];
           state.kpiCanViewAll = !!payload.canViewAll;
           state.kpiMembers = payload.members || [];
+          state.kpiDepts = payload.depts || [];
           state.kpiFirstBootstrapMonth = payload.firstBootstrapMonth || '2026-08';
-          if (state.kpiAssigneeFilter == null) {
+          state.kpiFirstBootstrapMonthPmo = payload.firstBootstrapMonthPmo || '2026-09';
+          if (!state._kpiAssigneeTouched) {
             state.kpiAssigneeFilter = getDefaultKpiAssigneeFilter();
           }
+          if (!state.kpiDeptFilter) state.kpiDeptFilter = 'all';
           render();
           return true;
         } catch (e) {

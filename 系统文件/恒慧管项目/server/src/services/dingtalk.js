@@ -1279,22 +1279,31 @@ function isPrivilegedStaffRole(role) {
 }
 
 function findLocalForDingReplace(dingUserId, dingName, nextUsers, claimedLocalIds) {
-  const byUserId = nextUsers.find(
-    u => u.dingTalkUserId && u.dingTalkUserId === dingUserId && !claimedLocalIds.has(u.id)
+  const available = nextUsers.filter(u => !claimedLocalIds.has(u.id));
+  const byUserIdActive = available.find(
+    u => u.dingTalkUserId && u.dingTalkUserId === dingUserId && u.active !== false
   );
-  if (byUserId) return { local: byUserId, how: 'userid' };
+  if (byUserIdActive) return { local: byUserIdActive, how: 'userid' };
+
+  const byUserIdInactive = available.find(
+    u => u.dingTalkUserId && u.dingTalkUserId === dingUserId && u.active === false
+  );
+  if (byUserIdInactive) return { local: byUserIdInactive, how: 'userid' };
 
   if (!dingName) return { local: null, how: 'none' };
-  const nameHits = nextUsers.filter(
-    u => !claimedLocalIds.has(u.id) && namesMatch(u.name, dingName)
-  );
-  if (nameHits.length === 1) return { local: nameHits[0], how: 'name' };
-  if (nameHits.length > 1) {
+  const nameHits = available.filter(u => namesMatch(u.name, dingName));
+  const activeHits = nameHits.filter(u => u.active !== false);
+  if (activeHits.length === 1) return { local: activeHits[0], how: 'name' };
+  if (activeHits.length > 1) {
     return {
       local: null,
       how: 'ambiguous',
-      ambiguousLocals: nameHits.map(u => ({ id: u.id, name: u.name, dept: u.dept })),
+      ambiguousLocals: activeHits.map(u => ({ id: u.id, name: u.name, dept: u.dept })),
     };
+  }
+  // 仅命中已停用档案：交给上层跳过，避免新建同名账号
+  if (nameHits.length >= 1) {
+    return { local: nameHits[0], how: 'name' };
   }
   return { local: null, how: 'none' };
 }
@@ -1319,7 +1328,8 @@ function applyDingTalkProfileToLocal(local, dingUserId, detail, basic, deptNameB
     name,
     dept: resolvedDept,
     position,
-    active: true,
+    // 手工停用账号同步时不应被恢复；其余保持在职
+    active: local.active === false ? false : true,
     role,
     profileKind,
     standardWeekHours: local.standardWeekHours || 60,
@@ -1329,6 +1339,7 @@ function applyDingTalkProfileToLocal(local, dingUserId, detail, basic, deptNameB
 
 /**
  * 按勾选部门从钉钉名册替换本地人员档案：新建 / 更新 / 软停用
+ * 本地已停用（含手工停用）账号：不做更新、不恢复、不因同名再建新号
  * @param {object} options
  * @param {string[]} options.deptNames
  * @param {boolean} [options.dryRun]
@@ -1374,6 +1385,7 @@ async function replaceUsersFromDingTalk(options = {}) {
   const toRename = [];
   const ambiguous = [];
   let skippedInactive = 0;
+  let skippedManualInactive = 0;
 
   for (const dingUserId of dingIds) {
     const detail = detailsById[dingUserId] || pool.basicById[dingUserId] || {};
@@ -1395,6 +1407,12 @@ async function replaceUsersFromDingTalk(options = {}) {
     }
 
     if (match.local) {
+      // 本地已手工停用：不同步更新、不恢复、也不因钉钉仍在职而新建同名账号
+      if (match.local.active === false) {
+        skippedManualInactive++;
+        claimedLocalIds.add(match.local.id);
+        continue;
+      }
       const idx = nextUsers.findIndex(u => u.id === match.local.id);
       if (idx < 0) continue;
       const oldName = nextUsers[idx].name;
@@ -1472,6 +1490,7 @@ async function replaceUsersFromDingTalk(options = {}) {
     rename: renames,
     ambiguous,
     skippedInactive,
+    skippedManualInactive,
     dingTalkPulled: dingIds.length,
     depts: deptNames,
     staffDeptCatalog: nextCatalog,
@@ -1487,11 +1506,13 @@ async function replaceUsersFromDingTalk(options = {}) {
       deactivated: toDeactivate.length,
       renamed: renames.length,
       ambiguous: ambiguous.length,
+      skippedManualInactive,
       message:
         `预览（部门：${deptNames.join('、')}）：将新增 ${toCreate.length}、更新 ${toUpdate.length}、改名 ${renames.length}、停用 ${toDeactivate.length}` +
         (ambiguous.length ? `，重名待处理 ${ambiguous.length}` : '') +
         `；钉钉拉取 ${dingIds.length} 人` +
-        (skippedInactive ? `，跳过离职 ${skippedInactive}` : ''),
+        (skippedInactive ? `，跳过离职 ${skippedInactive}` : '') +
+        (skippedManualInactive ? `，跳过已停用 ${skippedManualInactive}` : ''),
     };
   }
 
@@ -1534,7 +1555,8 @@ async function replaceUsersFromDingTalk(options = {}) {
     renamedRefs: renameResult.renamedRefs,
     ambiguous: ambiguous.length,
     bound: toUpdate.length + toCreate.length,
-    skipped: ambiguous.length + skippedInactive,
+    skipped: ambiguous.length + skippedInactive + skippedManualInactive,
+    skippedManualInactive,
     total: dingIds.length,
     mode: 'replace',
     scanMode: 'dept',
@@ -1543,6 +1565,7 @@ async function replaceUsersFromDingTalk(options = {}) {
       (renameResult.renamedRefs ? `（引用 ${renameResult.renamedRefs} 处）` : '') +
       `、停用 ${toDeactivate.length}` +
       (ambiguous.length ? `，重名跳过 ${ambiguous.length}` : '') +
+      (skippedManualInactive ? `，跳过已停用 ${skippedManualInactive}` : '') +
       `；钉钉拉取 ${dingIds.length} 人${persistHint}`,
     allUsers: nextUsers,
     updatedUsers: [...toUpdate, ...toCreate].map(row => nextUsers.find(u => u.id === row.id)).filter(Boolean),
@@ -1634,6 +1657,10 @@ async function syncUsersFromDingTalk(options = {}) {
       const nameIndex = buildDingTalkNameIndex(userIdSet, basicById);
       const pendingName = [];
       for (const local of locals) {
+        if (local.active === false) {
+          skipped++;
+          continue;
+        }
         const match = findDingTalkMatch(local, userIdSet, basicById, nameIndex);
         if (!match) {
           if (local.dingTalkUserId) needDetailIds.push({ local, dingUserId: local.dingTalkUserId });
@@ -1665,7 +1692,7 @@ async function syncUsersFromDingTalk(options = {}) {
     await runConcurrent(needDetailIds, 6, async (item) => {
       const local = item.local || item;
       const dingUserId = item.dingUserId || local.dingTalkUserId;
-      if (!dingUserId) return;
+      if (!dingUserId || local.active === false) return;
       try {
         const detail = await getUserDetail(accessToken, dingUserId);
         const idx = nextUsers.findIndex(u => u.id === local.id);
@@ -1691,6 +1718,10 @@ async function syncUsersFromDingTalk(options = {}) {
     const nameIndex = buildDingTalkNameIndex(userIdSet, basicById);
 
     for (const local of targetLocals) {
+      if (local.active === false) {
+        skipped++;
+        continue;
+      }
       const match = findDingTalkMatch(local, userIdSet, basicById, nameIndex);
       if (!match) {
         if (local.dingTalkUserId) needDetailIds.push({ local, dingUserId: local.dingTalkUserId });
@@ -1716,7 +1747,7 @@ async function syncUsersFromDingTalk(options = {}) {
     await runConcurrent(needDetailIds, 6, async (item) => {
       const local = item.local || item;
       const dingUserId = item.dingUserId || local.dingTalkUserId;
-      if (!dingUserId) return;
+      if (!dingUserId || local.active === false) return;
       try {
         const detail = await getUserDetail(accessToken, dingUserId);
         const idx = nextUsers.findIndex(u => u.id === local.id);

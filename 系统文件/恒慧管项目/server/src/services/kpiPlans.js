@@ -6,11 +6,19 @@ const {
 } = require('../db/database');
 const {
   KPI_DEPT,
+  KPI_DEPT_PMO,
   listKpiDeptMembers,
 } = require('../utils/kpiPlanAccess');
 
-/** 首套计划起始月（后续可由管理员补全历史） */
+/** 实施交付部首套计划起始月 */
 const FIRST_BOOTSTRAP_MONTH = '2026-08';
+/** 项目管控部首套计划起始月 */
+const FIRST_BOOTSTRAP_MONTH_PMO = '2026-09';
+
+function getFirstBootstrapMonthForDept(dept) {
+  if (dept === KPI_DEPT_PMO) return FIRST_BOOTSTRAP_MONTH_PMO;
+  return FIRST_BOOTSTRAP_MONTH;
+}
 
 const PROJECT_NAME_DEFAULT = '岗位标准要求';
 
@@ -24,6 +32,14 @@ const FIXED_TEMPLATE_ORDER = [
   'issue_risk',
   'responsibility',
   'weekly_report',
+];
+
+const FIXED_TEMPLATE_ORDER_PMO = [
+  'pmo_progress_ledger',
+  'pmo_risk_alert',
+  'pmo_weekly_summary',
+  'pmo_key_project_push',
+  'pmo_pdca_review',
 ];
 
 /** 月度实际完成结果（对外展示的状态） */
@@ -99,6 +115,55 @@ const FIXED_TEMPLATES = [
     dateRule: { kind: 'weeklySplit', weeks: 4 },
   },
 ];
+
+/** 项目管控部固定计划（源自《2026陈璇通用绩效考核表_项目管控部副科长》） */
+const FIXED_TEMPLATES_PMO = [
+  {
+    key: 'pmo_progress_ledger',
+    taskName: '项目进度跟踪与台账管理',
+    targetDeliverable: '项目台账覆盖率100%；每周更新；能准确回答各项目当前状态。',
+    dateRule: { kind: 'fullMonth' },
+  },
+  {
+    key: 'pmo_risk_alert',
+    taskName: '风险识别与预警上报',
+    targetDeliverable: '风险识别及时率≥90%；P0问题24小时内上报；问题清单闭环率≥80%。',
+    dateRule: { kind: 'fullMonth' },
+  },
+  {
+    key: 'pmo_weekly_summary',
+    taskName: '周报收集与月度汇总',
+    targetDeliverable: '周报收集率100%；周报汇总按时输出；月度报告经审核通过。',
+    deliverable: '周报汇总/项目看板',
+    dateRule: { kind: 'weeklySplit', weeks: 4 },
+  },
+  {
+    key: 'pmo_key_project_push',
+    taskName: '重点项目进度跟进与推动',
+    targetDeliverable: '重点项目跟进率≥90%；关键节点信息准确；问题推动有记录有反馈。',
+    dateRule: { kind: 'fullMonth' },
+  },
+  {
+    key: 'pmo_pdca_review',
+    taskName: '计划跟进与复盘总结（PDCA闭环）',
+    targetDeliverable: '重点节点跟进率≥90%；问题推动闭环率≥80%；月度复盘报告按时输出。',
+    dateRule: { kind: 'fullMonth' },
+  },
+];
+
+function getFixedTemplatesForDept(dept) {
+  if (dept === KPI_DEPT_PMO) return FIXED_TEMPLATES_PMO;
+  return FIXED_TEMPLATES;
+}
+
+function getFixedTemplateOrderForDept(dept) {
+  if (dept === KPI_DEPT_PMO) return FIXED_TEMPLATE_ORDER_PMO;
+  return FIXED_TEMPLATE_ORDER;
+}
+
+function isWeeklyFixedTemplateKey(key) {
+  return key === 'weekly_report' || key === 'pmo_weekly_summary';
+}
 
 function genId(prefix = 'KPI') {
   return `${prefix}-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
@@ -273,9 +338,28 @@ function findMonthlyPlanArrange(plans, user, yearMonth) {
   return findExistingPlan(plans, user, yearMonth, 'monthly_plan');
 }
 
-function normalizePlanRecord(raw) {
+function findAssigneeUser(plan, users = getAllUsers()) {
+  if (!plan) return null;
+  if (plan.assigneeId) {
+    const byId = (users || []).find(u => u.id === plan.assigneeId);
+    if (byId) return byId;
+  }
+  if (plan.assignee) {
+    return (users || []).find(u => u.name === plan.assignee) || null;
+  }
+  return null;
+}
+
+/** 计划所属部门：优先责任人当前部门，其次落库字段 */
+function resolvePlanDept(plan, users = getAllUsers()) {
+  const assignee = findAssigneeUser(plan, users);
+  if (assignee?.dept) return assignee.dept;
+  return plan?.dept || KPI_DEPT;
+}
+
+function normalizePlanRecord(raw, users = getAllUsers()) {
   const plan = { ...raw };
-  plan.dept = plan.dept || KPI_DEPT;
+  plan.dept = resolvePlanDept(plan, users);
   plan.projectName = String(plan.projectName || '').trim();
   plan.taskName = String(plan.taskName || '').trim();
   plan.targetDeliverable = String(plan.targetDeliverable || '').trim();
@@ -302,9 +386,12 @@ function normalizePlanRecord(raw) {
 
 function createPlanSkeleton(user, fields) {
   const now = new Date().toISOString();
+  const assigneeId = fields.assigneeId || user.id;
+  const assigneeUser = (getAllUsers() || []).find(u => u.id === assigneeId) || user;
+  const dept = fields.dept || assigneeUser?.dept || user?.dept || KPI_DEPT;
   return normalizePlanRecord({
     id: genId(),
-    dept: KPI_DEPT,
+    dept,
     type: 'fixed',
     status: 'pending',
     progress: 0,
@@ -322,15 +409,18 @@ function createPlanSkeleton(user, fields) {
     assigneeId: user.id,
     assignee: user.name,
     ...fields,
+    dept,
   });
 }
 
 function generateFixedPlansForUserMonth(user, yearMonth, plans) {
   const created = [];
   const ym = normalizeYearMonth(yearMonth);
-  if (!ym || compareDate(ym, FIRST_BOOTSTRAP_MONTH) < 0) return created;
+  const bootstrap = getFirstBootstrapMonthForDept(user?.dept);
+  if (!ym || compareDate(ym, bootstrap) < 0) return created;
 
-  for (const tpl of FIXED_TEMPLATES) {
+  const templates = getFixedTemplatesForDept(user.dept);
+  for (const tpl of templates) {
     if (tpl.dateRule.kind === 'weeklySplit') {
       if (findExistingPlan(plans, user, ym, tpl.key)) continue;
       const parent = createPlanSkeleton(user, {
@@ -356,7 +446,7 @@ function generateFixedPlansForUserMonth(user, yearMonth, plans) {
           parentId: parent.id,
           weekIndex: i,
           projectName: PROJECT_NAME_DEFAULT,
-          taskName: `${m}月第${WEEK_LABELS[i]}周`,
+          taskName: `${m}月${WEEK_LABELS[i]}周`,
           targetDeliverable: tpl.deliverable || '周汇报文件',
           ...calcWeekDates(ym, i),
         });
@@ -388,15 +478,20 @@ function ensureKpiPlansForUser(user, todayStr = todayDateStr()) {
   const plans = ensureKpiPlansArray(store);
   const ym = currentYearMonth();
   const created = [];
+  const bootstrap = getFirstBootstrapMonthForDept(user?.dept);
 
-  if (compareDate(ym, FIRST_BOOTSTRAP_MONTH) >= 0) {
+  if (compareDate(ym, bootstrap) >= 0) {
     created.push(...generateFixedPlansForUserMonth(user, ym, plans));
   }
 
   const planArrange = findMonthlyPlanArrange(plans, user, ym);
-  if (planArrange?.planStartDate && compareDate(todayStr, planArrange.planStartDate) >= 0) {
+  const day = parseInt(String(todayStr).slice(8, 10), 10) || 0;
+  const shouldGenNext =
+    (planArrange?.planStartDate && compareDate(todayStr, planArrange.planStartDate) >= 0) ||
+    (user.dept === KPI_DEPT_PMO && day >= 25);
+  if (shouldGenNext) {
     const nextYm = addMonths(ym, 1);
-    if (nextYm && compareDate(nextYm, FIRST_BOOTSTRAP_MONTH) >= 0) {
+    if (nextYm && compareDate(nextYm, bootstrap) >= 0) {
       created.push(...generateFixedPlansForUserMonth(user, nextYm, plans));
     }
   }
@@ -410,9 +505,10 @@ function refreshFixedWeeklyDates(plans, yearMonth) {
   if (!ym) return false;
   const ranges = calcMonthWeekRanges(ym);
   const fullMonth = calcPlanDates(ym, { kind: 'fullMonth' });
+  const m = monthNumber(ym);
   let changed = false;
   for (const p of plans) {
-    if (p.yearMonth !== ym || p.type !== 'fixed' || p.templateKey !== 'weekly_report') continue;
+    if (p.yearMonth !== ym || p.type !== 'fixed' || !isWeeklyFixedTemplateKey(p.templateKey)) continue;
     if (p.isParent) {
       if (p.planStartDate !== fullMonth.planStartDate || p.planEndDate !== fullMonth.planEndDate) {
         p.planStartDate = fullMonth.planStartDate;
@@ -426,14 +522,33 @@ function refreshFixedWeeklyDates(plans, yearMonth) {
     const range = ranges[p.weekIndex];
     if (!range) continue;
     const [start, end] = range;
-    if (p.planStartDate !== start || p.planEndDate !== end) {
+    const expectedName = `${m}月${WEEK_LABELS[p.weekIndex] || ''}周`;
+    if (p.planStartDate !== start || p.planEndDate !== end || p.taskName !== expectedName) {
       p.planStartDate = start;
       p.planEndDate = end;
+      p.taskName = expectedName;
       p.updatedAt = new Date().toISOString();
       changed = true;
     }
   }
   return changed;
+}
+
+function purgeKpiPlansBeforeDeptBootstrap(plans) {
+  let removed = 0;
+  const users = getAllUsers();
+  for (let i = (plans || []).length - 1; i >= 0; i--) {
+    const p = plans[i];
+    const ym = normalizeYearMonth(p?.yearMonth);
+    if (!ym) continue;
+    const dept = resolvePlanDept(p, users);
+    const bootstrap = getFirstBootstrapMonthForDept(dept);
+    if (compareDate(ym, bootstrap) < 0) {
+      plans.splice(i, 1);
+      removed += 1;
+    }
+  }
+  return removed;
 }
 
 function ensureKpiPlansForMonth(yearMonth) {
@@ -443,20 +558,25 @@ function ensureKpiPlansForMonth(yearMonth) {
   let total = 0;
   const store = getDb();
   const plans = ensureKpiPlansArray(store);
+  const purged = purgeKpiPlansBeforeDeptBootstrap(plans);
   for (const user of members) {
     total += generateFixedPlansForUserMonth(user, ym, plans).length;
   }
   const refreshed = refreshFixedWeeklyDates(plans, ym);
-  if (total || refreshed) persistStore();
+  if (total || refreshed || purged) persistStore();
   return total;
 }
 
 function ensureKpiPlansForDept(todayStr = todayDateStr()) {
+  const store = getDb();
+  const plans = ensureKpiPlansArray(store);
+  const purged = purgeKpiPlansBeforeDeptBootstrap(plans);
   const members = listKpiDeptMembers(getAllUsers());
   let total = 0;
   for (const user of members) {
     total += ensureKpiPlansForUser(user, todayStr).length;
   }
+  if (purged) persistStore();
   return total;
 }
 
@@ -469,13 +589,16 @@ function listMonthOptionsFromPlans(plans) {
 }
 
 function compareKpiPlans(a, b) {
+  const deptCmp = String(a.dept || '').localeCompare(String(b.dept || ''), 'zh-CN');
+  if (deptCmp !== 0) return deptCmp;
   if (a.type !== b.type) {
     if (a.type === 'fixed') return -1;
     if (b.type === 'fixed') return 1;
   }
   if (a.type === 'fixed' && b.type === 'fixed') {
-    const ia = FIXED_TEMPLATE_ORDER.indexOf(a.templateKey || '');
-    const ib = FIXED_TEMPLATE_ORDER.indexOf(b.templateKey || '');
+    const order = getFixedTemplateOrderForDept(a.dept || b.dept);
+    const ia = order.indexOf(a.templateKey || '');
+    const ib = order.indexOf(b.templateKey || '');
     if (ia !== ib) return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
     return (a.weekIndex ?? -1) - (b.weekIndex ?? -1);
   }
@@ -486,13 +609,30 @@ function compareKpiPlans(a, b) {
 
 function filterPlansForViewer(user, plans, yearMonth) {
   const ym = normalizeYearMonth(yearMonth) || currentYearMonth();
-  let list = (plans || []).filter(p => p.dept === KPI_DEPT && p.yearMonth === ym);
+  const users = getAllUsers();
+  let list = (plans || [])
+    .filter(p => p.yearMonth === ym)
+    .map(p => normalizePlanRecord(p, users))
+    // 手工停用人员的计划不展示（仍保留在库中，恢复后可见）
+    .filter(p => {
+      const assignee = findAssigneeUser(p, users);
+      return !(assignee && assignee.active === false);
+    });
   if (!user) return [];
   const { canViewAllDeptKpiPlans } = require('../utils/kpiPlanAccess');
   if (!canViewAllDeptKpiPlans(user)) {
     list = list.filter(p => p.assigneeId === user.id || p.assignee === user.name);
   }
   return list.sort(compareKpiPlans);
+}
+
+function listDeptsFromPlans(plans) {
+  const set = new Set();
+  for (const p of plans || []) {
+    const d = String(p.dept || '').trim();
+    if (d) set.add(d);
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, 'zh-CN'));
 }
 
 const TRACKED_FIELDS = [
@@ -745,8 +885,12 @@ function createCustomPlan(user, body = {}) {
   const store = getDb();
   const plans = ensureKpiPlansArray(store);
   const ym = normalizeYearMonth(body.yearMonth) || currentYearMonth();
-  if (compareDate(ym, FIRST_BOOTSTRAP_MONTH) < 0) {
-    throw new Error(`计划月份不能早于 ${FIRST_BOOTSTRAP_MONTH}`);
+  const assigneeId = body.assigneeId || user.id;
+  const assigneeUser = (getAllUsers() || []).find(u => u.id === assigneeId) || user;
+  const dept = body.dept || assigneeUser?.dept || user?.dept;
+  const bootstrap = getFirstBootstrapMonthForDept(dept);
+  if (compareDate(ym, bootstrap) < 0) {
+    throw new Error(`计划月份不能早于 ${bootstrap}`);
   }
   const plan = createPlanSkeleton(user, {
     yearMonth: ym,
@@ -757,8 +901,9 @@ function createCustomPlan(user, body = {}) {
     targetDeliverable: String(body.targetDeliverable || '').trim(),
     planStartDate: String(body.planStartDate || '').trim() || null,
     planEndDate: String(body.planEndDate || '').trim() || null,
-    assigneeId: body.assigneeId || user.id,
+    assigneeId,
     assignee: String(body.assignee || user.name).trim(),
+    dept,
     collaborators: Array.isArray(body.collaborators) ? body.collaborators : [],
     riskMitigation: String(body.riskMitigation || '').trim(),
     desc: String(body.desc || '').trim(),
@@ -820,6 +965,7 @@ function updateKpiPlan(user, planId, body = {}) {
   const prevStatus = prev.status;
   syncStatusFromMonthlyResult(next);
   applyStatusSideEffects(next, prevStatus, user.name);
+  next.dept = resolvePlanDept(next, getAllUsers());
 
   const logs = buildChangeEntries(prev, next, user.name);
   plans[idx] = next;
@@ -836,10 +982,15 @@ function getPlanChangeLogs(planId) {
 
 module.exports = {
   KPI_DEPT,
+  KPI_DEPT_PMO,
   FIRST_BOOTSTRAP_MONTH,
+  FIRST_BOOTSTRAP_MONTH_PMO,
+  getFirstBootstrapMonthForDept,
   FIXED_TEMPLATES,
+  FIXED_TEMPLATES_PMO,
   MONTHLY_RESULT_OPTIONS,
   monthlyResultLabel,
+  getFixedTemplatesForDept,
   genId,
   normalizeYearMonth,
   addMonths,
@@ -850,7 +1001,10 @@ module.exports = {
   ensureKpiPlansForUser,
   filterPlansForViewer,
   listMonthOptionsFromPlans,
+  listDeptsFromPlans,
+  resolvePlanDept,
   findPlanById,
+  findAssigneeUser,
   createCustomPlan,
   updateKpiPlan,
   getPlanChangeLogs,

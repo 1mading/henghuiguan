@@ -234,6 +234,105 @@ const V4_TEMPLATE = {
   ],
 };
 
+/** 与《2026陈璇通用绩效考核表_项目管控部副科长》列文案、分值保持一致（项目管控部固定模板） */
+const PMO_TEMPLATE = {
+  id: 'TPL-PMO-2026',
+  name: '2026年恒田企业信息中心项目管控部副科长通用绩效考核评分表',
+  version: 'PMO-2026',
+  contentVersion: 1,
+  bonusCap: 0,
+  companyName: '信息中心',
+  dept: '项目管控部',
+  positionName: '副科长',
+  baseScoreTotal: 80,
+  remark:
+    '本表为项目管控部岗位职能考核（总分80分）。评分需结合项目台账、问题清单、周报汇总、月度管控报告及部门负责人反馈。',
+  indicators: [
+    {
+      key: 'pmo_progress_ledger',
+      section: 'duty',
+      sectionTitle: '岗位职能指标（总分80分）',
+      category: '岗位指标',
+      title: '项目进度跟踪与台账管理',
+      shortName: '进度台账',
+      weight: 0.25,
+      maxScore: 20,
+      maxScoreLabel: '20',
+      definition:
+        '对信息中心在跑项目进行全面摸排与进度跟踪，建立项目台账（项目Owner、状态、关键节点）。每周更新台账，确保项目状态透明、无盲区。',
+      target: '项目台账覆盖率100%；每周更新；能准确回答各项目当前状态。',
+      scoringRule:
+        '本项标准值20分。1、按期完成得20分；2、台账未及时更新扣3分/次；3、项目信息遗漏或失真扣5分/次；4、隐瞒项目问题不报本项为0。',
+      dataSource: '部门负责人/各项目负责人',
+    },
+    {
+      key: 'pmo_risk_alert',
+      section: 'duty',
+      sectionTitle: '岗位职能指标（总分80分）',
+      category: '岗位指标',
+      title: '风险识别与预警上报',
+      shortName: '风险预警',
+      weight: 0.2,
+      maxScore: 16,
+      maxScoreLabel: '16',
+      definition: '主动发现项目风险、卡点和异常，建立问题清单并跟踪解决进度。P0问题24小时内上报。',
+      target: '风险识别及时率≥90%；P0问题24小时内上报；问题清单闭环率≥80%。',
+      scoringRule:
+        '本项标准值16分。1、按期达成得16分；2、P0问题漏报扣5分/次；3、超时上报扣3分/次；4、问题未跟踪闭环扣2分/个。',
+      dataSource: '部门负责人/各项目负责人',
+    },
+    {
+      key: 'pmo_weekly_summary',
+      section: 'duty',
+      sectionTitle: '岗位职能指标（总分80分）',
+      category: '岗位指标',
+      title: '周报收集与月度汇总',
+      shortName: '周报月汇总',
+      weight: 0.15,
+      maxScore: 12,
+      maxScoreLabel: '12',
+      definition: '每周收集各项目周报，汇总项目看板（正常/有风险/卡住），月底输出月度管控报告。',
+      target: '周报收集率100%；周报汇总按时输出；月度报告经审核通过。',
+      scoringRule:
+        '本项标准值12分。1、按期完成得12分；2、周报未收齐扣2分/人；3、汇总延误扣3分/次；4、月报未通过扣5分/次。',
+      dataSource: '部门负责人',
+    },
+    {
+      key: 'pmo_key_project_push',
+      section: 'duty',
+      sectionTitle: '岗位职能指标（总分80分）',
+      category: '岗位指标',
+      title: '重点项目进度跟进与推动',
+      shortName: '重点项目推动',
+      weight: 0.15,
+      maxScore: 12,
+      maxScoreLabel: '12',
+      definition: '对重点项目进行日常跟进，掌握项目进展与关键节点，推动问题解决，确保项目按计划推进。',
+      target: '重点项目跟进率≥90%；关键节点信息准确；问题推动有记录有反馈。',
+      scoringRule:
+        '本项标准值12分。1、全部达成得12分；2、跟进不及时扣3分/次；3、节点信息不准确扣2分/次；4、问题未推动反馈扣3分/个。',
+      dataSource: '部门负责人/各项目负责人',
+    },
+    {
+      key: 'pmo_pdca_review',
+      section: 'duty',
+      sectionTitle: '岗位职能指标（总分80分）',
+      category: '岗位指标',
+      title: '计划跟进与复盘总结（PDCA闭环）',
+      shortName: 'PDCA复盘',
+      weight: 0.25,
+      maxScore: 20,
+      maxScoreLabel: '20',
+      definition:
+        '对重点项目进行计划跟进，发现问题及时推动解决。月度进行复盘总结，输出改进措施并跟踪落实。形成问题清单并跟踪闭环。',
+      target: '重点节点跟进率≥90%；问题推动闭环率≥80%；月度复盘报告按时输出。',
+      scoringRule:
+        '本项标准值20分。1、按期达成得20分；2、节点未跟进扣3分/个；3、问题未推动闭环扣3分/个；4、复盘报告延误扣5分/次。',
+      dataSource: '部门负责人/各项目负责人',
+    },
+  ],
+};
+
 function genId(prefix) {
   return prefix + '-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
 }
@@ -303,30 +402,47 @@ function isPerformanceAdmin(user) {
   return false;
 }
 
-function ensurePerformanceStore(store) {
-  if (!Array.isArray(store.performanceTemplates)) store.performanceTemplates = [];
-  if (!Array.isArray(store.performanceCycles)) store.performanceCycles = [];
-  if (!Array.isArray(store.performanceAssessments)) store.performanceAssessments = [];
-  const existing = store.performanceTemplates.find(t => t.id === V4_TEMPLATE.id);
+const BUILTIN_TEMPLATES = [V4_TEMPLATE, PMO_TEMPLATE];
+
+function upsertBuiltinTemplate(store, template) {
+  const existing = store.performanceTemplates.find(t => t.id === template.id);
   if (!existing) {
-    store.performanceTemplates.push(structuredClone(V4_TEMPLATE));
+    store.performanceTemplates.push(structuredClone(template));
     return true;
   }
   const needRefresh =
-    existing.version !== V4_TEMPLATE.version ||
-    existing.contentVersion !== V4_TEMPLATE.contentVersion ||
-    (existing.indicators || []).length !== V4_TEMPLATE.indicators.length;
+    existing.version !== template.version ||
+    existing.contentVersion !== template.contentVersion ||
+    (existing.indicators || []).length !== template.indicators.length;
   if (needRefresh) {
-    const idx = store.performanceTemplates.findIndex(t => t.id === V4_TEMPLATE.id);
-    store.performanceTemplates[idx] = structuredClone(V4_TEMPLATE);
+    const idx = store.performanceTemplates.findIndex(t => t.id === template.id);
+    store.performanceTemplates[idx] = structuredClone(template);
     return true;
   }
   return false;
 }
 
-function getActiveTemplate(store) {
+function ensurePerformanceStore(store) {
+  if (!Array.isArray(store.performanceTemplates)) store.performanceTemplates = [];
+  if (!Array.isArray(store.performanceCycles)) store.performanceCycles = [];
+  if (!Array.isArray(store.performanceAssessments)) store.performanceAssessments = [];
+  let changed = false;
+  for (const tpl of BUILTIN_TEMPLATES) {
+    if (upsertBuiltinTemplate(store, tpl)) changed = true;
+  }
+  return changed;
+}
+
+function getTemplateByDept(store, dept) {
   ensurePerformanceStore(store);
+  if (dept === '项目管控部') {
+    return store.performanceTemplates.find(t => t.id === PMO_TEMPLATE.id) || PMO_TEMPLATE;
+  }
   return store.performanceTemplates.find(t => t.id === V4_TEMPLATE.id) || V4_TEMPLATE;
+}
+
+function getActiveTemplate(store, dept) {
+  return getTemplateByDept(store, dept);
 }
 
 function getIndicatorMap(template) {
@@ -461,11 +577,13 @@ function countPerformanceFileRefs(store, fileId) {
 
 module.exports = {
   V4_TEMPLATE,
+  PMO_TEMPLATE,
   EVIDENCE_TYPES,
   genId,
   isPerformanceAdmin,
   ensurePerformanceStore,
   getActiveTemplate,
+  getTemplateByDept,
   getIndicatorMap,
   calcAssessmentTotal,
   createAssessmentSkeleton,
