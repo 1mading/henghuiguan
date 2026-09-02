@@ -371,6 +371,7 @@ function normalizePlanRecord(raw, users = getAllUsers()) {
   plan.riskMitigation = String(plan.riskMitigation || '').trim();
   plan.desc = String(plan.desc || '').trim();
   plan.progress = Math.max(0, Math.min(100, parseInt(plan.progress, 10) || 0));
+  if (Number.isFinite(Number(raw.sortOrder))) plan.sortOrder = Number(raw.sortOrder);
   if (!['pending', 'doing', 'done', 'cancelled', 'paused'].includes(plan.status)) {
     plan.status = 'pending';
   }
@@ -589,9 +590,7 @@ function listMonthOptionsFromPlans(plans) {
   return [...set].sort().reverse();
 }
 
-function compareKpiPlans(a, b) {
-  const deptCmp = String(a.dept || '').localeCompare(String(b.dept || ''), 'zh-CN');
-  if (deptCmp !== 0) return deptCmp;
+function compareKpiPlansDefault(a, b) {
   if (a.type !== b.type) {
     if (a.type === 'fixed') return -1;
     if (b.type === 'fixed') return 1;
@@ -608,8 +607,77 @@ function compareKpiPlans(a, b) {
   return String(a.taskName || '').localeCompare(String(b.taskName || ''), 'zh-CN');
 }
 
+function planAssigneeKey(plan) {
+  return String(plan?.assigneeId || plan?.assignee || '');
+}
+
+function compareKpiPlans(a, b) {
+  const deptCmp = String(a.dept || '').localeCompare(String(b.dept || ''), 'zh-CN');
+  if (deptCmp !== 0) return deptCmp;
+  const assigneeCmp = String(a.assignee || '').localeCompare(String(b.assignee || ''), 'zh-CN');
+  if (assigneeCmp !== 0) return assigneeCmp;
+  const keyCmp = planAssigneeKey(a).localeCompare(planAssigneeKey(b));
+  if (keyCmp !== 0) return keyCmp;
+  // 固定计划始终按模板顺序，不允许拖拽打乱
+  if (a.type === 'fixed' || b.type === 'fixed') {
+    return compareKpiPlansDefault(a, b);
+  }
+  const ao = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : null;
+  const bo = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : null;
+  if (ao != null && bo != null && ao !== bo) return ao - bo;
+  return compareKpiPlansDefault(a, b);
+}
+
+/** 仅为自定义计划补齐 sortOrder（按责任人分组），固定计划不参与拖拽排序 */
+function ensureSortOrdersForMonth(yearMonth) {
+  const ym = normalizeYearMonth(yearMonth);
+  if (!ym) return false;
+  const store = getDb();
+  const plans = ensureKpiPlansArray(store);
+  const groups = new Map();
+  for (const p of plans) {
+    if (!p || p.yearMonth !== ym || p.isParent || p.type !== 'custom') continue;
+    const key = planAssigneeKey(p);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+  let changed = false;
+  for (const group of groups.values()) {
+    const missing = group.some(p => !Number.isFinite(Number(p.sortOrder)));
+    if (!missing) continue;
+    group.sort((a, b) => {
+      const byStart = compareDate(a.planStartDate, b.planStartDate);
+      if (byStart !== 0) return byStart;
+      return String(a.taskName || '').localeCompare(String(b.taskName || ''), 'zh-CN');
+    });
+    group.forEach((p, i) => {
+      if (Number(p.sortOrder) !== i) {
+        p.sortOrder = i;
+        changed = true;
+      }
+    });
+  }
+  if (changed) persistStore();
+  return changed;
+}
+
+function nextSortOrderForAssignee(plans, yearMonth, assigneeId, assigneeName) {
+  const ym = normalizeYearMonth(yearMonth);
+  let max = -1;
+  for (const p of plans || []) {
+    if (!p || p.yearMonth !== ym || p.isParent || p.type !== 'custom') continue;
+    const same = (assigneeId && p.assigneeId === assigneeId)
+      || (!!assigneeName && p.assignee === assigneeName);
+    if (!same) continue;
+    const n = Number(p.sortOrder);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max + 1;
+}
+
 function filterPlansForViewer(user, plans, yearMonth) {
   const ym = normalizeYearMonth(yearMonth) || currentYearMonth();
+  ensureSortOrdersForMonth(ym);
   const users = getAllUsers();
   let list = (plans || [])
     .filter(p => p.yearMonth === ym)
@@ -931,6 +999,7 @@ function createCustomPlan(user, body = {}) {
     monthlyResult: body.monthlyResult,
     actualStartDate: body.actualStartDate || null,
     actualEndDate: body.actualEndDate || null,
+    sortOrder: nextSortOrderForAssignee(plans, ym, assigneeId, String(body.assignee || user.name).trim()),
     createdBy: user.name,
     updatedBy: user.name,
   });
@@ -1018,6 +1087,65 @@ function deleteKpiPlan(user, planId) {
   return plan;
 }
 
+/**
+ * 按给定 id 顺序重排同一责任人、同一月份的自定义计划（固定计划不可排序）
+ */
+function reorderKpiPlans(user, orderedIds = []) {
+  const { canEditKpiPlan } = require('../utils/kpiPlanAccess');
+  const ids = (orderedIds || []).map(String).filter(Boolean);
+  if (ids.length < 2) throw new Error('请至少调整两条计划的顺序');
+  const store = getDb();
+  const plans = ensureKpiPlansArray(store);
+  const selected = ids.map(id => {
+    const p = plans.find(x => x.id === id);
+    if (!p) throw new Error(`计划不存在：${id}`);
+    if (p.isParent) throw new Error('父级计划不可单独排序');
+    if (p.type !== 'custom') throw new Error('固定计划不可调整顺序');
+    if (!canEditKpiPlan(user, p)) throw new Error('无权调整该计划顺序');
+    return p;
+  });
+  const ym = selected[0].yearMonth;
+  const assigneeKey = planAssigneeKey(selected[0]);
+  for (const p of selected) {
+    if (p.yearMonth !== ym) throw new Error('只能调整同一月份的计划顺序');
+    if (planAssigneeKey(p) !== assigneeKey) throw new Error('只能调整同一责任人的计划顺序');
+  }
+
+  const selectedSet = new Set(ids);
+  const rest = plans
+    .filter(p =>
+      p.yearMonth === ym &&
+      !p.isParent &&
+      p.type === 'custom' &&
+      planAssigneeKey(p) === assigneeKey &&
+      !selectedSet.has(p.id)
+    )
+    .sort((a, b) => {
+      const ao = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 0;
+      const bo = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 0;
+      return ao - bo;
+    });
+
+  [...selected, ...rest].forEach((p, i) => {
+    p.sortOrder = i;
+    p.updatedAt = new Date().toISOString();
+    p.updatedBy = user.name;
+  });
+
+  appendChangeLogs([{
+    id: genId('L'),
+    taskId: `KPI-REORDER-${ym}-${assigneeKey || 'x'}`,
+    operator: user.name,
+    operateTime: new Date().toLocaleString('zh-CN', { hour12: false }),
+    before: '原顺序',
+    after: `已调整 ${selected.length} 条自定义计划顺序`,
+    reason: '调整 KPI 计划顺序',
+    project: `KPI·${ym}`,
+  }]);
+  persistStore();
+  return selected.map(p => normalizePlanRecord(p));
+}
+
 function getPlanChangeLogs(planId) {
   const tid = `KPI-${planId}`;
   const store = getDb();
@@ -1052,6 +1180,7 @@ module.exports = {
   createCustomPlan,
   updateKpiPlan,
   deleteKpiPlan,
+  reorderKpiPlans,
   getPlanChangeLogs,
   normalizePlanRecord,
   compareKpiPlans,

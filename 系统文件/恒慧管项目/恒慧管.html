@@ -745,6 +745,7 @@
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       line-height: 1.35; height: 40px; max-height: 40px;
     }
+    .kpi-plan-table .kpi-col-drag { width: 36px; text-align: center; color: #9CA3AF; }
     .kpi-plan-table .kpi-col-dept { width: 100px; }
     .kpi-plan-table .kpi-col-type { width: 68px; }
     .kpi-plan-table .kpi-col-project { width: 120px; }
@@ -758,6 +759,15 @@
     .kpi-plan-deliverable { color: #374151; }
     .kpi-plan-table th { background: #FAFAFA; color: var(--text-muted); font-weight: 600; height: 36px; max-height: 36px; }
     .kpi-plan-table tr:hover td { background: #FAFAFA; }
+    .kpi-plan-table tr.kpi-plan-row-dragging { opacity: 0.55; }
+    .kpi-plan-table tr.kpi-plan-row-drop-before td { box-shadow: inset 0 2px 0 0 var(--brand); }
+    .kpi-plan-table tr.kpi-plan-row-drop-after td { box-shadow: inset 0 -2px 0 0 var(--brand); }
+    .kpi-plan-drag-handle {
+      cursor: grab; color: #9CA3AF; padding: 4px 6px; border: none; background: none;
+      font-size: 13px; line-height: 1;
+    }
+    .kpi-plan-drag-handle:active { cursor: grabbing; }
+    .kpi-plan-drag-handle:disabled { cursor: not-allowed; opacity: 0.35; }
     .kpi-plan-row-child .kpi-col-task { padding-left: 20px; }
     .kpi-plan-tag {
       display: inline-flex; align-items: center; justify-content: center;
@@ -5725,9 +5735,32 @@
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     }
 
+    function canEditKpiPlanRow(plan, user = currentUser) {
+      if (!canAccessKpiPlans(user) || !plan) return false;
+      if (canViewAllKpiPlans(user)) return true;
+      return plan.assigneeId === user.id || plan.assignee === user.name;
+    }
+
+    function canDeleteKpiPlanRow(plan, user = currentUser) {
+      return !!(plan && plan.type === 'custom' && canEditKpiPlanRow(plan, user));
+    }
+
+    function canReorderKpiPlanRow(plan, user = currentUser) {
+      return !!(plan && plan.type === 'custom' && canEditKpiPlanRow(plan, user));
+    }
+
+    function kpiPlanAssigneeKey(plan) {
+      return String(plan?.assigneeId || plan?.assignee || '');
+    }
+
     function compareKpiPlansInList(a, b) {
       const deptCmp = String(a.dept || '').localeCompare(String(b.dept || ''), 'zh-CN');
       if (deptCmp !== 0) return deptCmp;
+      const assigneeCmp = String(a.assignee || '').localeCompare(String(b.assignee || ''), 'zh-CN');
+      if (assigneeCmp !== 0) return assigneeCmp;
+      const keyCmp = kpiPlanAssigneeKey(a).localeCompare(kpiPlanAssigneeKey(b));
+      if (keyCmp !== 0) return keyCmp;
+      // 固定在前且按模板顺序；仅自定义计划使用 sortOrder
       if (a.type !== b.type) {
         if (a.type === 'fixed') return -1;
         if (b.type === 'fixed') return 1;
@@ -5738,6 +5771,9 @@
         if (ia !== ib) return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
         return (a.weekIndex ?? -1) - (b.weekIndex ?? -1);
       }
+      const ao = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : null;
+      const bo = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : null;
+      if (ao != null && bo != null && ao !== bo) return ao - bo;
       const sa = String(a.planStartDate || '');
       const sb = String(b.planStartDate || '');
       if (sa !== sb) return sa.localeCompare(sb);
@@ -5796,7 +5832,7 @@
           </select>`
         : '';
       const showDeptCol = !!state.kpiCanViewAll;
-      const colSpan = showDeptCol ? 10 : 9;
+      const colSpan = (showDeptCol ? 10 : 9) + 1;
       let lastDept = null;
       const rowsHtml = list.length ? list.map(p => {
         let deptHeader = '';
@@ -5804,8 +5840,19 @@
           lastDept = p.dept;
           deptHeader = `<tr class="kpi-plan-dept-group"><td colspan="${colSpan}" style="background:#F8FAFC;font-weight:600;color:#334155;padding:10px 12px;">${escapeHtml(p.dept)}</td></tr>`;
         }
+        const canDelete = canDeleteKpiPlanRow(p);
+        const canReorder = canReorderKpiPlanRow(p);
         return `${deptHeader}
-          <tr class="${p.parentId ? 'kpi-plan-row-child' : ''}">
+          <tr class="kpi-plan-data-row ${p.parentId ? 'kpi-plan-row-child' : ''}" data-kpi-id="${escapeHtml(p.id)}" data-kpi-assignee="${escapeHtml(kpiPlanAssigneeKey(p))}" data-kpi-type="${escapeHtml(p.type || '')}"
+            ondragover="onKpiPlanDragOver(event,'${p.id}')" ondragleave="onKpiPlanDragLeave(event)" ondrop="onKpiPlanDrop(event,'${p.id}')">
+            <td class="kpi-col-drag">
+              ${canReorder
+                ? `<span class="kpi-plan-drag-handle" draggable="true" title="拖拽调整自定义计划顺序"
+                    ondragstart="onKpiPlanDragStart(event,'${p.id}')" ondragend="onKpiPlanDragEnd(event)">
+                    <i class="fas fa-grip-vertical"></i>
+                  </span>`
+                : `<span class="kpi-plan-drag-handle" style="opacity:0.28;cursor:not-allowed;" title="${p.type === 'fixed' ? '固定计划不可拖拽' : '无权调整'}"><i class="fas fa-grip-vertical"></i></span>`}
+            </td>
             ${showDeptCol ? `<td class="kpi-col-dept">${escapeHtml(p.dept || '')}</td>` : ''}
             <td class="kpi-col-type"><span class="kpi-plan-tag ${p.type === 'custom' ? 'is-custom' : 'is-fixed'}">${p.type === 'custom' ? '自定义' : '固定'}</span></td>
             <td class="kpi-col-project" title="${escapeHtml(p.projectName || '')}">${escapeHtml(p.projectName || '')}</td>
@@ -5817,7 +5864,7 @@
             <td class="kpi-col-result">${renderKpiMonthlyResultQuick(p)}</td>
             <td class="kpi-col-actions" style="white-space:nowrap;">
               <button type="button" class="btn btn-ghost btn-sm" onclick="openKpiPlanEdit('${p.id}')" title="编辑"><i class="fas fa-edit"></i></button>
-              ${p.type === 'custom' ? `<button type="button" class="btn btn-ghost btn-sm" style="color:#DC2626;" onclick="deleteKpiPlan('${p.id}')" title="删除"><i class="fas fa-trash-alt"></i></button>` : ''}
+              ${canDelete ? `<button type="button" class="btn btn-ghost btn-sm" style="color:#DC2626;" onclick="deleteKpiPlan('${p.id}')" title="删除自定义计划"><i class="fas fa-trash-alt"></i></button>` : ''}
             </td>
           </tr>`;
       }).join('') : `<tr><td colspan="${colSpan}" style="padding:24px;color:#9CA3AF;text-align:center;">暂无计划，请选择月份或等待系统自动生成</td></tr>`;
@@ -5825,6 +5872,7 @@
         <div class="kpi-plan-wrap">
           <p class="content-intro" style="margin-bottom:12px;">
             KPI 计划按责任人部门区分。实施交付部首套从 ${escapeHtml(state.kpiFirstBootstrapMonth || '2026-08')} 起，项目管控部从 ${escapeHtml(state.kpiFirstBootstrapMonthPmo || '2026-09')} 起；部门经理/管理员/总经理可查看全部部门。
+            自定义计划均可删除；仅自定义计划可拖拽左侧手柄调整上下顺序（固定计划不可拖拽）。
             周汇报固定 4 段：首段从当月第一个周一起（若月初空档 ≥3 天则从 1 号起并入首段），月末剩余天数并入第四段；仅 1~2 天空档由「项目整体节点主动汇报」父任务覆盖。
           </p>
           <div class="kpi-plan-toolbar">
@@ -5842,6 +5890,7 @@
               <table class="kpi-plan-table">
                 <thead>
                   <tr>
+                    <th class="kpi-col-drag" title="拖拽排序"></th>
                     ${showDeptCol ? '<th class="kpi-col-dept">部门</th>' : ''}
                     <th class="kpi-col-type">类型</th>
                     <th class="kpi-col-project">项目名称</th>
@@ -5942,8 +5991,8 @@
     async function deleteKpiPlan(planId) {
       if (!ApiConfig.enabled || !authSession.token) { alert('请连接服务端'); return; }
       const plan = (state.kpiPlans || []).find(p => p.id === planId) || (state.form?.id === planId ? state.form : null);
-      if (plan && plan.type !== 'custom') {
-        alert('固定计划不可删除');
+      if (!canDeleteKpiPlanRow(plan)) {
+        alert(plan && plan.type !== 'custom' ? '固定计划不可删除' : '无权删除该计划');
         return;
       }
       const label = plan?.taskName
@@ -5961,6 +6010,112 @@
         await KpiPlanService.load(state.kpiYearMonth);
       } catch (e) {
         alert(e.message || '删除失败');
+      }
+    }
+
+    function clearKpiPlanDropIndicators() {
+      document.querySelectorAll('.kpi-plan-row-drop-before, .kpi-plan-row-drop-after, .kpi-plan-row-dragging').forEach(el => {
+        el.classList.remove('kpi-plan-row-drop-before', 'kpi-plan-row-drop-after', 'kpi-plan-row-dragging');
+      });
+    }
+
+    function onKpiPlanDragStart(event, planId) {
+      const plan = (state.kpiPlans || []).find(p => p.id === planId);
+      if (!canReorderKpiPlanRow(plan)) {
+        event.preventDefault();
+        return;
+      }
+      state._kpiDragId = planId;
+      state._kpiDragAssignee = kpiPlanAssigneeKey(plan);
+      try {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/kpi-plan-id', planId);
+        event.dataTransfer.setData('text/plain', planId);
+      } catch (_) { /* ignore */ }
+      const row = event.target.closest('tr');
+      if (row) setTimeout(() => row.classList.add('kpi-plan-row-dragging'), 0);
+    }
+
+    function onKpiPlanDragEnd() {
+      state._kpiDragId = null;
+      state._kpiDragAssignee = null;
+      clearKpiPlanDropIndicators();
+    }
+
+    function onKpiPlanDragOver(event, targetId) {
+      const dragId = state._kpiDragId;
+      if (!dragId || dragId === targetId) return;
+      const target = (state.kpiPlans || []).find(p => p.id === targetId);
+      if (!canReorderKpiPlanRow(target) || kpiPlanAssigneeKey(target) !== state._kpiDragAssignee) return;
+      event.preventDefault();
+      try { event.dataTransfer.dropEffect = 'move'; } catch (_) { /* ignore */ }
+      clearKpiPlanDropIndicators();
+      const row = event.currentTarget;
+      if (!row) return;
+      const rect = row.getBoundingClientRect();
+      const before = event.clientY < rect.top + rect.height / 2;
+      row.classList.add(before ? 'kpi-plan-row-drop-before' : 'kpi-plan-row-drop-after');
+      state._kpiDropBefore = before;
+    }
+
+    function onKpiPlanDragLeave(event) {
+      const row = event.currentTarget;
+      if (!row) return;
+      row.classList.remove('kpi-plan-row-drop-before', 'kpi-plan-row-drop-after');
+    }
+
+    async function onKpiPlanDrop(event, targetId) {
+      event.preventDefault();
+      const dragId = state._kpiDragId || (() => {
+        try { return event.dataTransfer.getData('text/kpi-plan-id') || event.dataTransfer.getData('text/plain'); }
+        catch { return null; }
+      })();
+      clearKpiPlanDropIndicators();
+      if (!dragId || dragId === targetId) return;
+      const list = getFilteredKpiPlans();
+      const dragPlan = list.find(p => p.id === dragId) || (state.kpiPlans || []).find(p => p.id === dragId);
+      const targetPlan = list.find(p => p.id === targetId) || (state.kpiPlans || []).find(p => p.id === targetId);
+      if (!dragPlan || !targetPlan) return;
+      if (!canReorderKpiPlanRow(dragPlan) || !canReorderKpiPlanRow(targetPlan)) {
+        alert('固定计划不可拖拽，仅可调整自定义计划顺序');
+        return;
+      }
+      if (kpiPlanAssigneeKey(dragPlan) !== kpiPlanAssigneeKey(targetPlan)) {
+        alert('只能在同一责任人的计划之间调整顺序');
+        return;
+      }
+      const assigneeKey = kpiPlanAssigneeKey(dragPlan);
+      const siblingIds = list
+        .filter(p => kpiPlanAssigneeKey(p) === assigneeKey && p.type === 'custom')
+        .map(p => p.id);
+      const from = siblingIds.indexOf(dragId);
+      const to = siblingIds.indexOf(targetId);
+      if (from < 0 || to < 0) return;
+      const next = siblingIds.slice();
+      next.splice(from, 1);
+      let insertAt = next.indexOf(targetId);
+      if (insertAt < 0) return;
+      const dropBefore = state._kpiDropBefore !== false;
+      if (!dropBefore) insertAt += 1;
+      next.splice(insertAt, 0, dragId);
+      // 乐观更新本地 sortOrder（仅自定义）
+      next.forEach((id, i) => {
+        const p = (state.kpiPlans || []).find(x => x.id === id);
+        if (p) p.sortOrder = i;
+      });
+      render();
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/kpi-plans/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+          body: JSON.stringify({ orderedIds: next }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || '调整顺序失败');
+        await KpiPlanService.load(state.kpiYearMonth);
+      } catch (e) {
+        alert(e.message || '调整顺序失败');
+        await KpiPlanService.load(state.kpiYearMonth);
       }
     }
 
@@ -6059,7 +6214,7 @@
 
     function renderKpiPlanEditModal() {
       const plan = state.form || {};
-      const canDelete = plan.type === 'custom';
+      const canDelete = canDeleteKpiPlanRow(plan);
       return `
         <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
           <div class="modal-box" style="max-width:640px;max-height:90vh;overflow:auto;" onclick="event.stopPropagation()">

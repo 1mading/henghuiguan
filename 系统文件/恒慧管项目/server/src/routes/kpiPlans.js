@@ -24,6 +24,7 @@ const {
   createCustomPlan,
   updateKpiPlan,
   deleteKpiPlan,
+  reorderKpiPlans,
   getPlanChangeLogs,
   MONTHLY_RESULT_OPTIONS,
   normalizePlanRecord,
@@ -139,6 +140,16 @@ router.post('/kpi-plans', requireAuth, requireKpiAccess, (req, res) => {
     res.json({ success: true, data: { plan } });
   } catch (e) {
     writeErr(res, 400, e.message || '创建失败');
+  }
+});
+
+router.post('/kpi-plans/reorder', requireAuth, requireKpiAccess, (req, res) => {
+  try {
+    const orderedIds = req.body?.orderedIds || req.body?.ids || [];
+    const plans = reorderKpiPlans(req.user, orderedIds);
+    res.json({ success: true, data: { plans } });
+  } catch (e) {
+    writeErr(res, 400, e.message || '调整顺序失败');
   }
 });
 
