@@ -326,12 +326,13 @@ function planDedupeKey(plan) {
 }
 
 function findExistingPlan(plans, user, yearMonth, templateKey, weekIndex = null) {
-  return plans.find(p =>
-    p.yearMonth === yearMonth &&
-    p.templateKey === templateKey &&
-    (p.assigneeId === user.id || p.assignee === user.name) &&
-    (weekIndex == null ? p.weekIndex == null : p.weekIndex === weekIndex)
-  );
+  const weekMatch = (p) => (weekIndex == null ? p.weekIndex == null : p.weekIndex === weekIndex);
+  const sameTemplate = (p) =>
+    p.yearMonth === yearMonth && p.templateKey === templateKey && weekMatch(p);
+  // 优先按 assigneeId，避免同名/改名后的停用账号挡住在职账号生成
+  return plans.find(p => sameTemplate(p) && p.assigneeId === user.id)
+    || plans.find(p => sameTemplate(p) && !p.assigneeId && p.assignee === user.name)
+    || null;
 }
 
 function findMonthlyPlanArrange(plans, user, yearMonth) {
@@ -748,11 +749,30 @@ function resolveImportAssignee(rawName, users) {
   const name = normalizeImportPersonName(rawName);
   const full = String(rawName || '').trim();
   if (!name && !full) return null;
-  return users.find(u => u.name === full || u.name === name)
-    || users.find(u => u.name && normalizeImportPersonName(u.name) === name)
-    || users.find(u => u.name && (u.name.startsWith(name) || name.startsWith(normalizeImportPersonName(u.name))))
-    || users.find(u => u.name && (u.name.includes(name) || name.includes(normalizeImportPersonName(u.name))))
-    || null;
+  const list = users || [];
+  const preferActive = (a, b) => {
+    const aa = a && a.active !== false ? 1 : 0;
+    const ba = b && b.active !== false ? 1 : 0;
+    return ba - aa;
+  };
+  const pick = (cands) => (cands.length ? cands.slice().sort(preferActive)[0] : null);
+
+  // 1) 全名精确匹配（优先在职）
+  const byFull = pick(list.filter(u => u.name === full));
+  if (byFull) return byFull;
+  // 2) 中文名/短名精确匹配
+  const byName = pick(list.filter(u =>
+    u.name === name || (u.name && normalizeImportPersonName(u.name) === name)
+  ));
+  if (byName) return byName;
+  // 3) 前缀 / 包含（仍优先在职）
+  const byPrefix = pick(list.filter(u =>
+    u.name && (u.name.startsWith(name) || name.startsWith(normalizeImportPersonName(u.name)))
+  ));
+  if (byPrefix) return byPrefix;
+  return pick(list.filter(u =>
+    u.name && (u.name.includes(name) || name.includes(normalizeImportPersonName(u.name)))
+  ));
 }
 
 function normalizeImportProgress(raw) {
@@ -974,6 +994,30 @@ function updateKpiPlan(user, planId, body = {}) {
   return next;
 }
 
+function deleteKpiPlan(user, planId) {
+  const store = getDb();
+  const plans = ensureKpiPlansArray(store);
+  const idx = plans.findIndex(p => p.id === planId);
+  if (idx < 0) throw new Error('计划不存在');
+  const plan = plans[idx];
+  if (plan.type !== 'custom') {
+    throw new Error('固定计划不可删除');
+  }
+  plans.splice(idx, 1);
+  appendChangeLogs([{
+    id: genId('L'),
+    taskId: `KPI-${plan.id}`,
+    operator: user.name,
+    operateTime: new Date().toLocaleString('zh-CN', { hour12: false }),
+    before: `${plan.projectName || ''} / ${plan.taskName || ''}`.trim(),
+    after: '已删除',
+    reason: '删除自定义 KPI 计划',
+    project: `KPI·${plan.taskName || ''}`,
+  }]);
+  persistStore();
+  return plan;
+}
+
 function getPlanChangeLogs(planId) {
   const tid = `KPI-${planId}`;
   const store = getDb();
@@ -1007,6 +1051,7 @@ module.exports = {
   findAssigneeUser,
   createCustomPlan,
   updateKpiPlan,
+  deleteKpiPlan,
   getPlanChangeLogs,
   normalizePlanRecord,
   compareKpiPlans,

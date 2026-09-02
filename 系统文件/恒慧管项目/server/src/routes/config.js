@@ -19,6 +19,9 @@ router.get('/config/public', (_req, res) => {
     deployMode: config.deployMode,
     lanAddresses: config.localAsServer ? getLanIPv4List() : [],
     dingtalkConfigured: isConfigured(),
+    nccMonitorConfigured: !!(config.nccMonitor?.loopUsername && config.nccMonitor?.loopPassword),
+    nccMonitorUrl: config.nccMonitor?.url || '',
+    handaOmUrl: process.env.HANDA_OM_URL || '',
   });
 });
 

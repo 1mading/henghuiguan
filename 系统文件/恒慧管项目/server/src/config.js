@@ -73,4 +73,12 @@ module.exports = {
     maxAttachments: Math.min(20, Math.max(0, parseInt(process.env.INTAKE_AITABLE_MAX_ATTACHMENTS || '10', 10) || 10)),
     downloadTimeoutMs: Math.min(120000, Math.max(5000, parseInt(process.env.INTAKE_AITABLE_DOWNLOAD_TIMEOUT_MS || '30000', 10) || 30000)),
   },
+  /** NCC 异常看板：同域代理 Loop，解决跨站 Cookie 导致 iframe 打不开 */
+  nccMonitor: {
+    url: (process.env.NCC_MONITOR_URL || 'https://www.handagroup.ai/api/loop/reports/ncc-monitor/html').trim(),
+    loopBaseUrl: (process.env.NCC_MONITOR_LOOP_BASE_URL || 'https://www.handagroup.ai').trim(),
+    reportPath: (process.env.NCC_MONITOR_REPORT_PATH || '/api/loop/reports/ncc-monitor/html').trim(),
+    loopUsername: (process.env.NCC_MONITOR_LOOP_USERNAME || '').trim(),
+    loopPassword: (process.env.NCC_MONITOR_LOOP_PASSWORD || '').trim(),
+  },
 };

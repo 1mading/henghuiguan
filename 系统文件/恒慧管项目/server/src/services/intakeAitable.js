@@ -204,24 +204,60 @@ function parseAitableAttachmentContent(content) {
   return items;
 }
 
+/** 钉钉 JSON 编辑器插入变量时常自动加引号，尝试把字符串还原为 JSON 对象/数组 */
+function coerceQuotedAttachmentJson(val) {
+  if (val == null || val === '') return val;
+  if (typeof val !== 'string') return val;
+  const trimmed = val.trim();
+  if (!trimmed) return val;
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return val;
+    }
+  }
+  return val;
+}
+
 function extractAttachmentsPayload(body = {}) {
   const candidates = [
     body.attachments,
+    body.attachmentsJson,
     body['附件'],
     body.attachment,
     body.attachmentContent,
     body['附件内容'],
   ];
   for (const c of candidates) {
-    if (c != null && c !== '') return c;
+    if (c != null && c !== '') return coerceQuotedAttachmentJson(c);
   }
+
+  const urlScalar = body.attachmentUrl
+    || body.attachmentUrls
+    || body['附件链接']
+    || body['附件临时链接'];
+  const nameScalar = body.attachmentName
+    || body.attachmentNames
+    || body['附件名'];
+  if (urlScalar || nameScalar) {
+    return {
+      '附件内容': {
+        '附件名': coerceQuotedAttachmentJson(nameScalar),
+        '附件临时链接': coerceQuotedAttachmentJson(urlScalar),
+        '附件大小': coerceQuotedAttachmentJson(body['附件大小'] || body.attachmentSizes),
+        '附件类型': coerceQuotedAttachmentJson(body['附件类型'] || body.attachmentTypes),
+      },
+    };
+  }
+
   if (body['附件名'] || body['附件临时链接'] || body.attachmentNames || body.attachmentUrls) {
     return {
       '附件内容': {
-        '附件名': body['附件名'] || body.attachmentNames,
-        '附件临时链接': body['附件临时链接'] || body.attachmentUrls,
-        '附件大小': body['附件大小'] || body.attachmentSizes,
-        '附件类型': body['附件类型'] || body.attachmentTypes,
+        '附件名': coerceQuotedAttachmentJson(body['附件名'] || body.attachmentNames),
+        '附件临时链接': coerceQuotedAttachmentJson(body['附件临时链接'] || body.attachmentUrls),
+        '附件大小': coerceQuotedAttachmentJson(body['附件大小'] || body.attachmentSizes),
+        '附件类型': coerceQuotedAttachmentJson(body['附件类型'] || body.attachmentTypes),
         docRes: body.docRes || {
           url: body['docRes.url'],
           id: body['docRes.id'],
@@ -233,6 +269,23 @@ function extractAttachmentsPayload(body = {}) {
   return null;
 }
 
+/** 钉钉自动化有时把附件四个字段压成字符串而非数组，统一归一化 */
+function normalizeAitableAttachmentScalars(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  const inner = payload['附件内容'] && typeof payload['附件内容'] === 'object'
+    ? { ...payload['附件内容'] }
+    : { ...payload };
+  const keys = ['附件名', '附件临时链接', '附件大小', '附件类型', 'filename', 'name', 'tempUrl', 'size', 'type'];
+  for (const key of keys) {
+    if (inner[key] == null || inner[key] === '') continue;
+    if (!Array.isArray(inner[key])) inner[key] = [inner[key]];
+  }
+  if (payload['附件内容']) {
+    return { ...payload, '附件内容': inner };
+  }
+  return inner;
+}
+
 function parseAttachmentsRaw(raw) {
   if (!raw) return [];
   if (typeof raw === 'string') {
@@ -240,7 +293,7 @@ function parseAttachmentsRaw(raw) {
     if (!trimmed) return [];
     try {
       const parsed = JSON.parse(trimmed);
-      return parseAttachmentsRaw(parsed);
+      return parseAttachmentsRaw(normalizeAitableAttachmentScalars(parsed));
     } catch {
       if (/^https?:\/\//i.test(trimmed)) {
         return [{ url: trimmed, filename: trimmed.split('/').pop() || '附件' }];
@@ -255,16 +308,17 @@ function parseAttachmentsRaw(raw) {
     return raw;
   }
   if (typeof raw === 'object') {
-    const aitable = parseAitableAttachmentContent(raw);
+    const normalized = normalizeAitableAttachmentScalars(raw);
+    const aitable = parseAitableAttachmentContent(normalized);
     if (aitable.length) return aitable;
-    if (raw.url || raw.resourceUrl || raw.link || raw['附件临时链接'] || raw['附件名'] || raw.filename) {
+    if (normalized.url || normalized.resourceUrl || normalized.link || normalized['附件临时链接'] || normalized['附件名'] || normalized.filename) {
       return [{
-        filename: raw['附件名'] || raw.filename || raw.name,
-        name: raw['附件名'] || raw.filename || raw.name,
-        url: raw['附件临时链接'] || raw.url || raw.resourceUrl || raw.link,
-        size: raw['附件大小'] || raw.size,
-        type: raw['附件类型'] || raw.type,
-        resourceId: raw.resourceId || raw.docRes?.id,
+        filename: normalized['附件名'] || normalized.filename || normalized.name,
+        name: normalized['附件名'] || normalized.filename || normalized.name,
+        url: normalized['附件临时链接'] || normalized.url || normalized.resourceUrl || normalized.link,
+        size: normalized['附件大小'] || normalized.size,
+        type: normalized['附件类型'] || normalized.type,
+        resourceId: normalized.resourceId || normalized.docRes?.id,
       }];
     }
   }
@@ -543,12 +597,19 @@ async function processAitableIntake(body = {}) {
   const creator = resolved.user?.name || submitterName || DEFAULT_CREATOR;
 
   const desc = String(body.desc || body['详细说明'] || '').trim();
-  const dueDate = normalizeDate(body.dueDate || body['期望完成日期']) || tomorrowDateStr();
+  const dueDate = normalizeDate(
+    body.dueDate || body['期望完成日期'] || body['期望完成时间'] || body['期望完成时间日期']
+  ) || tomorrowDateStr();
   const priority = normalizePriority(body.priority || body['优先级']);
   const systemName = normalizeSystemName(body.system ?? body['系统'] ?? '');
   const submittedAt = String(body.submittedAt || body['提交时间'] || new Date().toISOString()).trim();
   const attachmentsRaw = extractAttachmentsPayload(body);
-  const { attachments, warnings } = await buildAttachmentsFromIntake(attachmentsRaw, creator);
+  const { attachments, warnings } = await buildAttachmentsFromIntake(
+    attachmentsRaw ? normalizeAitableAttachmentScalars(
+      typeof attachmentsRaw === 'string' ? attachmentsRaw : attachmentsRaw
+    ) : null,
+    creator
+  );
 
   const task = {
     id: genTaskId(),

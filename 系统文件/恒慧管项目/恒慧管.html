@@ -656,9 +656,33 @@
       gap: 12px;
       flex-wrap: wrap;
     }
+    .ncc-embed-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     .ncc-embed-desc {
       font-size: 12px;
       color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .ncc-embed-tip {
+      font-size: 12px;
+      color: #334155;
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      line-height: 1.55;
+    }
+    .ncc-embed-warn {
+      font-size: 12px;
+      color: #B45309;
+      background: #FFFBEB;
+      border: 1px solid #FDE68A;
+      border-radius: 8px;
+      padding: 8px 12px;
       line-height: 1.5;
     }
     .ncc-embed-frame {
@@ -710,30 +734,29 @@
       overflow-y: visible;
       max-height: none;
     }
-    .kpi-plan-table { width: 100%; border-collapse: collapse; min-width: 1380px; table-layout: fixed; }
+    .kpi-plan-table { width: 100%; border-collapse: collapse; min-width: 1480px; table-layout: fixed; }
     .kpi-plan-table thead th {
       position: sticky; top: 0; z-index: 2;
       background: #FAFAFA; box-shadow: 0 1px 0 var(--border-light);
     }
     .kpi-plan-table th, .kpi-plan-table td {
-      padding: 10px 12px; border-bottom: 1px solid var(--border-light);
+      padding: 8px 10px; border-bottom: 1px solid var(--border-light);
       font-size: 12px; vertical-align: middle; text-align: left;
-      word-break: break-word; overflow-wrap: anywhere;
-      overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      line-height: 1.35; height: 40px; max-height: 40px;
     }
-    .kpi-plan-table .kpi-col-dept { width: 110px; white-space: nowrap; }
-    .kpi-plan-table .kpi-col-type { width: 72px; white-space: nowrap; }
+    .kpi-plan-table .kpi-col-dept { width: 100px; }
+    .kpi-plan-table .kpi-col-type { width: 68px; }
     .kpi-plan-table .kpi-col-project { width: 120px; }
     .kpi-plan-table .kpi-col-task { width: 140px; }
-    .kpi-plan-table .kpi-col-deliverable { width: 200px; }
-    .kpi-plan-table .kpi-col-period { width: 118px; white-space: normal; line-height: 1.35; }
-    .kpi-plan-table .kpi-col-assignee { width: 88px; white-space: nowrap; }
-    .kpi-plan-table .kpi-col-progress { width: 56px; white-space: nowrap; }
-    .kpi-plan-table .kpi-col-result { width: 110px; white-space: nowrap; overflow: visible; }
-    .kpi-plan-table .kpi-col-actions { width: 56px; white-space: nowrap; }
-    .kpi-plan-period-range { display: block; font-variant-numeric: tabular-nums; }
-    .kpi-plan-deliverable { line-height: 1.45; color: #374151; }
-    .kpi-plan-table th { background: #FAFAFA; color: var(--text-muted); font-weight: 600; }
+    .kpi-plan-table .kpi-col-deliverable { width: 220px; }
+    .kpi-plan-table .kpi-col-period { width: 178px; font-variant-numeric: tabular-nums; }
+    .kpi-plan-table .kpi-col-assignee { width: 88px; }
+    .kpi-plan-table .kpi-col-progress { width: 52px; }
+    .kpi-plan-table .kpi-col-result { width: 110px; overflow: visible; }
+    .kpi-plan-table .kpi-col-actions { width: 88px; }
+    .kpi-plan-deliverable { color: #374151; }
+    .kpi-plan-table th { background: #FAFAFA; color: var(--text-muted); font-weight: 600; height: 36px; max-height: 36px; }
     .kpi-plan-table tr:hover td { background: #FAFAFA; }
     .kpi-plan-row-child .kpi-col-task { padding-left: 20px; }
     .kpi-plan-tag {
@@ -5420,29 +5443,82 @@
       return url || NccMonitorConfig.defaultUrl;
     }
 
+    /** Loop 看板近期要求 userid，恒慧管内嵌/新窗口都要带上当前用户钉钉 userid */
+    function getNccMonitorViewerUserId() {
+      const fromUser = String(currentUser?.dingTalkUserId || '').trim();
+      if (fromUser) return fromUser;
+      try {
+        const q = new URLSearchParams(window.location.search || '');
+        return String(q.get('userid') || q.get('userId') || q.get('dingTalkUserId') || '').trim();
+      } catch {
+        return '';
+      }
+    }
+
+    function buildNccMonitorUrl(opts = {}) {
+      const bustCache = opts.bustCache !== false;
+      let url = getNccMonitorBaseUrl();
+      const userid = getNccMonitorViewerUserId();
+      if (userid && !/[?&]userid=/i.test(url)) {
+        url += (url.includes('?') ? '&' : '?') + 'userid=' + encodeURIComponent(userid);
+      }
+      if (bustCache) {
+        url += (url.includes('?') ? '&' : '?') + 'v=' + Date.now();
+      }
+      return url;
+    }
+
     function getNccMonitorEmbedUrl() {
-      const base = getNccMonitorBaseUrl();
-      const sep = base.includes('?') ? '&' : '?';
-      return base + sep + 'v=' + Date.now();
+      const userid = getNccMonitorViewerUserId();
+      const token = String(authSession?.token || '').trim();
+      const qs = new URLSearchParams();
+      if (userid) qs.set('userid', userid);
+      if (token) qs.set('access_token', token);
+      qs.set('v', String(Date.now()));
+      // 同域代理：在 iframe 内登录 Loop 后即可内嵌，不再依赖跨站 Cookie
+      return `/api/ncc-monitor/embed?${qs.toString()}`;
     }
 
     function openNccMonitorExternal() {
-      window.open(getNccMonitorBaseUrl(), '_blank', 'noopener,noreferrer');
+      window.open(buildNccMonitorUrl({ bustCache: false }), '_blank', 'noopener,noreferrer');
+    }
+
+    function openNccMonitorLogin() {
+      const url = String(NccMonitorConfig.loginUrl || 'https://www.handagroup.ai/login').trim();
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+
+    function reloadNccMonitorFrame() {
+      if (state.page === 'nccMonitor') render();
     }
 
     function renderNccMonitor() {
       if (!isFullAccess(currentUser.role)) {
         return renderWorkbenchHome();
       }
+      const userid = getNccMonitorViewerUserId();
       const src = escapeHtml(getNccMonitorEmbedUrl());
+      const useridWarn = userid
+        ? ''
+        : `<div class="ncc-embed-warn">当前账号未绑定钉钉 userid，看板可能无法打开。请先在人员档案同步通讯录。</div>`;
       return `
         <div class="ncc-embed-wrap">
           <div class="ncc-embed-toolbar">
             <div class="ncc-embed-desc">环思 → 用友 NCC 传单异常监控：异常单据、原因分布、处理进度。</div>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="openNccMonitorExternal()">
-              <i class="fas fa-external-link-alt"></i> 新窗口打开
-            </button>
+            <div class="ncc-embed-actions">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="reloadNccMonitorFrame()">
+                <i class="fas fa-rotate-right"></i> 刷新内嵌
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openNccMonitorExternal()">
+                <i class="fas fa-external-link-alt"></i> 浏览器打开
+              </button>
+            </div>
           </div>
+          <div class="ncc-embed-tip">
+            因浏览器跨站限制，在外部网站登录 <strong>不能</strong> 作用于恒慧管内嵌。
+            请直接在下方看板区域登录 Loop（约 7 天有效），即可在本页内打开，无需新窗口。
+          </div>
+          ${useridWarn}
           <iframe class="ncc-embed-frame" src="${src}" title="NCC异常看板" allowfullscreen></iframe>
         </div>
       `;
@@ -5732,14 +5808,17 @@
           <tr class="${p.parentId ? 'kpi-plan-row-child' : ''}">
             ${showDeptCol ? `<td class="kpi-col-dept">${escapeHtml(p.dept || '')}</td>` : ''}
             <td class="kpi-col-type"><span class="kpi-plan-tag ${p.type === 'custom' ? 'is-custom' : 'is-fixed'}">${p.type === 'custom' ? '自定义' : '固定'}</span></td>
-            <td class="kpi-col-project">${escapeHtml(p.projectName || '')}</td>
-            <td class="kpi-col-task">${escapeHtml(p.taskName || '')}</td>
-            <td class="kpi-col-deliverable kpi-plan-deliverable">${escapeHtml(p.targetDeliverable || '')}</td>
-            <td class="kpi-col-period"><span class="kpi-plan-period-range">${escapeHtml(p.planStartDate || '-')}</span><span class="kpi-plan-period-range">~ ${escapeHtml(p.planEndDate || '-')}</span></td>
+            <td class="kpi-col-project" title="${escapeHtml(p.projectName || '')}">${escapeHtml(p.projectName || '')}</td>
+            <td class="kpi-col-task" title="${escapeHtml(p.taskName || '')}">${escapeHtml(p.taskName || '')}</td>
+            <td class="kpi-col-deliverable kpi-plan-deliverable" title="${escapeHtml(p.targetDeliverable || '')}">${escapeHtml(p.targetDeliverable || '')}</td>
+            <td class="kpi-col-period" title="${escapeHtml((p.planStartDate || '-') + ' ~ ' + (p.planEndDate || '-'))}">${escapeHtml((p.planStartDate || '-') + ' ~ ' + (p.planEndDate || '-'))}</td>
             <td class="kpi-col-assignee" title="${escapeHtml(p.assignee || '')}">${escapeHtml(p.assignee || '')}</td>
             <td class="kpi-col-progress">${p.progress ?? 0}%</td>
             <td class="kpi-col-result">${renderKpiMonthlyResultQuick(p)}</td>
-            <td class="kpi-col-actions"><button type="button" class="btn btn-ghost btn-sm" onclick="openKpiPlanEdit('${p.id}')"><i class="fas fa-edit"></i></button></td>
+            <td class="kpi-col-actions" style="white-space:nowrap;">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openKpiPlanEdit('${p.id}')" title="编辑"><i class="fas fa-edit"></i></button>
+              ${p.type === 'custom' ? `<button type="button" class="btn btn-ghost btn-sm" style="color:#DC2626;" onclick="deleteKpiPlan('${p.id}')" title="删除"><i class="fas fa-trash-alt"></i></button>` : ''}
+            </td>
           </tr>`;
       }).join('') : `<tr><td colspan="${colSpan}" style="padding:24px;color:#9CA3AF;text-align:center;">暂无计划，请选择月份或等待系统自动生成</td></tr>`;
       return `
@@ -5860,6 +5939,31 @@
       }
     }
 
+    async function deleteKpiPlan(planId) {
+      if (!ApiConfig.enabled || !authSession.token) { alert('请连接服务端'); return; }
+      const plan = (state.kpiPlans || []).find(p => p.id === planId) || (state.form?.id === planId ? state.form : null);
+      if (plan && plan.type !== 'custom') {
+        alert('固定计划不可删除');
+        return;
+      }
+      const label = plan?.taskName
+        ? `「${[plan.projectName, plan.taskName].filter(Boolean).join(' / ')}」`
+        : '';
+      if (!confirm(`确定删除自定义 KPI 计划${label}？删除后不可恢复。`)) return;
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/kpi-plans/' + encodeURIComponent(planId), {
+          method: 'DELETE',
+          headers: { ...AuthService.getAuthHeaders() },
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || '删除失败');
+        if (state.showModal === 'kpiPlanEdit' && state.form?.id === planId) closeModal();
+        await KpiPlanService.load(state.kpiYearMonth);
+      } catch (e) {
+        alert(e.message || '删除失败');
+      }
+    }
+
     function collectKpiPlanFormFromDom(plan) {
       const get = id => document.getElementById(id)?.value;
       const collRaw = get('kpiCollaborators');
@@ -5955,6 +6059,7 @@
 
     function renderKpiPlanEditModal() {
       const plan = state.form || {};
+      const canDelete = plan.type === 'custom';
       return `
         <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
           <div class="modal-box" style="max-width:640px;max-height:90vh;overflow:auto;" onclick="event.stopPropagation()">
@@ -5963,9 +6068,14 @@
               <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:18px;"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body">${renderKpiPlanFormFields(plan)}</div>
-            <div class="modal-footer">
-              <button class="btn btn-ghost" onclick="closeModal()">取消</button>
-              <button class="btn btn-primary" onclick="saveKpiPlanEdit()"><i class="fas fa-save"></i> 保存</button>
+            <div class="modal-footer" style="justify-content:space-between;">
+              ${canDelete
+                ? `<button class="btn btn-ghost" style="color:#DC2626;" onclick="deleteKpiPlan('${escapeHtml(plan.id)}')"><i class="fas fa-trash-alt"></i> 删除</button>`
+                : '<span></span>'}
+              <div style="display:flex;gap:8px;">
+                <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveKpiPlanEdit()"><i class="fas fa-save"></i> 保存</button>
+              </div>
             </div>
           </div>
         </div>
@@ -10040,6 +10150,8 @@
     const NccMonitorConfig = {
       defaultUrl: 'https://www.handagroup.ai/api/loop/reports/ncc-monitor/html',
       url: 'https://www.handagroup.ai/api/loop/reports/ncc-monitor/html',
+      /** Loop 平台自 2026-08-29 起整站需先登录；会话约 7 天 */
+      loginUrl: 'https://www.handagroup.ai/login',
     };
 
     /** Handa-OM 运维门户（管理员新窗口打开，与 NCC 看板独立）；可由 /config/public.handaOmUrl 覆盖 */

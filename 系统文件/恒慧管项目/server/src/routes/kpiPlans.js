@@ -23,6 +23,7 @@ const {
   findAssigneeUser,
   createCustomPlan,
   updateKpiPlan,
+  deleteKpiPlan,
   getPlanChangeLogs,
   MONTHLY_RESULT_OPTIONS,
   normalizePlanRecord,
@@ -152,6 +153,20 @@ router.patch('/kpi-plans/:id', requireAuth, requireKpiAccess, (req, res) => {
     res.json({ success: true, data: { plan: updated } });
   } catch (e) {
     writeErr(res, 400, e.message || '保存失败');
+  }
+});
+
+router.delete('/kpi-plans/:id', requireAuth, requireKpiAccess, (req, res) => {
+  const plan = findPlanById(req.params.id);
+  const store = getDb();
+  if (!plan || !canEditKpiPlan(req.user, plan) || isInactiveAssigneePlan(plan, store.users)) {
+    return writeErr(res, 403, '无权删除该计划');
+  }
+  try {
+    const deleted = deleteKpiPlan(req.user, plan.id);
+    res.json({ success: true, data: { plan: deleted } });
+  } catch (e) {
+    writeErr(res, 400, e.message || '删除失败');
   }
 });
 
