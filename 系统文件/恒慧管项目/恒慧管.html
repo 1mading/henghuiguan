@@ -6567,10 +6567,13 @@
         </div>`;
     }
 
-    /** 工作台展示的项目推进：进行中、当前用户相关的项目 */
+    /** 工作台展示的项目推进：进行中/已暂停、当前用户相关的项目
+     *  [本地改动 2026-09-03] 原仅纳入 status==='active'，导致「已暂停」项目（专属钉钉等）在此完全不可见。
+     *  现放宽为 active + paused；已完成(done) / 已归档(archived) 仍不在此展示。
+     */
     function getWorkbenchProjectFocusProjects() {
       return getViewableProjects()
-        .filter(p => !isProjectArchived(p) && p.status === 'active')
+        .filter(p => !isProjectArchived(p) && (p.status === 'active' || p.status === 'paused'))
         .filter(p => {
           const related =
             isSamePersonName(p.manager, currentUser.name) ||
@@ -6580,6 +6583,10 @@
           return related || isFullAccess(currentUser.role);
         })
         .sort((a, b) => {
+          // 进行中优先，已暂停排后
+          const aPaused = a.status === 'paused' ? 1 : 0;
+          const bPaused = b.status === 'paused' ? 1 : 0;
+          if (aPaused !== bPaused) return aPaused - bPaused;
           const aBlock = !!String(a.blocker || '').trim();
           const bBlock = !!String(b.blocker || '').trim();
           if (aBlock !== bBlock) return bBlock - aBlock;
@@ -6601,7 +6608,7 @@
                 ${renderProjectFocusRows(project)}
               </div>`;
           }).join('')
-        : `<div class="wb-empty" style="border:none;padding:20px 8px;">暂无进行中的项目</div>`;
+        : `<div class="wb-empty" style="border:none;padding:20px 8px;">暂无进行中或暂停的项目</div>`;
 
       return `
         <div class="wb-project-focus-block">
