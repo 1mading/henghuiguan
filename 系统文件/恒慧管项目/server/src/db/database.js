@@ -525,11 +525,20 @@ function mergeProjectsById(existing, incoming, predicate, options = {}) {
     if (p?.id) incomingIds.add(p.id);
     const prev = map.get(p.id);
     if (prev) {
-      map.set(p.id, normalizeProjectRecord({
+      const prevArchived = prev.archived === true || prev.status === 'archived';
+      const nextArchived = p.archived === true || p.status === 'archived';
+      // 与任务终态类似：任一侧已归档则保持归档，避免旧客户端 sync 把归档冲掉
+      const keepArchived = prevArchived || nextArchived;
+      const merged = {
         ...prev,
         ...p,
         documents: mergeProjectDocuments(prev.documents, p.documents),
-      }));
+      };
+      if (keepArchived) {
+        merged.archived = true;
+        merged.status = 'archived';
+      }
+      map.set(p.id, normalizeProjectRecord(merged));
     } else {
       map.set(p.id, normalizeProjectRecord({ ...p }));
     }

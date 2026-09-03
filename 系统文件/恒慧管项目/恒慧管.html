@@ -2311,6 +2311,10 @@
       flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .todo-board-date { flex-shrink: 0; }
+    .todo-board-submitter {
+      min-width: 0; margin-left: auto;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
     .todo-board-card-footer .priority-dot { margin-left: 4px; }
     .todo-kanban-col.is-drop-target { outline: 2px dashed var(--brand); outline-offset: 2px; }
     .todo-board-wrap { margin-top: 4px; }
@@ -3462,8 +3466,23 @@
       return !!(task?.intakeMeta && task.intakeMeta.source === 'aitable');
     }
 
+    /** 剥掉钉钉自动化偶发包裹的 {{...}} */
+    function unwrapTemplateDisplay(raw) {
+      let text = String(raw == null ? '' : raw).trim();
+      for (let i = 0; i < 3; i++) {
+        const m = text.match(/^\{\{\s*([\s\S]*?)\s*\}\}$/);
+        if (!m) break;
+        text = String(m[1] || '').trim();
+      }
+      return text;
+    }
+
     function getIntakeSystemName(task) {
-      return String(task?.intakeMeta?.system || '').trim();
+      return unwrapTemplateDisplay(task?.intakeMeta?.system || '');
+    }
+
+    function getIntakeTaskTitle(task) {
+      return unwrapTemplateDisplay(task?.title || '') || String(task?.title || '');
     }
 
     function needsIntakeEstimatedHours(task) {
@@ -4196,6 +4215,11 @@
               merged.currentPhase = String(local.currentPhase || '').trim();
               merged.nextPlan = String(local.nextPlan || '').trim();
               merged.blocker = String(local.blocker || '').trim();
+              // 本地刚归档、尚未 sync 完成时，勿被服务端旧快照冲回未归档
+              if (isProjectArchived(local)) {
+                merged.archived = true;
+                merged.status = 'archived';
+              }
             }
             return merged;
           });
@@ -6632,19 +6656,26 @@
         : (dueSoon ? '<span class="wb-todo-badge is-duesoon">即将到期</span>' : '');
       const due = normalizeDateStr(resolveTaskDueDate(task)) || task.dueDate || '';
       const actions = buildTodoQuickActionButtons(task);
+      const titleText = isAitableIntakeTask(task) ? getIntakeTaskTitle(task) : String(task.title || '');
+      const submitterName = typeof displayTaskSubmitterName === 'function' ? displayTaskSubmitterName(task) : '';
+      const systemName = typeof getIntakeSystemName === 'function' ? getIntakeSystemName(task) : '';
+      const metaBits = [];
+      if (due) metaBits.push(`<span class="tag"><i class="far fa-calendar"></i> ${escapeHtml(due)}</span>`);
+      if (systemName) metaBits.push(`<span class="tag"><i class="fas fa-server"></i> 系统 ${escapeHtml(systemName)}</span>`);
+      if (submitterName) metaBits.push(`<span class="tag"><i class="fas fa-user"></i> 提单人 ${escapeHtml(submitterName)}</span>`);
 
       return `
         <div class="wb-todo-card ${urgencyClass}" onclick="viewTask('${task.id}')">
           <div class="wb-todo-bar">
             <div class="wb-todo-bar-main">
               <div class="wb-todo-top">
-                <div class="wb-todo-title">${escapeHtml(task.title || '')}</div>
+                <div class="wb-todo-title">${escapeHtml(titleText)}</div>
                 ${badge}
               </div>
             </div>
             ${actions.length ? `<div class="wb-todo-actions" onclick="event.stopPropagation()">${actions.join('')}</div>` : ''}
           </div>
-          ${due ? `<div class="wb-todo-meta"><span class="tag"><i class="far fa-calendar"></i> ${escapeHtml(due)}</span></div>` : ''}
+          ${metaBits.length ? `<div class="wb-todo-meta">${metaBits.join('')}</div>` : ''}
         </div>
       `;
     }
@@ -9212,6 +9243,9 @@
       const canAbolish = canAbolishTask(task) && task.status !== 'abolished' && task.status !== 'archived' && task.status !== 'done';
       const statusActions = buildTodoQuickActionButtons(task);
       const actions = [...statusActions];
+      const titleText = isAitableIntakeTask(task) ? getIntakeTaskTitle(task) : String(task.title || '');
+      const submitterName = typeof displayTaskSubmitterName === 'function' ? displayTaskSubmitterName(task) : '';
+      const systemName = typeof getIntakeSystemName === 'function' ? getIntakeSystemName(task) : '';
       if (canEdit) {
         actions.push(`<button type="button" class="btn btn-icon" title="编辑" onclick="event.stopPropagation();editTask('${task.id}')"><i class="fas fa-pen"></i></button>`);
       }
@@ -9224,11 +9258,13 @@
           ondragstart="event.dataTransfer.setData('text/taskId','${task.id}')"
           onclick="viewTask('${task.id}')">
           <div class="todo-board-card-top">
-            <div class="todo-board-card-title">${escapeHtml(task.title || '')}</div>
+            <div class="todo-board-card-title">${escapeHtml(titleText)}</div>
             ${actions.length ? `<div class="todo-board-card-actions wb-todo-actions" onclick="event.stopPropagation()">${actions.join('')}</div>` : ''}
           </div>
           <div class="todo-board-card-footer">
             <span class="todo-board-date">${escapeHtml(dueLabel)}</span>
+            ${systemName ? `<span class="todo-board-submitter" title="系统"><i class="fas fa-server"></i> ${escapeHtml(systemName)}</span>` : ''}
+            ${submitterName ? `<span class="todo-board-submitter" title="提单人"><i class="fas fa-user"></i> ${escapeHtml(submitterName)}</span>` : ''}
           </div>
         </div>
       `;
@@ -10890,7 +10926,7 @@
       /** 通知展示用提交人：无中文名 / userid / 占位则视为不可展示 */
       displaySubmitter(d) {
         const name = String(d.submitterName || d.creator || '').trim();
-        if (!name || name === 'AI表格提报') return '';
+        if (!name || name === 'AI表格提报' || name === '表单提报' || name === '表单') return '';
         if (!/[\u4e00-\u9fff]/.test(name)) return '';
         return name;
       },
@@ -12129,27 +12165,49 @@
       return !!(task && task.type === 'temp' && !task.projectId);
     }
 
+    function isPlaceholderSubmitterName(name) {
+      const n = String(name || '').trim();
+      return !n
+        || n === 'AI表格提报'
+        || n === '表单提报'
+        || n === '表单'
+        || n === '提交人'
+        || n === '提单人'
+        || n === '记录创建人';
+    }
+
     function getTaskSubmitterName(task) {
       if (!task) return '';
       const staff = resolveTaskSubmitterStaff(task);
       if (staff?.name) return staff.name;
-      const fromMeta = String(task.intakeMeta?.submitterName || '').trim();
-      if (fromMeta && /[\u4e00-\u9fff]/.test(fromMeta)) return fromMeta;
-      const creator = String(task.creator || '').trim();
-      if (creator && creator !== 'AI表格提报' && /[\u4e00-\u9fff]/.test(creator)) return creator;
-      return fromMeta || creator || '';
+      const fromMeta = unwrapTemplateDisplay(task.intakeMeta?.submitterName || '');
+      if (fromMeta && !isPlaceholderSubmitterName(fromMeta) && /[\u4e00-\u9fff]/.test(fromMeta)) return fromMeta;
+      const creator = unwrapTemplateDisplay(task.creator || '');
+      if (creator && !isPlaceholderSubmitterName(creator) && /[\u4e00-\u9fff]/.test(creator)) return creator;
+      if (fromMeta && !isPlaceholderSubmitterName(fromMeta)) return fromMeta;
+      if (creator && !isPlaceholderSubmitterName(creator)) return creator;
+      return '';
+    }
+
+    /** 待办/详情展示用提单人：无中文名 / userid / 占位则不展示 */
+    function displayTaskSubmitterName(task) {
+      if (task?.projectId) return '';
+      const name = String(getTaskSubmitterName(task) || '').trim();
+      if (isPlaceholderSubmitterName(name)) return '';
+      if (!/[\u4e00-\u9fff]/.test(name)) return '';
+      return name;
     }
 
     /** 提单人可能是姓名，也可能是钉钉 userid（AI 表格人员字段常见） */
     function resolveTaskSubmitterStaff(task) {
       if (!task) return null;
       const list = getStaffDirectoryUsers();
+      const metaName = unwrapTemplateDisplay(task.intakeMeta?.submitterName || '');
+      const creatorName = unwrapTemplateDisplay(task.creator || '');
       const dingId = String(
-        task.intakeMeta?.submitterDingTalkUserId
-        || (/^[0-9A-Za-z_-]{4,64}$/.test(String(task.intakeMeta?.submitterName || '').trim())
-          ? task.intakeMeta.submitterName
-          : '')
-        || (/^[0-9A-Za-z_-]{4,64}$/.test(String(task.creator || '').trim()) ? task.creator : '')
+        unwrapTemplateDisplay(task.intakeMeta?.submitterDingTalkUserId || '')
+        || (/^[0-9A-Za-z_-]{4,64}$/.test(metaName) ? metaName : '')
+        || (/^[0-9A-Za-z_-]{4,64}$/.test(creatorName) ? creatorName : '')
         || ''
       ).trim();
       if (dingId) {
@@ -12158,12 +12216,8 @@
         );
         if (byDing) return byDing;
       }
-      const nameCandidates = [
-        task.intakeMeta?.submitterName,
-        task.creator,
-      ].map(s => String(s || '').trim()).filter(Boolean);
+      const nameCandidates = [metaName, creatorName].filter(n => n && !isPlaceholderSubmitterName(n));
       for (const name of nameCandidates) {
-        if (name === 'AI表格提报') continue;
         const hit = list.find(u => isSamePersonName(u.name, name) || u.name === name)
           || list.find(u => u.name && (u.name.startsWith(name) || name.startsWith(u.name.split(/\s+/)[0])));
         if (hit) return hit;
@@ -14156,6 +14210,9 @@
       const canTransfer = isSamePersonName(task.assignee, currentUser.name) || isFullAccess(currentUser.role) || isTaskProjectManager(task);
       const canArchive = (isFullAccess(currentUser.role) || isTaskProjectManager(task)) && task.status === 'done';
       const canAddSubTask = canCreateSubTask(task);
+      const submitterName = typeof displayTaskSubmitterName === 'function' ? displayTaskSubmitterName(task) : '';
+      const systemName = typeof getIntakeSystemName === 'function' ? getIntakeSystemName(task) : '';
+      const detailTitle = isAitableIntakeTask(task) ? getIntakeTaskTitle(task) : String(task.title || '');
       if (!state.uiSections) state.uiSections = {};
       if (hasHardBlock(task) || getTaskPredecessorDeps(task.id).length) {
         state.uiSections.taskDetailAdvanced = true;
@@ -14174,7 +14231,7 @@
                   <span style="font-size:12px;color:#9CA3AF;">${task.id}</span>
                 </div>
                 ${renderIntakeHoursHint(task, false)}
-                <h3 class="modal-title">${task.title}${isMilestoneTask(task) ? '' : renderDependencyBadges(task, false)}</h3>
+                <h3 class="modal-title">${escapeHtml(detailTitle)}${isMilestoneTask(task) ? '' : renderDependencyBadges(task, false)}</h3>
               </div>
               <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:18px;" title="关闭"><i class="fas fa-times"></i></button>
             </div>
@@ -14222,6 +14279,18 @@
                     <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">主负责人</div>
                     <span style="font-size:13px;font-weight:500;">${task.assignee}</span>
                   </div>
+                  ${submitterName ? `
+                  <div style="padding:10px 12px;background:#F9FAFB;border-radius:8px;">
+                    <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">提单人</div>
+                    <span style="font-size:13px;font-weight:500;">${escapeHtml(submitterName)}</span>
+                  </div>
+                  ` : ''}
+                  ${systemName ? `
+                  <div style="padding:10px 12px;background:#F9FAFB;border-radius:8px;">
+                    <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">系统</div>
+                    <span style="font-size:13px;font-weight:500;">${escapeHtml(systemName)}</span>
+                  </div>
+                  ` : ''}
                   <div style="padding:10px 12px;background:#F9FAFB;border-radius:8px;">
                     <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">截止日期</div>
                     <span style="font-size:13px;font-weight:500;${isOverdue(task) ? 'color:#DC2626;' : isDueSoon(task) ? 'color:#D97706;' : ''}">${normalizeDateStr(resolveTaskDueDate(task)) || task.dueDate || '未设置'}${isOverdue(task) ? ' (延期' + getDaysOverdue(task) + '天)' : isDueSoon(task) ? ' (临期)' : ''}</span>

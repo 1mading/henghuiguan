@@ -31,8 +31,24 @@ function tomorrowDateStr() {
   return d.toISOString().split('T')[0];
 }
 
+/**
+ * 钉钉自动化偶发把展开后的值再包一层 {{...}}（如 {{NCC}}、{{userid}}）。
+ * 入库前剥掉，避免标题/系统/提单人无法展示或匹配。
+ */
+function unwrapTemplateValue(raw) {
+  if (raw == null) return raw;
+  if (typeof raw !== 'string') return raw;
+  let text = raw.trim();
+  for (let i = 0; i < 3; i++) {
+    const m = text.match(/^\{\{\s*([\s\S]*?)\s*\}\}$/);
+    if (!m) break;
+    text = String(m[1] || '').trim();
+  }
+  return text;
+}
+
 function normalizePriority(raw) {
-  const v = String(raw || '').trim().toLowerCase();
+  const v = unwrapTemplateValue(String(raw || '')).toLowerCase();
   if (!v) return 'normal';
   if (v === '紧急' || v === 'urgent') return 'urgent';
   if (v === '重要' || v === 'important') return 'important';
@@ -45,25 +61,15 @@ function normalizeSystemName(raw) {
   if (raw == null || raw === '') return '';
   if (Array.isArray(raw)) return normalizeSystemName(raw[0]);
   if (typeof raw === 'object') {
-    return String(
+    return unwrapTemplateValue(String(
       raw.name || raw.label || raw.value || raw.text || raw['系统'] || ''
-    ).trim();
+    ));
   }
-  return String(raw).trim();
-}
-
-/**
- * 仅当系统为 NCC 时发送新任务消息提醒。
- * 未传「系统」时仍通知，兼容旧表单自动化。
- */
-function shouldNotifyIntakeAssignee(systemName) {
-  const s = String(systemName || '').trim();
-  if (!s) return true;
-  return s.toUpperCase() === 'NCC';
+  return unwrapTemplateValue(String(raw));
 }
 
 function normalizeDate(raw) {
-  const v = String(raw || '').trim();
+  const v = unwrapTemplateValue(String(raw || ''));
   if (!v) return '';
   const m = v.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
   if (m) {
@@ -92,13 +98,22 @@ function parseSubmitterRaw(raw) {
       raw.name || raw.userName || raw.displayName || raw['姓名'] || raw.nick || ''
     ).trim();
     const dingTalkUserId = String(
-      raw.userid || raw.userId || raw.dingTalkUserId || raw['userid'] || raw.id || ''
+      raw.userid || raw.userId || raw.dingTalkUserId || raw['userid']
+      || raw.staffId || raw.emplId || raw.workNo || ''
     ).trim();
     return { name, dingTalkUserId };
   }
 
-  const text = String(raw).trim();
+  const text = unwrapTemplateValue(String(raw));
   if (!text) return { name: '', dingTalkUserId: '' };
+
+  if ((text.startsWith('{') || text.startsWith('[')) && (text.includes('userid') || text.includes('name') || text.includes('姓名'))) {
+    try {
+      return parseSubmitterRaw(JSON.parse(text));
+    } catch {
+      // fall through
+    }
+  }
 
   // 纯数字 / 字母数字 userid（无中文名）→ 按钉钉 userid 处理
   if (/^[0-9A-Za-z_-]{4,64}$/.test(text) && !/[\u4e00-\u9fff]/.test(text)) {
@@ -457,6 +472,10 @@ function formatTaskAssignedMessage(task, operator) {
     '您有新任务待处理：',
     `[${task.id}] ${task.title}${task.dueDate ? `（截止 ${task.dueDate}）` : ''}（临时任务）`,
   ];
+  const submitter = String(task.intakeMeta?.submitterName || operator || '').trim();
+  if (submitter && submitter !== DEFAULT_CREATOR && /[\u4e00-\u9fff]/.test(submitter)) {
+    lines.push(`提单人：${submitter}`);
+  }
   const systemName = String(task.intakeMeta?.system || '').trim();
   if (systemName) {
     lines.push(`系统：${systemName}`);
@@ -493,6 +512,8 @@ async function notifyTaskAssigned(task, assigneeUsers, operator) {
       taskTitle: task.title,
       assignee: task.assignee,
       dueDate: task.dueDate,
+      isTempTask: true,
+      submitterName: task.intakeMeta?.submitterName || operator || task.creator || '',
       intakeSource: 'aitable',
     },
     taskId: task.id,
@@ -543,15 +564,15 @@ async function processAitableIntake(body = {}) {
     throw err;
   }
 
-  const title = String(body.title || body['事项标题'] || '').trim();
+  const title = unwrapTemplateValue(String(body.title || body['事项标题'] || ''));
   if (!title) {
     const err = new Error('事项标题不能为空');
     err.status = 400;
     throw err;
   }
 
-  const recordId = String(body.recordId || body['记录ID'] || '').trim();
-  const clientToken = String(body.clientToken || '').trim();
+  const recordId = unwrapTemplateValue(String(body.recordId || body['记录ID'] || ''));
+  const clientToken = unwrapTemplateValue(String(body.clientToken || ''));
 
   if (recordId) {
     const existing = findTaskByRecordId(recordId);
@@ -584,25 +605,37 @@ async function processAitableIntake(body = {}) {
     throw err;
   }
 
+  // 提单人：优先表单「提交人/提单人」，兼容「记录创建人」
   const submitterRaw = body.submitterName
     ?? body['提交人']
+    ?? body['提单人']
+    ?? body['填报人']
     ?? body.submitter
     ?? body.submitterUserId
     ?? body['提交人userid']
     ?? body['提交人姓名']
+    ?? body['提单人姓名']
+    ?? body['记录创建人']
+    ?? body['记录创建人姓名']
+    ?? body.recordCreator
+    ?? body.recordCreatorName
+    ?? body['创建人']
+    ?? body['创建人姓名']
+    ?? body.createdBy
+    ?? body.creatorName
     ?? '';
   const resolved = resolveSubmitterUser(submitterRaw);
   const submitterName = resolved.name;
   const submitterDingTalkUserId = resolved.dingTalkUserId;
   const creator = resolved.user?.name || submitterName || DEFAULT_CREATOR;
 
-  const desc = String(body.desc || body['详细说明'] || '').trim();
+  const desc = unwrapTemplateValue(String(body.desc || body['详细说明'] || ''));
   const dueDate = normalizeDate(
     body.dueDate || body['期望完成日期'] || body['期望完成时间'] || body['期望完成时间日期']
   ) || tomorrowDateStr();
   const priority = normalizePriority(body.priority || body['优先级']);
   const systemName = normalizeSystemName(body.system ?? body['系统'] ?? '');
-  const submittedAt = String(body.submittedAt || body['提交时间'] || new Date().toISOString()).trim();
+  const submittedAt = unwrapTemplateValue(String(body.submittedAt || body['提交时间'] || body['记录创建时间'] || new Date().toISOString()));
   const attachmentsRaw = extractAttachmentsPayload(body);
   const { attachments, warnings } = await buildAttachmentsFromIntake(
     attachmentsRaw ? normalizeAitableAttachmentScalars(
@@ -654,12 +687,7 @@ async function processAitableIntake(body = {}) {
     throw err;
   }
 
-  let notifyResult = { skipped: true, reason: 'system_not_ncc' };
-  if (shouldNotifyIntakeAssignee(systemName)) {
-    notifyResult = await notifyTaskAssigned(task, assigneeUsers, creator);
-  } else {
-    console.log(`[intake] skip notify taskId=${task.id} system=${systemName || '(empty)'}`);
-  }
+  const notifyResult = await notifyTaskAssigned(task, assigneeUsers, creator);
 
   return {
     success: true,
