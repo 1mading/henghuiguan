@@ -1,5 +1,7 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const config = require('../config');
 const { backupJsonFile } = require('../utils/backup');
 const { mergeProjectDocuments } = require('../utils/projectDocuments');
@@ -19,6 +21,7 @@ const DEFAULT_STORE = {
   pushLogs: [],
   notifications: [],
   workCalendar: null,
+  rolePermissions: null,
   systemUpdates: [],
   performanceTemplates: [],
   performanceCycles: [],
@@ -26,12 +29,37 @@ const DEFAULT_STORE = {
   workReports: [],
   kpiPlans: [],
   staffDeptCatalog: defaultStaffDeptCatalog(),
+  apiKeys: [],
 };
 
 let store = null;
 let storePath = null;
 /** 当前内存库对应的磁盘 mtime；用于判断是否需从磁盘刷新 */
 let storeFileMtimeMs = null;
+/** MySQL 驱动下最近一次成功落盘时间戳（ms） */
+let storeMysqlSyncedAt = null;
+
+function useMysql() {
+  return config.dbDriver === 'mysql';
+}
+
+function mysqlWorkerPath() {
+  return path.join(__dirname, 'mysqlStoreWorker.js');
+}
+
+function runMysqlWorker(cmd, filePath) {
+  const r = spawnSync(process.execPath, [mysqlWorkerPath(), cmd, filePath], {
+    encoding: 'utf8',
+    env: process.env,
+    timeout: 120000,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (r.status !== 0) {
+    const err = (r.stderr || r.stdout || '').trim() || `mysql worker exit ${r.status}`;
+    throw new Error(err);
+  }
+  return r;
+}
 
 function getStorePath() {
   if (!storePath) {
@@ -43,6 +71,7 @@ function getStorePath() {
 }
 
 function getStoreFileMtimeMs() {
+  if (useMysql()) return storeMysqlSyncedAt;
   const file = getStorePath();
   try {
     if (!fs.existsSync(file)) return null;
@@ -69,6 +98,13 @@ function normalizeProjectRecord(project) {
   project.currentPhase = String(project.currentPhase || '').trim();
   project.nextPlan = String(project.nextPlan || '').trim();
   project.blocker = String(project.blocker || '').trim();
+  project.objective = String(project.objective || '').trim();
+  project.value = String(project.value || '').trim();
+  project.scope = String(project.scope || '').trim();
+  project.outOfScope = String(project.outOfScope || '').trim();
+  project.planVerified = project.planVerified === true;
+  project.planVerifiedBy = String(project.planVerifiedBy || '').trim();
+  project.planVerifiedAt = String(project.planVerifiedAt || '').trim();
   return project;
 }
 
@@ -95,7 +131,43 @@ function normalizeUserProfileKinds(users) {
   return changed;
 }
 
+function finalizeLoadedStore(dirtyHint = false) {
+  normalizeAllProjects(store.projects);
+  let dirty = ensureStaffDeptCatalog(store) || dirtyHint;
+  dirty = normalizeUserProfileKinds(store.users) || dirty;
+  if (dirty) persistStore();
+  return store;
+}
+
+function loadStoreFromMysql() {
+  const tmp = path.join(os.tmpdir(), `hhg-mysql-load-${process.pid}.json`);
+  try {
+    runMysqlWorker('load', tmp);
+    const raw = fs.readFileSync(tmp, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed == null) {
+      store = structuredClone(DEFAULT_STORE);
+      persistStore();
+      return store;
+    }
+    store = { ...structuredClone(DEFAULT_STORE), ...parsed };
+    storeMysqlSyncedAt = Date.now();
+    storeFileMtimeMs = storeMysqlSyncedAt;
+    return finalizeLoadedStore(false);
+  } catch (e) {
+    console.warn('[db] MySQL 读取失败，使用空库', e.message);
+    store = structuredClone(DEFAULT_STORE);
+    storeMysqlSyncedAt = null;
+    storeFileMtimeMs = null;
+    return store;
+  } finally {
+    try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+  }
+}
+
 function loadStoreFromDisk() {
+  if (useMysql()) return loadStoreFromMysql();
+
   const file = getStorePath();
   const dir = path.dirname(file);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -110,10 +182,7 @@ function loadStoreFromDisk() {
     const raw = fs.readFileSync(file, 'utf8');
     store = { ...structuredClone(DEFAULT_STORE), ...JSON.parse(raw) };
     storeFileMtimeMs = getStoreFileMtimeMs();
-    normalizeAllProjects(store.projects);
-    let dirty = ensureStaffDeptCatalog(store);
-    dirty = normalizeUserProfileKinds(store.users) || dirty;
-    if (dirty) persistStore();
+    return finalizeLoadedStore(false);
   } catch (e) {
     console.warn('[db] 读取失败，使用空库', e.message);
     store = structuredClone(DEFAULT_STORE);
@@ -127,19 +196,22 @@ function getStore() {
   return store;
 }
 
-/** 强制从磁盘重新加载（改库文件后或排查数据不一致时使用） */
+/** 强制从磁盘/MySQL 重新加载（改库后或排查数据不一致时使用） */
 function reloadStoreFromDisk() {
   store = null;
   storeFileMtimeMs = null;
+  storeMysqlSyncedAt = null;
   return loadStoreFromDisk();
 }
 
 /**
  * 仅当磁盘文件比内存新（外部改库 / 其它进程写入）时才重读；
  * 常驻进程内 bootstrap 应走此路径，避免每次打开都 JSON.parse 整库。
+ * MySQL 模式下默认不主动重拉（同进程内以内存为准）。
  */
 function reloadStoreFromDiskIfStale() {
   if (!store) return loadStoreFromDisk();
+  if (useMysql()) return store;
   const mtime = getStoreFileMtimeMs();
   if (mtime == null) return store;
   if (storeFileMtimeMs == null || mtime > storeFileMtimeMs) {
@@ -148,7 +220,25 @@ function reloadStoreFromDiskIfStale() {
   return store;
 }
 
+function persistStoreToMysql() {
+  const tmp = path.join(os.tmpdir(), `hhg-mysql-save-${process.pid}.json`);
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(store), 'utf8');
+    runMysqlWorker('save', tmp);
+    storeMysqlSyncedAt = Date.now();
+    storeFileMtimeMs = storeMysqlSyncedAt;
+    return true;
+  } catch (e) {
+    console.error('[db] MySQL 写入失败（数据仍在内存中）:', e.message);
+    return false;
+  } finally {
+    try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+  }
+}
+
 function persistStore() {
+  if (useMysql()) return persistStoreToMysql();
+
   const file = getStorePath();
   const dir = path.dirname(file);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -280,6 +370,16 @@ function setWorkCalendar(calendar) {
   getStore().workCalendar = calendar;
   persistStore();
   return calendar;
+}
+
+function getRolePermissions() {
+  return getStore().rolePermissions || null;
+}
+
+function setRolePermissions(matrix) {
+  getStore().rolePermissions = matrix;
+  persistStore();
+  return matrix;
 }
 
 function isEmpty() {
@@ -605,6 +705,69 @@ function mergeTaskDependenciesById(existing, incoming) {
   return [...map.values()];
 }
 
+/**
+ * 数据安全可视化：只返回集合数量与连接元信息，不含记录正文/密码
+ */
+function getDataSecuritySnapshot() {
+  const s = getStore();
+  const collections = {};
+  Object.keys(DEFAULT_STORE).forEach((key) => {
+    const v = s[key];
+    if (Array.isArray(v)) {
+      collections[key] = { type: 'array', count: v.length };
+    } else if (v == null) {
+      collections[key] = { type: 'null', count: 0 };
+    } else if (typeof v === 'object') {
+      collections[key] = { type: 'object', count: 1 };
+    } else {
+      collections[key] = { type: typeof v, count: v ? 1 : 0 };
+    }
+  });
+
+  const mysql = useMysql();
+  let file = null;
+  if (!mysql) {
+    const filePath = getStorePath();
+    let sizeBytes = null;
+    let mtime = null;
+    try {
+      if (fs.existsSync(filePath)) {
+        const st = fs.statSync(filePath);
+        sizeBytes = st.size;
+        mtime = st.mtime.toISOString();
+      }
+    } catch {
+      /* ignore */
+    }
+    file = {
+      path: filePath,
+      fileName: path.basename(filePath),
+      sizeBytes,
+      mtime,
+    };
+  }
+
+  return {
+    driver: mysql ? 'mysql' : 'json',
+    connection: mysql
+      ? {
+          host: config.mysql.host,
+          port: config.mysql.port,
+          database: config.mysql.database,
+          user: config.mysql.user,
+        }
+      : {
+          host: null,
+          port: null,
+          database: null,
+          user: null,
+        },
+    file,
+    collections,
+    memorySyncedAt: mysql ? storeMysqlSyncedAt : storeFileMtimeMs,
+  };
+}
+
 module.exports = {
   getDb,
   getAllUsers,
@@ -636,6 +799,8 @@ module.exports = {
   appendChangeLogs,
   getWorkCalendar,
   setWorkCalendar,
+  getRolePermissions,
+  setRolePermissions,
   getStaffDeptCatalog,
   setStaffDeptCatalog,
   isEmpty,
@@ -643,4 +808,5 @@ module.exports = {
   persistStore,
   reloadStoreFromDisk,
   reloadStoreFromDiskIfStale,
+  getDataSecuritySnapshot,
 };

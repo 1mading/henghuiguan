@@ -4,6 +4,8 @@ data/*.json
 data/*.json.tmp
 data/backups/
 data/uploads/
+data/*.local.txt
+data/mysql-third-party.local.txt
 .env
 .env.*
 !.env.example

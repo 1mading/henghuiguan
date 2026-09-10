@@ -380,6 +380,7 @@ router.get('/miniapp/bootstrap', requireApiKey, requireAuth, (req, res) => {
     transferLogs: getAllTransferLogs(),
     pushLogs: getAllPushLogs(100),
     workCalendar: getWorkCalendar(),
+    rolePermissions: require('../services/permissions').getRolePermissions(),
     staffDeptCatalog: getStaffDeptCatalog(),
     serverTime: new Date().toISOString(),
   };
@@ -402,6 +403,7 @@ router.get('/data/bootstrap', requireAuth, (req, res) => {
     transferLogs: getAllTransferLogs(),
     pushLogs: getAllPushLogs(100),
     workCalendar: getWorkCalendar(),
+    rolePermissions: require('../services/permissions').getRolePermissions(),
     staffDeptCatalog: getStaffDeptCatalog(),
   };
   const filtered = filterByRole(req.user, raw);

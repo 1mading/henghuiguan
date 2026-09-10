@@ -15,6 +15,9 @@ const workbuddyRoutes = require('./workbuddy');
 const externalRoutes = require('./external');
 const kpiPlansRoutes = require('./kpiPlans');
 const nccMonitorRoutes = require('./nccMonitor');
+const dataSecurityRoutes = require('./dataSecurity');
+const permissionsRoutes = require('./permissions');
+const scopedApiKeysRoutes = require('./scopedApiKeys');
 
 const router = express.Router();
 
@@ -34,6 +37,9 @@ router.use(workbuddyRoutes);
 router.use(externalRoutes);
 router.use(kpiPlansRoutes);
 router.use(nccMonitorRoutes);
+router.use(dataSecurityRoutes);
+router.use(permissionsRoutes);
+router.use(scopedApiKeysRoutes);
 router.use(systemUpdatesRoutes);
 router.use(notificationsRoutes);
 router.use(workCalendarRoutes);

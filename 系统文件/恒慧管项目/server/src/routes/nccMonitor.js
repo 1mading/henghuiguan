@@ -16,8 +16,13 @@ const {
 const router = express.Router();
 
 function canViewNcc(user) {
-  const role = String(user?.role || '');
-  return role === 'admin' || role === 'gm';
+  try {
+    const { capOn } = require('../services/permissions');
+    return capOn(user, 'nav.ncc');
+  } catch {
+    const role = String(user?.role || '');
+    return role === 'admin' || role === 'gm';
+  }
 }
 
 /** iframe 无法自动带 Authorization，允许 ?access_token= */

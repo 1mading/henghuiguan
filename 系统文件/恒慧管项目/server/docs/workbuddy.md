@@ -26,6 +26,7 @@ Base：`{PUBLIC_BASE_URL}/api`
 | GET | `/workbuddy/health` | 连通性 |
 | GET | `/workbuddy/query` | 统一查询 |
 | GET | `/workbuddy/projects/:id` | 项目详情 + 下属任务 |
+| GET | `/workbuddy/projects/:id/plan-ledger` | 项目计划台账（管线格式） |
 | GET | `/workbuddy/tasks/:id` | 任务详情 |
 
 ### `/workbuddy/query` 参数
@@ -53,7 +54,21 @@ Base：`{PUBLIC_BASE_URL}/api`
 
 失败时 `code` 为 HTTP 状态码，`message` 为原因。
 
-项目对象在查询结果中会包含推进字段：`currentPhase`（当前阶段）、`nextPlan`（下一步计划）、`blocker`（当前卡点），以及 `desc` 等项目基本信息。
+项目对象在查询结果中会包含：
+
+- 推进字段：`currentPhase`、`nextPlan`、`blocker`
+- 计划书字段：`objective`、`value`、`scope`、`outOfScope`、`endDate`、`planVerified` / `planVerifiedBy` / `planVerifiedAt`
+- 基本信息：`desc`、`manager`、`status` 等
+
+里程碑任务额外包含：`milestoneSeq`、`roleA`/`roleR`/`roleC`/`roleV`、`deliverables`、`acceptanceCriteria`、`depsRisks` 等。
+
+### 计划台账
+
+```bash
+curl -s -H "X-Api-Key: $KEY" "$BASE/api/workbuddy/projects/PRJ-xxx/plan-ledger"
+```
+
+返回 `text`（可直接粘贴回复领导）与结构化 `rows`。
 
 ## 调用示例
 
@@ -70,6 +85,10 @@ curl -s -H "X-Api-Key: $KEY" "$BASE/api/workbuddy/query?type=projects&keyword=�
 # 某人未完成任务
 curl -s -H "X-Api-Key: $KEY" \
   "$BASE/api/workbuddy/query?type=tasks&assignee=张三&includeDone=0"
+
+# 项目计划台账
+curl -s -H "X-Api-Key: $KEY" \
+  "$BASE/api/workbuddy/projects/PRJ-xxx/plan-ledger"
 ```
 
 ## 在 WorkBuddy 中使用

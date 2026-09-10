@@ -76,6 +76,13 @@ function nameCore(name) {
   return dash > 0 ? first.slice(0, dash) : first;
 }
 
+/** 钉钉「备用号」类账号：不同步、不展示在团队管理 */
+function isSpareAccountName(name) {
+  const n = String(name || '').trim();
+  if (!n) return false;
+  return n.includes('备用号') || n.endsWith('备用') || /备用\d+$/.test(n);
+}
+
 /**
  * 本地名与钉钉最新名模糊匹配时，采用钉钉最新显示名；
  * 调用方需同步把任务/项目里的旧名引用改成新名。
@@ -1105,6 +1112,9 @@ async function ensureUserForDingTalkLogin(dingTalkUserId) {
   }
 
   const name = String(detail?.name || '').trim();
+  if (isSpareAccountName(name)) {
+    return null;
+  }
   const nameCore = name.split(/\s+/)[0];
   const allUsers = getAllUsers();
 
@@ -1225,6 +1235,9 @@ function namesMatch(localName, dingName) {
 
 function mergeDingTalkIntoUser(nextUsers, idx, dingUserId, detail, basic, deptNameById) {
   const dingName = detail.name || basic?.name || '';
+  if (isSpareAccountName(dingName) || (idx >= 0 && isSpareAccountName(nextUsers[idx]?.name))) {
+    return { updated: 0, created: 0, bound: false, skipped: 1, skippedSpare: 1 };
+  }
   if (idx >= 0) {
     const prev = nextUsers[idx];
     const nextName = dingName && namesMatch(prev.name, dingName)
@@ -1386,6 +1399,7 @@ async function replaceUsersFromDingTalk(options = {}) {
   const ambiguous = [];
   let skippedInactive = 0;
   let skippedManualInactive = 0;
+  let skippedSpare = 0;
 
   for (const dingUserId of dingIds) {
     const detail = detailsById[dingUserId] || pool.basicById[dingUserId] || {};
@@ -1395,6 +1409,10 @@ async function replaceUsersFromDingTalk(options = {}) {
       continue;
     }
     const dingName = detail.name || basic.name || '';
+    if (isSpareAccountName(dingName)) {
+      skippedSpare++;
+      continue;
+    }
     const match = findLocalForDingReplace(dingUserId, dingName, nextUsers, claimedLocalIds);
 
     if (match.how === 'ambiguous') {
@@ -1468,6 +1486,21 @@ async function replaceUsersFromDingTalk(options = {}) {
   for (const local of nextUsers) {
     if (coveredLocalIds.has(local.id)) continue;
     if (local.active === false) continue;
+    // 本地已有「备用号」：同步时停用，避免出现在团队管理
+    if (isSpareAccountName(local.name)) {
+      toDeactivate.push({
+        id: local.id,
+        name: local.name,
+        dept: local.dept,
+        role: local.role,
+        profileKind: local.profileKind || PROFILE_KIND_MEMBER,
+        dingTalkUserId: local.dingTalkUserId || '',
+        reason: 'spare',
+      });
+      const spareIdx = nextUsers.findIndex(u => u.id === local.id);
+      if (spareIdx >= 0) nextUsers[spareIdx] = { ...nextUsers[spareIdx], active: false };
+      continue;
+    }
     const inScope = deptNames.some(d => deptNameMatchesFilter(local.dept, [d]));
     if (!inScope) continue;
     toDeactivate.push({
@@ -1491,6 +1524,7 @@ async function replaceUsersFromDingTalk(options = {}) {
     ambiguous,
     skippedInactive,
     skippedManualInactive,
+    skippedSpare,
     dingTalkPulled: dingIds.length,
     depts: deptNames,
     staffDeptCatalog: nextCatalog,
@@ -1507,12 +1541,14 @@ async function replaceUsersFromDingTalk(options = {}) {
       renamed: renames.length,
       ambiguous: ambiguous.length,
       skippedManualInactive,
+      skippedSpare,
       message:
         `预览（部门：${deptNames.join('、')}）：将新增 ${toCreate.length}、更新 ${toUpdate.length}、改名 ${renames.length}、停用 ${toDeactivate.length}` +
         (ambiguous.length ? `，重名待处理 ${ambiguous.length}` : '') +
         `；钉钉拉取 ${dingIds.length} 人` +
         (skippedInactive ? `，跳过离职 ${skippedInactive}` : '') +
-        (skippedManualInactive ? `，跳过已停用 ${skippedManualInactive}` : ''),
+        (skippedManualInactive ? `，跳过已停用 ${skippedManualInactive}` : '') +
+        (skippedSpare ? `，跳过备用号 ${skippedSpare}` : ''),
     };
   }
 
@@ -1555,8 +1591,9 @@ async function replaceUsersFromDingTalk(options = {}) {
     renamedRefs: renameResult.renamedRefs,
     ambiguous: ambiguous.length,
     bound: toUpdate.length + toCreate.length,
-    skipped: ambiguous.length + skippedInactive + skippedManualInactive,
+    skipped: ambiguous.length + skippedInactive + skippedManualInactive + skippedSpare,
     skippedManualInactive,
+    skippedSpare,
     total: dingIds.length,
     mode: 'replace',
     scanMode: 'dept',
@@ -1566,6 +1603,7 @@ async function replaceUsersFromDingTalk(options = {}) {
       `、停用 ${toDeactivate.length}` +
       (ambiguous.length ? `，重名跳过 ${ambiguous.length}` : '') +
       (skippedManualInactive ? `，跳过已停用 ${skippedManualInactive}` : '') +
+      (skippedSpare ? `，跳过备用号 ${skippedSpare}` : '') +
       `；钉钉拉取 ${dingIds.length} 人${persistHint}`,
     allUsers: nextUsers,
     updatedUsers: [...toUpdate, ...toCreate].map(row => nextUsers.find(u => u.id === row.id)).filter(Boolean),
@@ -1657,7 +1695,7 @@ async function syncUsersFromDingTalk(options = {}) {
       const nameIndex = buildDingTalkNameIndex(userIdSet, basicById);
       const pendingName = [];
       for (const local of locals) {
-        if (local.active === false) {
+        if (local.active === false || isSpareAccountName(local.name)) {
           skipped++;
           continue;
         }
@@ -1718,7 +1756,7 @@ async function syncUsersFromDingTalk(options = {}) {
     const nameIndex = buildDingTalkNameIndex(userIdSet, basicById);
 
     for (const local of targetLocals) {
-      if (local.active === false) {
+      if (local.active === false || isSpareAccountName(local.name)) {
         skipped++;
         continue;
       }
@@ -1785,6 +1823,12 @@ async function syncUsersFromDingTalk(options = {}) {
   // 移除历史误同步自动创建的 DT- 陌生人
   for (let i = nextUsers.length - 1; i >= 0; i--) {
     if (String(nextUsers[i].id || '').startsWith('DT-')) nextUsers.splice(i, 1);
+  }
+  // 本地「备用号」停用，避免进入团队管理
+  for (let i = 0; i < nextUsers.length; i++) {
+    if (nextUsers[i].active !== false && isSpareAccountName(nextUsers[i].name)) {
+      nextUsers[i] = { ...nextUsers[i], active: false };
+    }
   }
 
   const renames = collectNameRenames(existing, nextUsers);

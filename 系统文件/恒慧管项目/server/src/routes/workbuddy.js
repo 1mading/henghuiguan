@@ -1,46 +1,24 @@
 const express = require('express');
-const config = require('../config');
 const { writeOk, writeErr } = require('../utils/response');
 const {
   queryWorkbuddy,
   getProjectDetail,
   getTaskDetail,
+  getProjectPlanLedger,
 } = require('../services/workbuddyQuery');
+const { requireWorkbuddyApiKey } = require('../middleware/apiKeyAuth');
 
 const router = express.Router();
 
-/**
- * WorkBuddy / 外部 Agent 专用鉴权：
- * 必须携带 X-Api-Key，匹配 WORKBUDDY_API_KEY（优先）或 API_KEY。
- * 未配置任一密钥时返回 503，避免未鉴权对外暴露。
- */
-function requireWorkbuddyApiKey(req, res, next) {
-  const expected = String(config.workbuddyApiKey || config.apiKey || '').trim();
-  if (!expected) {
-    return writeErr(res, 503, '未配置 WORKBUDDY_API_KEY 或 API_KEY，无法对外提供查询');
-  }
-  const incoming = String(req.headers['x-api-key'] || req.query.key || '').trim();
-  if (!incoming || incoming !== expected) {
-    return writeErr(res, 401, '未授权或密钥错误（请设置 Header: X-Api-Key）');
-  }
-  next();
-}
-
-/** 连通性探测（需密钥） */
-router.get('/workbuddy/health', requireWorkbuddyApiKey, (_req, res) => {
+router.get('/workbuddy/health', requireWorkbuddyApiKey, (req, res) => {
   writeOk(res, {
     service: 'henghuiguan-workbuddy',
     time: new Date().toISOString(),
+    keyKind: req.apiKeyKind || 'global',
+    actor: req.scopedActor ? { id: req.scopedActor.id, name: req.scopedActor.name } : null,
   });
 });
 
-/**
- * 统一查询
- * GET /api/workbuddy/query
- * Query: type=all|projects|tasks|summary
- *        keyword, status, assignee, projectId, limit
- *        includeArchived, includeDone
- */
 router.get('/workbuddy/query', requireWorkbuddyApiKey, (req, res) => {
   try {
     const data = queryWorkbuddy({
@@ -52,6 +30,7 @@ router.get('/workbuddy/query', requireWorkbuddyApiKey, (req, res) => {
       limit: req.query.limit,
       includeArchived: req.query.includeArchived,
       includeDone: req.query.includeDone,
+      actor: req.scopedActor || null,
     });
     writeOk(res, data);
   } catch (e) {
@@ -61,7 +40,15 @@ router.get('/workbuddy/query', requireWorkbuddyApiKey, (req, res) => {
 
 router.get('/workbuddy/projects/:id', requireWorkbuddyApiKey, (req, res) => {
   try {
-    writeOk(res, getProjectDetail(String(req.params.id || '').trim()));
+    writeOk(res, getProjectDetail(String(req.params.id || '').trim(), { actor: req.scopedActor || null }));
+  } catch (e) {
+    writeErr(res, e.status || 500, e.message || '查询失败');
+  }
+});
+
+router.get('/workbuddy/projects/:id/plan-ledger', requireWorkbuddyApiKey, (req, res) => {
+  try {
+    writeOk(res, getProjectPlanLedger(String(req.params.id || '').trim(), { actor: req.scopedActor || null }));
   } catch (e) {
     writeErr(res, e.status || 500, e.message || '查询失败');
   }
@@ -69,7 +56,7 @@ router.get('/workbuddy/projects/:id', requireWorkbuddyApiKey, (req, res) => {
 
 router.get('/workbuddy/tasks/:id', requireWorkbuddyApiKey, (req, res) => {
   try {
-    writeOk(res, getTaskDetail(String(req.params.id || '').trim()));
+    writeOk(res, getTaskDetail(String(req.params.id || '').trim(), { actor: req.scopedActor || null }));
   } catch (e) {
     writeErr(res, e.status || 500, e.message || '查询失败');
   }

@@ -18,6 +18,13 @@ const {
   normalizeProjectRecord,
 } = require('../db/database');
 const { emitChange } = require('./realtime');
+const { buildProjectPlanLedger } = require('../utils/projectPlanLedger');
+const {
+  assertScopedCanReadProject,
+  assertScopedCanWriteProject,
+  assertScopedCanWriteTask,
+  assertScopedCanAbolishTask,
+} = require('./scopedApiKeys');
 
 const TASK_STATUSES = new Set(['todo', 'doing', 'paused', 'done', 'abolished', 'archived']);
 const TASK_PRIORITIES = new Set(['urgent', 'important', 'normal']);
@@ -32,6 +39,14 @@ function httpError(status, message) {
   const err = new Error(message);
   err.status = status;
   return err;
+}
+
+function denyScoped(actor, action) {
+  if (actor) throw httpError(403, `作用域 Key 不能${action}，请使用可管理范围内的项目/任务接口`);
+}
+
+function scopedActorName(actor, fallback) {
+  return (actor && actor.name) || fallback;
 }
 
 function genId(prefix) {
@@ -129,7 +144,9 @@ function createDefaultPhaseMilestones(project, creator) {
   };
   const store = getDb();
   const created = [];
+  let seq = 0;
   for (const phase of phases) {
+    seq += 1;
     const milestone = {
       id: genId('T'),
       projectId: project.id,
@@ -155,6 +172,18 @@ function createDefaultPhaseMilestones(project, creator) {
       desc: '',
       createdAt: nowCreatedAt(),
       phaseKey: phase.key,
+      milestoneSeq: `M${seq}`,
+      roleA: project.manager || '',
+      roleR: project.manager || '',
+      roleC: '',
+      roleV: '',
+      deliverables: '',
+      acceptanceCriteria: '',
+      completionEvidence: '',
+      depsRisks: '',
+      escalation: '',
+      delayImpact: '',
+      reopenConditions: '',
     };
     store.tasks.push(milestone);
     created.push(milestone);
@@ -191,7 +220,8 @@ function createDefaultPhaseMilestones(project, creator) {
   return created;
 }
 
-function createProject(body = {}) {
+function createProject(body = {}, opts = {}) {
+  denyScoped(opts.actor, '新建项目');
   const name = String(body.name || body.title || '').trim();
   if (!name) throw httpError(400, '项目名称 name 不能为空');
 
@@ -207,6 +237,10 @@ function createProject(body = {}) {
     id,
     name,
     desc: String(body.desc || body.description || '').trim(),
+    objective: String(body.objective || '').trim(),
+    value: String(body.value || '').trim(),
+    scope: String(body.scope || '').trim(),
+    outOfScope: String(body.outOfScope || '').trim(),
     nextPlan: String(body.nextPlan || '').trim(),
     blocker: String(body.blocker || '').trim(),
     currentPhase: String(body.currentPhase || '').trim(),
@@ -220,6 +254,9 @@ function createProject(body = {}) {
     creator,
     createdAt: String(body.createdAt || nowCreatedAt()),
     documents: Array.isArray(body.documents) ? body.documents : [],
+    planVerified: body.planVerified === true,
+    planVerifiedBy: String(body.planVerifiedBy || '').trim(),
+    planVerifiedAt: String(body.planVerifiedAt || '').trim(),
     externalMeta: body.externalMeta && typeof body.externalMeta === 'object' ? body.externalMeta : undefined,
   };
   if (!project.externalMeta) delete project.externalMeta;
@@ -235,15 +272,20 @@ function createProject(body = {}) {
   return { project, templateTaskCount: templateTasks.length };
 }
 
-function updateProject(id, body = {}) {
+function updateProject(id, body = {}, opts = {}) {
   const store = getDb();
   const idx = store.projects.findIndex(p => String(p.id) === String(id));
   if (idx < 0) throw httpError(404, `项目不存在: ${id}`);
   const prev = store.projects[idx];
+  if (opts.actor) assertScopedCanWriteProject(opts.actor, prev);
   const next = { ...prev };
 
   if (body.name != null) next.name = String(body.name).trim() || prev.name;
   if (body.desc != null || body.description != null) next.desc = String(body.desc ?? body.description ?? '').trim();
+  if (body.objective != null) next.objective = String(body.objective).trim();
+  if (body.value != null) next.value = String(body.value).trim();
+  if (body.scope != null) next.scope = String(body.scope).trim();
+  if (body.outOfScope != null) next.outOfScope = String(body.outOfScope).trim();
   if (body.nextPlan != null) next.nextPlan = String(body.nextPlan).trim();
   if (body.blocker != null) next.blocker = String(body.blocker).trim();
   if (body.currentPhase != null) next.currentPhase = String(body.currentPhase).trim();
@@ -264,6 +306,9 @@ function updateProject(id, body = {}) {
   }
   if (body.startDate != null) next.startDate = normalizeDate(body.startDate) || next.startDate;
   if (body.endDate != null) next.endDate = normalizeDate(body.endDate);
+  if (body.planVerified != null) next.planVerified = body.planVerified === true || body.planVerified === 'true';
+  if (body.planVerifiedBy != null) next.planVerifiedBy = String(body.planVerifiedBy).trim();
+  if (body.planVerifiedAt != null) next.planVerifiedAt = String(body.planVerifiedAt).trim();
   if (body.externalMeta && typeof body.externalMeta === 'object') {
     next.externalMeta = { ...(prev.externalMeta || {}), ...body.externalMeta };
   }
@@ -275,7 +320,8 @@ function updateProject(id, body = {}) {
   return { project: next };
 }
 
-function deleteProject(id, { cascadeTasks = true } = {}) {
+function deleteProject(id, { cascadeTasks = true, actor = null } = {}) {
+  denyScoped(actor, '删除项目');
   const store = getDb();
   const idx = store.projects.findIndex(p => String(p.id) === String(id));
   if (idx < 0) throw httpError(404, `项目不存在: ${id}`);
@@ -319,7 +365,7 @@ function normalizeCollaboratorEntries(body, fallbackNames = []) {
   return (fallbackNames || []).map(n => ({ name: resolvePersonName(n), role: 'inform' })).filter(e => e.name);
 }
 
-function createTask(body = {}) {
+function createTask(body = {}, opts = {}) {
   const title = String(body.title || body.name || '').trim();
   if (!title) throw httpError(400, '任务标题 title 不能为空');
 
@@ -328,6 +374,10 @@ function createTask(body = {}) {
 
   const projectId = body.projectId != null ? String(body.projectId).trim() : '';
   if (projectId && !findProject(projectId)) throw httpError(400, `所属项目不存在: ${projectId}`);
+  if (opts.actor) {
+    if (!projectId) throw httpError(403, '作用域 Key 创建任务时必须指定可管理的 projectId');
+    assertScopedCanWriteProject(opts.actor, findProject(projectId));
+  }
 
   const parentId = body.parentId != null && body.parentId !== '' ? String(body.parentId).trim() : null;
   if (parentId && !findTask(parentId)) throw httpError(400, `父任务不存在: ${parentId}`);
@@ -339,7 +389,7 @@ function createTask(body = {}) {
     : priority === '重要' ? 'important'
       : TASK_PRIORITIES.has(priority) ? priority : 'normal';
 
-  const creator = resolvePersonName(body.creator) || '外部系统';
+  const creator = scopedActorName(opts.actor, resolvePersonName(body.creator) || '外部系统');
   const assignee = resolvePersonName(body.assignee) || creator;
   const collaboratorEntries = normalizeCollaboratorEntries(body, body.collaborators);
   const type = projectId
@@ -370,6 +420,18 @@ function createTask(body = {}) {
     actualEndDate: normalizeDate(body.actualEndDate) || null,
     comments: Array.isArray(body.comments) ? body.comments : [],
     attachments: Array.isArray(body.attachments) ? body.attachments : [],
+    milestoneSeq: String(body.milestoneSeq || '').trim(),
+    roleA: String(body.roleA || '').trim(),
+    roleR: String(body.roleR || '').trim() || assignee,
+    roleC: String(body.roleC || '').trim(),
+    roleV: String(body.roleV || '').trim(),
+    deliverables: String(body.deliverables || '').trim(),
+    acceptanceCriteria: String(body.acceptanceCriteria || '').trim(),
+    completionEvidence: String(body.completionEvidence || '').trim(),
+    depsRisks: String(body.depsRisks || '').trim(),
+    escalation: String(body.escalation || '').trim(),
+    delayImpact: String(body.delayImpact || '').trim(),
+    reopenConditions: String(body.reopenConditions || '').trim(),
   };
   if (body.externalMeta && typeof body.externalMeta === 'object') {
     task.externalMeta = body.externalMeta;
@@ -390,13 +452,17 @@ const TASK_PATCHABLE = [
   'assignee', 'status', 'priority', 'progress', 'dueDate', 'estimatedHours', 'actualHours',
   'planStartDate', 'actualStartDate', 'actualEndDate', 'attachments', 'externalMeta', 'intakeMeta',
   'informCollaborators', 'assistCollaborators', 'collaboratorEntries', 'collaborators',
+  'milestoneSeq', 'roleA', 'roleR', 'roleC', 'roleV',
+  'deliverables', 'acceptanceCriteria', 'completionEvidence',
+  'depsRisks', 'escalation', 'delayImpact', 'reopenConditions',
 ];
 
-function updateTask(id, body = {}) {
+function updateTask(id, body = {}, opts = {}) {
   const store = getDb();
   const idx = store.tasks.findIndex(t => String(t.id) === String(id));
   if (idx < 0) throw httpError(404, `任务不存在: ${id}`);
   const prev = store.tasks[idx];
+  if (opts.actor) assertScopedCanWriteTask(opts.actor, prev);
   const next = { ...prev };
 
   if (body.title != null || body.name != null) {
@@ -455,6 +521,17 @@ function updateTask(id, body = {}) {
     next.collaboratorEntries = normalizeCollaboratorEntries(body, body.collaborators);
     next.collaborators = next.collaboratorEntries.map(e => e.name);
   }
+  const planTextFields = [
+    'milestoneSeq', 'roleA', 'roleR', 'roleC', 'roleV',
+    'deliverables', 'acceptanceCriteria', 'completionEvidence',
+    'depsRisks', 'escalation', 'delayImpact', 'reopenConditions',
+  ];
+  planTextFields.forEach((key) => {
+    if (body[key] != null) next[key] = String(body[key]).trim();
+  });
+  if (body.roleR != null && String(body.roleR).trim() && !body.assignee) {
+    next.assignee = resolvePersonName(body.roleR) || next.assignee;
+  }
 
   store.tasks[idx] = next;
   persistOrThrow();
@@ -462,10 +539,11 @@ function updateTask(id, body = {}) {
   return { task: next, patchedFields: TASK_PATCHABLE.filter(k => body[k] !== undefined) };
 }
 
-function deleteTask(id, { cascadeChildren = true } = {}) {
+function deleteTask(id, { cascadeChildren = true, actor = null } = {}) {
   const store = getDb();
   const target = store.tasks.find(t => String(t.id) === String(id));
   if (!target) throw httpError(404, `任务不存在: ${id}`);
+  if (actor) assertScopedCanAbolishTask(actor, target);
 
   const toRemove = new Set([String(id)]);
   if (cascadeChildren !== false) {
@@ -491,15 +569,16 @@ function deleteTask(id, { cascadeChildren = true } = {}) {
   return { task: target, removedTaskIds: [...toRemove], removedCount: removed.length };
 }
 
-function addComment(taskId, body = {}) {
+function addComment(taskId, body = {}, opts = {}) {
   const store = getDb();
   const task = store.tasks.find(t => String(t.id) === String(taskId));
   if (!task) throw httpError(404, `任务不存在: ${taskId}`);
+  if (opts.actor) assertScopedCanWriteTask(opts.actor, task);
   const content = String(body.content || body.text || '').trim();
   if (!content && !(Array.isArray(body.attachments) && body.attachments.length)) {
     throw httpError(400, '评论 content 不能为空');
   }
-  const author = resolvePersonName(body.author || body.operator) || '外部系统';
+  const author = scopedActorName(opts.actor, resolvePersonName(body.author || body.operator) || '外部系统');
   const comment = {
     id: String(body.id || '').trim() || genId('C'),
     author,
@@ -515,10 +594,11 @@ function addComment(taskId, body = {}) {
   return { taskId: task.id, comment };
 }
 
-function deleteComment(taskId, commentId) {
+function deleteComment(taskId, commentId, opts = {}) {
   const store = getDb();
   const task = store.tasks.find(t => String(t.id) === String(taskId));
   if (!task) throw httpError(404, `任务不存在: ${taskId}`);
+  if (opts.actor) assertScopedCanWriteTask(opts.actor, task);
   if (!Array.isArray(task.comments)) throw httpError(404, '评论不存在');
   const idx = task.comments.findIndex(c => String(c.id) === String(commentId));
   if (idx < 0) throw httpError(404, `评论不存在: ${commentId}`);
@@ -547,7 +627,13 @@ function wouldCreateDependencyCycle(predecessorTaskId, successorTaskId) {
   return false;
 }
 
-function createDependency(body = {}) {
+function createDependency(body = {}, opts = {}) {
+  if (opts.actor) {
+    const pred = findTask(body.predecessorTaskId);
+    const succ = findTask(body.successorTaskId);
+    if (pred) assertScopedCanWriteTask(opts.actor, pred);
+    if (succ) assertScopedCanWriteTask(opts.actor, succ);
+  }
   const predecessorTaskId = String(body.predecessorTaskId || body.fromTaskId || '').trim();
   const successorTaskId = String(body.successorTaskId || body.toTaskId || '').trim();
   if (!predecessorTaskId || !successorTaskId) {
@@ -585,7 +671,16 @@ function createDependency(body = {}) {
   return { dependency: dep };
 }
 
-function updateDependency(id, body = {}) {
+function updateDependency(id, body = {}, opts = {}) {
+  if (opts.actor) {
+    const dep = findDependency(id);
+    if (dep) {
+      const pred = findTask(dep.predecessorTaskId);
+      const succ = findTask(dep.successorTaskId);
+      if (pred) assertScopedCanWriteTask(opts.actor, pred);
+      if (succ) assertScopedCanWriteTask(opts.actor, succ);
+    }
+  }
   const store = getDb();
   if (!Array.isArray(store.taskDependencies)) store.taskDependencies = [];
   const idx = store.taskDependencies.findIndex(d => String(d.id) === String(id));
@@ -609,7 +704,16 @@ function updateDependency(id, body = {}) {
   return { dependency: next };
 }
 
-function deleteDependency(id) {
+function deleteDependency(id, opts = {}) {
+  if (opts.actor) {
+    const dep = findDependency(id);
+    if (dep) {
+      const pred = findTask(dep.predecessorTaskId);
+      const succ = findTask(dep.successorTaskId);
+      if (pred) assertScopedCanWriteTask(opts.actor, pred);
+      if (succ) assertScopedCanWriteTask(opts.actor, succ);
+    }
+  }
   const store = getDb();
   if (!Array.isArray(store.taskDependencies)) store.taskDependencies = [];
   const idx = store.taskDependencies.findIndex(d => String(d.id) === String(id));
@@ -620,7 +724,8 @@ function deleteDependency(id) {
   return { dependency: dep };
 }
 
-function upsertExternalUser(body = {}) {
+function upsertExternalUser(body = {}, opts = {}) {
+  denyScoped(opts.actor, '维护人员档案');
   const name = String(body.name || '').trim();
   if (!name) throw httpError(400, '人员姓名 name 不能为空');
   const dingTalkUserId = String(body.dingTalkUserId || body.userid || '').trim();
@@ -645,7 +750,8 @@ function upsertExternalUser(body = {}) {
   return { user, created: !existing };
 }
 
-function updateWorkCalendar(calendar) {
+function updateWorkCalendar(calendar, opts = {}) {
+  denyScoped(opts.actor, '修改工作日历');
   if (!calendar || typeof calendar !== 'object') throw httpError(400, '需要工作日历对象');
   const saved = setWorkCalendar(calendar);
   emitChange({
@@ -658,7 +764,8 @@ function updateWorkCalendar(calendar) {
   return { workCalendar: saved || getWorkCalendar() };
 }
 
-function appendExternalChangeLogs(entries) {
+function appendExternalChangeLogs(entries, opts = {}) {
+  denyScoped(opts.actor, '批量写入变更日志');
   if (!Array.isArray(entries) || !entries.length) throw httpError(400, '需要 changeLogs 数组');
   const normalized = entries.map(e => ({
     id: e.id || genId('CL'),
@@ -685,7 +792,8 @@ function appendExternalChangeLogs(entries) {
 /**
  * 批量写入：upsert projects/tasks/dependencies，支持显式删除
  */
-function batchWrite(body = {}) {
+function batchWrite(body = {}, opts = {}) {
+  denyScoped(opts.actor, '批量写入');
   const result = {
     projectsUpserted: 0,
     tasksUpserted: 0,
@@ -759,18 +867,42 @@ function getCatalog() {
     auth: 'Header X-Api-Key（环境变量 API_KEY）',
     base: '/api/external',
     projectFields: {
+      objective: '项目目标',
+      value: '项目价值',
+      scope: '范围（做什么）',
+      outOfScope: '不做范围',
+      endDate: '最终完成时间',
       currentPhase: '当前阶段（手动维护的项目推进状态）',
       nextPlan: '下一步计划',
       blocker: '当前卡点',
+      planVerified: '计划台账是否已校验',
+      planVerifiedBy: '校验人',
+      planVerifiedAt: '校验时间',
+    },
+    milestoneFields: {
+      milestoneSeq: 'M序号',
+      roleA: 'A 唯一交付人',
+      roleR: 'R 直接执行人',
+      roleC: 'C 协作人',
+      roleV: 'V 业务验收人',
+      deliverables: '交付物',
+      acceptanceCriteria: '验收标准',
+      completionEvidence: '完成证据',
+      depsRisks: '依赖/风险',
+      escalation: '升级条件',
+      delayImpact: '延期影响',
+      reopenConditions: '重开条件',
     },
     endpoints: [
       { method: 'GET', path: '/external/health', desc: '连通性' },
       { method: 'GET', path: '/external/catalog', desc: '接口目录' },
       { method: 'POST', path: '/external/projects', desc: '创建项目（默认带标准阶段模板）' },
-      { method: 'PATCH', path: '/external/projects/:id', desc: '更新项目' },
+      { method: 'PATCH', path: '/external/projects/:id', desc: '更新项目（含计划书字段）' },
+      { method: 'GET', path: '/external/projects/:id/plan-ledger', desc: '导出项目计划台账（管线格式）' },
+      { method: 'POST', path: '/external/projects/:id/plan-verify', desc: '校验/取消校验项目计划台账' },
       { method: 'DELETE', path: '/external/projects/:id', desc: '删除项目（默认级联任务）' },
-      { method: 'POST', path: '/external/tasks', desc: '创建任务/临时事项/里程碑' },
-      { method: 'PATCH', path: '/external/tasks/:id', desc: '更新任务' },
+      { method: 'POST', path: '/external/tasks', desc: '创建任务/临时事项/里程碑（含 A/R/C/V）' },
+      { method: 'PATCH', path: '/external/tasks/:id', desc: '更新任务/里程碑计划字段' },
       { method: 'DELETE', path: '/external/tasks/:id', desc: '删除任务（默认级联子任务）' },
       { method: 'POST', path: '/external/tasks/:id/comments', desc: '添加评论' },
       { method: 'DELETE', path: '/external/tasks/:taskId/comments/:commentId', desc: '删除评论' },
@@ -782,6 +914,57 @@ function getCatalog() {
       { method: 'POST', path: '/external/change-logs', desc: '追加变更日志' },
       { method: 'POST', path: '/external/batch', desc: '批量 upsert/删除' },
     ],
+  };
+}
+
+function getExternalProjectPlanLedger(id, opts = {}) {
+  const project = findProject(id);
+  if (!project) throw httpError(404, `项目不存在: ${id}`);
+  if (opts.actor) assertScopedCanReadProject(opts.actor, project);
+  return buildProjectPlanLedger(project, getAllTasks());
+}
+
+/**
+ * 校验 / 取消校验项目计划台账
+ * body: { verified?: boolean, operator?: string }
+ */
+function verifyProjectPlan(id, body = {}, opts = {}) {
+  const store = getDb();
+  const idx = store.projects.findIndex(p => String(p.id) === String(id));
+  if (idx < 0) throw httpError(404, `项目不存在: ${id}`);
+  const prev = store.projects[idx];
+  if (opts.actor) assertScopedCanWriteProject(opts.actor, prev);
+  const operator = scopedActorName(opts.actor, resolvePersonName(body.operator) || 'external-api');
+  const verified = body.verified === undefined
+    ? true
+    : (body.verified === true || body.verified === 'true' || body.verified === 1 || body.verified === '1');
+
+  const next = { ...prev };
+  if (verified) {
+    next.planVerified = true;
+    next.planVerifiedBy = operator;
+    next.planVerifiedAt = new Date().toLocaleString('zh-CN', { hour12: false });
+  } else {
+    next.planVerified = false;
+    next.planVerifiedBy = '';
+    next.planVerifiedAt = '';
+  }
+  store.projects[idx] = normalizeProjectRecord(next);
+  persistOrThrow();
+  appendChangeLogs([{
+    id: genId('CL'),
+    taskId: `PROJECT-${id}`,
+    operator,
+    operateTime: new Date().toLocaleString('zh-CN', { hour12: false }),
+    before: prev.planVerified ? `已校验（${prev.planVerifiedBy || ''}）` : '未校验',
+    after: next.planVerified ? `已校验（${next.planVerifiedBy}）` : '未校验',
+    reason: '项目计划台账校验',
+    project: next.name,
+  }]);
+  emitEntityChange('project.plan_verified', 'project', next, operator);
+  return {
+    project: next,
+    ledger: buildProjectPlanLedger(next, getAllTasks()),
   };
 }
 
@@ -802,4 +985,6 @@ module.exports = {
   updateWorkCalendar,
   appendExternalChangeLogs,
   batchWrite,
+  getExternalProjectPlanLedger,
+  verifyProjectPlan,
 };

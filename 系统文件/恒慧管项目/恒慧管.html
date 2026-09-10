@@ -242,6 +242,22 @@
     }
     .wb-todo-badge.is-overdue { color: #DC2626; background: #FEE2E2; }
     .wb-todo-badge.is-duesoon { color: #D97706; background: #FEF3C7; }
+    .wb-todo-status-row {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+      margin-top: 8px;
+    }
+    .wb-todo-source {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px;
+      background: #F3F4F6; color: #4B5563;
+    }
+    .wb-todo-source.is-project { background: #EEF2FF; color: #4338CA; }
+    .wb-todo-source.is-temp { background: #FEF3C7; color: #B45309; }
+    .wb-todo-source.is-inform { background: #ECFDF5; color: #047857; }
+    .wb-todo-source.is-intake { background: #F0FDF4; color: #059669; }
+    .wb-section-sub {
+      font-size: 12px; font-weight: 500; color: var(--text-muted); margin-left: 6px;
+    }
     .wb-todo-desc {
       font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -427,6 +443,34 @@
     .role-manager { background: #DBEAFE; color: #2563EB; }
     .role-staff { background: #D1FAE5; color: #059669; }
 
+    /* 权限管理矩阵 */
+    .perm-page { max-width: 1100px; }
+    .perm-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .perm-hint { font-size: 12px; color: #6B7280; line-height: 1.5; }
+    .perm-table-wrap {
+      overflow: auto; border: 1px solid #E5E7EB; border-radius: 12px; background: #fff;
+    }
+    .perm-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
+    .perm-table th, .perm-table td {
+      padding: 10px 12px; border-bottom: 1px solid #F3F4F6; text-align: left; vertical-align: middle;
+    }
+    .perm-table th {
+      background: #F8FAFC; color: #475569; font-weight: 600; position: sticky; top: 0; z-index: 1;
+    }
+    .perm-table tr.perm-group-row td {
+      background: #F1F5F9; color: #334155; font-weight: 600; font-size: 12px;
+      padding-top: 8px; padding-bottom: 8px;
+    }
+    .perm-table select {
+      width: 100%; max-width: 160px; padding: 6px 8px; border-radius: 8px;
+      border: 1px solid #E5E7EB; background: #fff; font-size: 12px; font-family: inherit;
+    }
+    .perm-table .perm-ro { color: #1F2937; font-weight: 500; }
+    .perm-dirty { color: #D97706; font-size: 12px; margin-left: 8px; }
+
     /* 人员档案（仅内容区） */
     .staff-page { position: relative; }
     .staff-toolbar {
@@ -464,6 +508,28 @@
     .staff-row.is-active-row { background: var(--brand-soft) !important; }
     .staff-row .staff-name { font-weight: 500; color: #1F2937; }
     .staff-row .staff-pos { font-size: 12px; color: #9CA3AF; margin-top: 2px; }
+    .staff-ops {
+      display: inline-flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .staff-ops .btn { flex-shrink: 0; }
+    .staff-key-badge {
+      display: inline-block; font-size: 10px; font-weight: 600;
+      padding: 1px 6px; border-radius: 999px; margin-left: 6px;
+      vertical-align: middle; line-height: 1.4;
+    }
+    .staff-key-badge.is-on { background: #ECFDF5; color: #047857; }
+    .staff-key-badge.is-off { background: #F3F4F6; color: #9CA3AF; }
+    th.staff-col-ops, td.staff-col-ops {
+      width: 168px;
+      min-width: 168px;
+      white-space: nowrap;
+    }
     .staff-leader-link {
       color: var(--brand); background: none; border: none; cursor: pointer;
       font-size: 13px; font-family: inherit; padding: 0;
@@ -549,6 +615,11 @@
     .breadcrumb { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 13px; white-space: nowrap; }
     .breadcrumb .sep { color: var(--text-light); }
     .breadcrumb .current { color: var(--text); font-weight: 500; }
+    .breadcrumb .crumb-link {
+      border: none; background: none; padding: 0; margin: 0; cursor: pointer;
+      font: inherit; color: var(--text-muted);
+    }
+    .breadcrumb .crumb-link:hover { color: var(--brand); }
     .global-search {
       flex: 1; max-width: 420px; margin: 0 auto;
       display: flex; align-items: center; gap: 8px;
@@ -720,6 +791,95 @@
     }
     .sql-tool-output.is-empty { color: #94A3B8; background: #F8FAFC; border: 1px dashed #CBD5E1; }
     .sql-tool-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+    /* ========== 数据安全 ========== */
+    .ds-wrap { max-width: 1100px; }
+    .ds-tabs {
+      display: flex; gap: 6px; background: #F5F5F4; border-radius: 14px; padding: 5px;
+      margin-bottom: 18px; max-width: 420px;
+    }
+    .ds-tab {
+      flex: 1; padding: 10px 0; text-align: center; font-size: 13px; font-weight: 500;
+      border-radius: 10px; border: none; cursor: pointer; background: transparent; color: #737373;
+    }
+    .ds-tab:hover { color: #171717; }
+    .ds-tab.active { background: #fff; color: var(--brand-dark); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .ds-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+    .ds-stat {
+      background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 14px 16px;
+    }
+    .ds-stat-label { font-size: 12px; color: #6B7280; margin-bottom: 4px; }
+    .ds-stat-value { font-size: 22px; font-weight: 700; color: #1F2937; letter-spacing: -0.02em; }
+    .ds-stat-sub { font-size: 11px; color: #9CA3AF; margin-top: 4px; }
+    .ds-panel {
+      background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 18px 20px; margin-bottom: 16px;
+    }
+    .ds-panel h3 {
+      margin: 0 0 12px; font-size: 15px; font-weight: 600; color: #1F2937;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .ds-notes { margin: 0; padding-left: 18px; color: #64748B; font-size: 12px; line-height: 1.7; }
+    .ds-notes li { margin-bottom: 2px; }
+    .ds-meta-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 20px; font-size: 13px;
+    }
+    .ds-meta-item { display: flex; gap: 8px; }
+    .ds-meta-k { color: #6B7280; min-width: 72px; }
+    .ds-meta-v { color: #1F2937; font-weight: 500; word-break: break-all; }
+    .ds-bar-list { display: flex; flex-direction: column; gap: 10px; }
+    .ds-bar-row { display: grid; grid-template-columns: 120px 1fr 64px; gap: 10px; align-items: center; }
+    .ds-bar-name { font-size: 12px; color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ds-bar-track { height: 8px; background: #F1F5F9; border-radius: 999px; overflow: hidden; }
+    .ds-bar-fill { height: 100%; border-radius: 999px; background: var(--brand); min-width: 0; }
+    .ds-bar-fill.is-high { background: #DC2626; }
+    .ds-bar-fill.is-medium { background: #D97706; }
+    .ds-bar-fill.is-low { background: #059669; }
+    .ds-bar-count { font-size: 12px; font-weight: 600; color: #1F2937; text-align: right; font-variant-numeric: tabular-nums; }
+    .ds-table-wrap { overflow-x: auto; }
+    .ds-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .ds-table th, .ds-table td {
+      padding: 8px 10px; text-align: left; border-bottom: 1px solid #F1F5F9; vertical-align: top;
+    }
+    .ds-table th { color: #64748B; font-weight: 600; background: #FAFAF8; white-space: nowrap; }
+    .ds-table td { color: #334155; }
+    .ds-table code { font-size: 11px; background: #F1F5F9; padding: 1px 5px; border-radius: 4px; }
+    .ds-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    }
+    .ds-badge.is-high, .ds-badge.is-critical { background: #FEE2E2; color: #B91C1C; }
+    .ds-badge.is-medium { background: #FEF3C7; color: #B45309; }
+    .ds-badge.is-low { background: #D1FAE5; color: #047857; }
+    .ds-method {
+      display: inline-block; min-width: 52px; text-align: center; font-size: 10px; font-weight: 700;
+      padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, monospace;
+    }
+    .ds-method.is-get { background: #DBEAFE; color: #1D4ED8; }
+    .ds-method.is-post { background: #D1FAE5; color: #047857; }
+    .ds-method.is-put, .ds-method.is-patch { background: #FEF3C7; color: #B45309; }
+    .ds-method.is-delete, .ds-method.is-all { background: #FEE2E2; color: #B91C1C; }
+    .ds-group-title {
+      font-size: 13px; font-weight: 600; color: #1F2937; margin: 16px 0 8px;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .ds-group-title:first-child { margin-top: 0; }
+    .ds-chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .ds-chip {
+      font-size: 12px; padding: 5px 10px; border-radius: 8px; background: #F8FAFC; border: 1px solid #E2E8F0; color: #475569;
+    }
+    .ds-chip strong { color: #0F172A; margin-left: 4px; }
+    .ds-loading, .ds-error {
+      padding: 32px; text-align: center; color: #9CA3AF; font-size: 13px;
+    }
+    .ds-error { color: #B91C1C; }
+    .ds-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+    .ds-filter {
+      font-size: 12px; padding: 6px 10px; border: 1px solid #E5E7EB; border-radius: 8px; background: #fff; color: #374151;
+    }
+    @media (max-width: 900px) {
+      .ds-stats { grid-template-columns: repeat(2, 1fr); }
+      .ds-meta-grid { grid-template-columns: 1fr; }
+      .ds-bar-row { grid-template-columns: 90px 1fr 48px; }
+    }
     .kpi-plan-wrap { width: 100%; }
     .kpi-plan-toolbar {
       display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px;
@@ -1872,6 +2032,41 @@
       font-size: 13px; font-weight: 600; color: var(--text);
       margin: 0 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
     }
+    /* 项目计划：表格 / 甘特切换 */
+    .project-plan-view-toggle {
+      display: inline-flex; gap: 0; border: 1px solid var(--border); border-radius: 8px;
+      overflow: hidden; background: #fff; margin-bottom: 12px;
+    }
+    .project-plan-view-toggle button {
+      border: none; background: transparent; padding: 6px 12px; font-size: 12px;
+      color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .project-plan-view-toggle button + button { border-left: 1px solid var(--border); }
+    .project-plan-view-toggle button.active {
+      background: var(--brand-soft); color: var(--brand); font-weight: 600;
+    }
+    .project-gantt-section {
+      margin-top: 8px; background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow);
+    }
+    .project-gantt-wrap {
+      width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      min-height: 160px;
+    }
+    .project-gantt-wrap .gantt .handle-group { display: none !important; }
+    .project-gantt-wrap .gantt .bar-wrapper { cursor: pointer; }
+    .project-gantt-wrap .gantt .bar-wrapper.gantt-row-milestone .bar {
+      fill: var(--brand);
+    }
+    .project-gantt-wrap .gantt .bar-wrapper.gantt-row-done .bar {
+      fill: #10B981;
+    }
+    .project-gantt-wrap .gantt .bar-wrapper.gantt-row-overdue .bar {
+      fill: #DC2626;
+    }
+    .project-gantt-meta {
+      margin-top: 10px; font-size: 12px; color: var(--text-muted);
+    }
     .project-member-panel,
     .project-task-preview-panel {
       background: var(--bg-panel); border: 1px solid var(--border);
@@ -1935,6 +2130,41 @@
     }
     .project-focus-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
     .project-focus-row.is-phase .project-focus-value:not(.is-empty) { color: var(--brand-dark); font-weight: 600; }
+    .project-plan-panel {
+      background: var(--bg-panel); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .project-plan-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
+    @media (max-width: 720px) {
+      .project-plan-grid { grid-template-columns: 1fr; }
+    }
+    .project-plan-item {
+      padding: 10px 12px; background: #F9FAFB; border-radius: 8px; border: 1px solid #F3F4F6;
+    }
+    .project-plan-item.is-wide { grid-column: 1 / -1; }
+    .project-plan-k {
+      font-size: 11px; color: #9CA3AF; margin-bottom: 4px; font-weight: 600;
+    }
+    .project-plan-v {
+      font-size: 13px; color: #1F2937; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+    }
+    .project-plan-v.is-empty { color: #9CA3AF; font-style: italic; }
+    .project-plan-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
+    }
+    .project-plan-badge.is-ok { background: #ECFDF5; color: #059669; }
+    .project-plan-badge.is-warn { background: #FFFBEB; color: #D97706; }
+    .project-plan-badge.is-verified { background: #EFF6FF; color: #2563EB; }
+    .arcv-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #F3F4F6; color: #4B5563;
+      margin-right: 4px; white-space: nowrap;
+    }
+    .arcv-chip b { color: #1F2937; }
     .project-card-focus-row {
       display: flex; gap: 6px; align-items: flex-start;
       font-size: 12px; color: var(--text-muted); line-height: 1.45;
@@ -2277,6 +2507,44 @@
     .todo-board-card-actions {
       display: inline-flex; gap: 4px; flex-shrink: 0; flex-wrap: nowrap; align-items: center;
     }
+    .todo-action-menu { position: relative; flex-shrink: 0; }
+    .todo-action-menu-btn {
+      font-size: 12px; padding: 4px 10px; white-space: nowrap;
+    }
+    .todo-action-menu-panel {
+      position: absolute; right: 0; top: calc(100% + 4px); z-index: 40;
+      min-width: 132px; background: #fff; border: 1px solid var(--border);
+      border-radius: 10px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+      padding: 4px; display: flex; flex-direction: column; gap: 2px;
+    }
+    .todo-action-menu-item {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      border: none; background: transparent; cursor: pointer; font-family: inherit;
+      padding: 8px 10px; border-radius: 8px; font-size: 12px; color: var(--text); text-align: left;
+    }
+    .todo-action-menu-item:hover { background: var(--border-light); }
+    .todo-action-menu-item i { width: 14px; text-align: center; color: var(--text-muted); }
+    .todo-action-menu-item.is-primary { color: var(--brand-dark); }
+    .todo-action-menu-item.is-primary i { color: var(--brand); }
+    .todo-action-menu-item.is-success { color: #047857; }
+    .todo-action-menu-item.is-success i { color: #059669; }
+    .todo-action-menu-item.is-warning { color: #B45309; }
+    .todo-action-menu-item.is-warning i { color: #D97706; }
+    .todo-action-menu-item.is-danger { color: #B91C1C; }
+    .todo-action-menu-item.is-danger i { color: #DC2626; }
+    .todo-board-card-title-main {
+      display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .todo-board-card-title-proj {
+      display: block; font-size: 11px; font-weight: 500; color: var(--text-muted);
+      margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .wb-todo-title-proj {
+      display: block; font-size: 12px; font-weight: 500; color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+    .wb-todo-title-main { display: block; }
+
     .todo-board-card-desc {
       font-size: 12px; color: var(--text-muted); line-height: 1.45;
       margin-bottom: 8px;
@@ -2433,8 +2701,17 @@
     function isStaffActive(u) {
       return !u || u.active !== false;
     }
+    /** 钉钉备用号账号：不同步，团队管理不展示 */
+    function isSpareAccountName(name) {
+      const n = String(name || '').trim();
+      if (!n) return false;
+      return n.includes('备用号') || n.endsWith('备用') || /备用\d+$/.test(n);
+    }
+    function isSpareAccount(u) {
+      return !!(u && isSpareAccountName(u.name));
+    }
     function activeUsers() {
-      return users.filter(isStaffActive);
+      return users.filter(u => isStaffActive(u) && !isSpareAccount(u));
     }
     /** 可登录、可分派任务的业务成员（排除通知联系人） */
     function businessUsers(includeInactive = false) {
@@ -2473,15 +2750,93 @@
     const KPI_DEPT_PMO_NAME = '项目管控部';
     const KPI_DEPT_NAMES = [KPI_DEPT_NAME, KPI_DEPT_PMO_NAME];
 
+    /** 与后端 services/permissions.js 默认矩阵对齐 */
+    const DEFAULT_ROLE_PERMISSIONS = {
+      full: {
+        'nav.team': 'on', 'nav.staff': 'on', 'nav.permissions': 'on', 'nav.archive': 'on',
+        'nav.import': 'on', 'nav.systemUpdates': 'on', 'nav.ncc': 'on', 'nav.dataSecurity': 'on',
+        'nav.sqlTools': 'on', 'projects.view': 'all', 'projects.manage': 'all', 'projects.create': 'on',
+        'projects.delete': 'on', 'tasks.deptScope': 'on', 'staff.edit': 'all', 'staff.dingSync': 'on',
+        'kpi.viewAll': 'on', 'display.company': 'on',
+      },
+      manager: {
+        'nav.team': 'on', 'nav.staff': 'on', 'nav.permissions': 'on', 'nav.archive': 'on',
+        'nav.import': 'on', 'nav.systemUpdates': 'on', 'nav.ncc': 'off', 'nav.dataSecurity': 'off',
+        'nav.sqlTools': 'off', 'projects.view': 'all', 'projects.manage': 'own', 'projects.create': 'on',
+        'projects.delete': 'off', 'tasks.deptScope': 'on', 'staff.edit': 'dept_staff', 'staff.dingSync': 'off',
+        'kpi.viewAll': 'on', 'display.company': 'off',
+      },
+      staff: {
+        'nav.team': 'off', 'nav.staff': 'off', 'nav.permissions': 'off', 'nav.archive': 'off',
+        'nav.import': 'off', 'nav.systemUpdates': 'on', 'nav.ncc': 'off', 'nav.dataSecurity': 'off',
+        'nav.sqlTools': 'off', 'projects.view': 'related', 'projects.manage': 'own', 'projects.create': 'on',
+        'projects.delete': 'off', 'tasks.deptScope': 'off', 'staff.edit': 'none', 'staff.dingSync': 'off',
+        'kpi.viewAll': 'off', 'display.company': 'off',
+      },
+    };
+
+    const PERM_CAP_DEFS = [
+      { key: 'nav.team', label: '团队管理', group: '菜单入口', values: ['on', 'off'], valueLabels: { on: '可见', off: '隐藏' } },
+      { key: 'nav.staff', label: '人员档案', group: '菜单入口', values: ['on', 'off'], valueLabels: { on: '可见', off: '隐藏' } },
+      { key: 'nav.permissions', label: '权限管理', group: '菜单入口', values: ['on', 'off'], valueLabels: { on: '可见', off: '隐藏' } },
+      { key: 'nav.dataSecurity', label: '数据安全', group: '菜单入口', values: ['on', 'off'], valueLabels: { on: '可见', off: '隐藏' } },
+      { key: 'nav.archive', label: '归档管理', group: '菜单入口', values: ['on', 'off'], valueLabels: { on: '可见', off: '隐藏' } },
+      { key: 'nav.import', label: '数据导入', group: '菜单入口', values: ['on', 'off'], valueLabels: { on: '可见', off: '隐藏' } },
+      { key: 'nav.systemUpdates', label: '更新记录', group: '菜单入口', values: ['on', 'off'], valueLabels: { on: '可见', off: '隐藏' } },
+      { key: 'nav.ncc', label: 'NCC异常看板', group: '侧栏能力', values: ['on', 'off'], valueLabels: { on: '可见', off: '隐藏' } },
+      { key: 'nav.sqlTools', label: 'SQL脚本生成', group: '侧栏能力', values: ['on', 'off'], valueLabels: { on: '可见', off: '隐藏' } },
+      { key: 'projects.view', label: '项目可见范围', group: '项目', values: ['all', 'related'], valueLabels: { all: '全公司', related: '仅相关' } },
+      { key: 'projects.manage', label: '项目管理', group: '项目', values: ['all', 'own', 'none'], valueLabels: { all: '全部可管', own: '本人负责', none: '不可管' } },
+      { key: 'projects.create', label: '新建项目', group: '项目', values: ['on', 'off'], valueLabels: { on: '允许', off: '禁止' } },
+      { key: 'projects.delete', label: '删除项目', group: '项目', values: ['on', 'off'], valueLabels: { on: '允许', off: '禁止' } },
+      { key: 'tasks.deptScope', label: '任务中心·部门页签', group: '任务', values: ['on', 'off'], valueLabels: { on: '可见', off: '隐藏' } },
+      { key: 'staff.edit', label: '人员档案编辑', group: '组织', values: ['all', 'dept_staff', 'none'], valueLabels: { all: '全员', dept_staff: '本部门执行人员', none: '不可编辑' } },
+      { key: 'staff.dingSync', label: '钉钉通讯录同步', group: '组织', values: ['on', 'off'], valueLabels: { on: '允许', off: '禁止' } },
+      { key: 'kpi.viewAll', label: 'KPI 查看全部部门', group: 'KPI', values: ['on', 'off'], valueLabels: { on: '允许', off: '仅本人' } },
+      { key: 'display.company', label: '滚动大屏（全公司）', group: '展示', values: ['on', 'off'], valueLabels: { on: '允许', off: '禁止' } },
+    ];
+
+    function permRoleBucket(role) {
+      if (isFullAccess(role) || role === 'full') return 'full';
+      if (role === 'manager') return 'manager';
+      return 'staff';
+    }
+
+    function getActiveRolePermissions() {
+      return state.rolePermissions || DEFAULT_ROLE_PERMISSIONS;
+    }
+
+    function resolveCap(userOrRole, key) {
+      const role = typeof userOrRole === 'object' ? userOrRole?.role : userOrRole;
+      const bucket = permRoleBucket(role || currentUser?.role);
+      const matrix = getActiveRolePermissions();
+      const def = PERM_CAP_DEFS.find(d => d.key === key);
+      const v = matrix?.[bucket]?.[key];
+      if (def && def.values.includes(v)) return v;
+      return DEFAULT_ROLE_PERMISSIONS[bucket]?.[key] ?? null;
+    }
+
+    function capOn(userOrRole, key) {
+      return resolveCap(userOrRole, key) === 'on';
+    }
+
+    function canAccessPermissionsPage(user = currentUser) {
+      return !!user?.id && capOn(user, 'nav.permissions');
+    }
+
+    function canEditPermissionsMatrix(user = currentUser) {
+      return !!user?.id && isFullAccess(user.role);
+    }
+
     /** 实施交付部/项目管控部成员，或部门经理/管理员/总经理 */
     function canAccessKpiPlans(user = currentUser) {
       if (!user?.id || isContactProfile(user)) return false;
       return isFullAccess(user.role) || user.role === 'manager' || KPI_DEPT_NAMES.includes(user.dept);
     }
 
-    /** 部门经理/管理员/总经理可查看全部部门计划 */
+    /** 部门经理/管理员/总经理可查看全部部门计划（可由矩阵 kpi.viewAll 覆盖） */
     function canViewAllKpiPlans(user = currentUser) {
-      return canAccessKpiPlans(user) && (isFullAccess(user.role) || user.role === 'manager');
+      return canAccessKpiPlans(user) && capOn(user, 'kpi.viewAll');
     }
 
     function isInfoCenterMember(user = currentUser) {
@@ -2490,7 +2845,7 @@
 
     function canViewAllProjects(user = currentUser) {
       if (!user?.id) return false;
-      return isFullAccess(user.role) || user.role === 'manager';
+      return resolveCap(user, 'projects.view') === 'all';
     }
 
     /** 是否与项目相关（负责人/创建人/团队成员，或参与其下任务） */
@@ -2801,6 +3156,7 @@
     function normalizeAllTaskCollaborators() {
       tasks.forEach(ensureCollaboratorEntries);
       normalizeMilestoneFlags();
+      syncAllMilestoneStatusesFromTasks({ silent: true });
     }
 
     /** 将项目一级根节点标记为里程碑（兼容历史数据） */
@@ -2819,6 +3175,88 @@
           else if (t.isMilestone) t.isMilestone = false;
         });
       });
+    }
+
+    /**
+     * 里程碑状态由下属任务推导：
+     * - 任一进行中 → 进行中
+     * - 全部完成 → 已完成
+     * - 否则有暂停 → 已暂停
+     * - 否则 → 待开始
+     */
+    function deriveMilestoneStatusFromTasks(milestoneId) {
+      const descendants = getMilestoneDescendantTasks(milestoneId);
+      if (!descendants.length) return null;
+      if (descendants.every(t => t.status === 'done')) return 'done';
+      if (descendants.some(t => t.status === 'doing')) return 'doing';
+      if (descendants.some(t => t.status === 'paused')) return 'paused';
+      return 'todo';
+    }
+
+    function applyDerivedMilestoneStatus(milestone, opts = {}) {
+      if (!milestone || !isMilestoneTask(milestone)) return false;
+      if (milestone.status === 'abolished' || milestone.status === 'archived') return false;
+      const derived = deriveMilestoneStatusFromTasks(milestone.id);
+      if (!derived) return false;
+      const oldStatus = milestone.status;
+      milestone.progress = calcProgress(milestone.id);
+      if (oldStatus === derived) return false;
+
+      if (derived === 'done') {
+        applyTaskDoneFields(milestone);
+        milestone.status = 'done';
+        if (!opts.silent) {
+          appendChangeLogEntry({
+            taskId: milestone.id,
+            operator: currentUser.name,
+            operateTime: new Date().toLocaleString(),
+            before: statusMap[oldStatus]?.label || oldStatus,
+            after: statusMap.done.label,
+            reason: '下属任务全部完成，里程碑自动完成',
+            project: projects.find(p => p.id === milestone.projectId)?.name || '',
+          });
+          onTaskMarkedDone(milestone);
+        }
+      } else {
+        if (oldStatus === 'done') {
+          milestone.actualEndDate = null;
+        }
+        if (derived === 'doing' && !milestone.actualStartDate) {
+          milestone.actualStartDate = todayStr();
+        }
+        milestone.status = derived;
+        if (derived !== 'done') {
+          const p = Number(milestone.progress);
+          if (!Number.isFinite(p) || p >= 100) milestone.progress = calcProgress(milestone.id);
+        }
+        if (!opts.silent) {
+          appendChangeLogEntry({
+            taskId: milestone.id,
+            operator: currentUser.name,
+            operateTime: new Date().toLocaleString(),
+            before: statusMap[oldStatus]?.label || oldStatus,
+            after: statusMap[derived]?.label || derived,
+            reason: '随下属任务状态自动同步',
+            project: projects.find(p => p.id === milestone.projectId)?.name || '',
+          });
+        }
+      }
+      return true;
+    }
+
+    function syncAllMilestoneStatusesFromTasks(opts = {}) {
+      let changed = 0;
+      tasks.forEach(t => {
+        if (isMilestoneTask(t) && applyDerivedMilestoneStatus(t, opts)) changed += 1;
+      });
+      return changed;
+    }
+
+    /** 从任务向上同步所属里程碑状态 */
+    function syncOwningMilestoneStatus(task, opts = {}) {
+      const milestone = getOwningMilestone(task);
+      if (!milestone) return false;
+      return applyDerivedMilestoneStatus(milestone, opts);
     }
 
     /** 里程碑：项目计划中的分组节点，不计入任务 */
@@ -3208,7 +3646,7 @@
       { id: 'U085', name: '胡洁', dept: '财务核算组', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '18314236511050688' },
       { id: 'U086', name: '徐群英', dept: '财务核算组', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '204416250324556381' },
       { id: 'U087', name: '冯小红', dept: '财务核算组', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '343811453120858466' },
-      { id: 'U088', name: 'AI应用工程师备用号2', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '398947776' },
+      { id: 'U088', name: '沈昊 AI应用工程师', dept: 'AI创新部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '398947776' },
       { id: 'U089', name: '朱贵乔 Joe', dept: '实施交付部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '136334158' },
       { id: 'U090', name: '陈璇  Chenxuan', dept: '项目管控部', role: 'admin', position: '副科长', leaderId: '', standardWeekHours: 60, dingTalkUserId: '418924990' },
       { id: 'U091', name: '钱华杰 后端研发', dept: '研发集成部', role: 'staff', position: '执行人员', leaderId: '', standardWeekHours: 60, dingTalkUserId: '379939783' },
@@ -3444,6 +3882,20 @@
       return projects.find(p => p.id === task.projectId)?.name || '未知项目';
     }
 
+    /** 任务中心展示名：项目名称 · 任务名称 */
+    function getTaskCenterDisplayParts(task) {
+      const projectLabel = getTaskProjectLabel(task);
+      const title = isAitableIntakeTask(task) ? getIntakeTaskTitle(task) : String(task?.title || '');
+      return { projectLabel, title };
+    }
+
+    function formatTaskCenterDisplayTitle(task) {
+      const { projectLabel, title } = getTaskCenterDisplayParts(task);
+      if (!title) return projectLabel;
+      if (!task?.projectId) return title;
+      return `${projectLabel} · ${title}`;
+    }
+
     /** 卡片顶部上下文：默认「项目 › 上级」；hideProject 时仅上级（待办按项目分区用） */
     function renderTaskCardContext(task, opts = {}) {
       if (!task) return '';
@@ -3638,16 +4090,17 @@
       return isTemp ? daysUntilDue === 0 : daysUntilDue <= 1;
     }
 
-    /** 任务展示用状态：终态优先，其次阻塞 > 延期 > 临期 > 业务状态 */
+    /**
+     * 任务展示用「进度状态」（是否推进）：终态优先，其次阻塞，否则业务状态。
+     * 临期/逾期是截止情况，不写入此处，由徽标/截止列单独展示。
+     */
     function getTaskDisplayStatus(task) {
       if (!task) return 'todo';
       if (task.status === 'abolished' || task.status === 'archived' || task.status === 'rejected' || task.status === 'done' || task.status === 'paused') {
         return task.status;
       }
       if (isTaskBlocked(task) && isActiveTaskStatus(task)) return 'blocked';
-      if (isOverdue(task)) return 'overdue';
-      if (isDueSoon(task)) return 'dueSoon';
-      return task.status;
+      return task.status || 'todo';
     }
 
     function getWeekStartMonday(date) {
@@ -4061,7 +4514,274 @@
       project.currentPhase = String(project.currentPhase || '').trim();
       project.nextPlan = String(project.nextPlan || '').trim();
       project.blocker = String(project.blocker || '').trim();
+      project.objective = String(project.objective || '').trim();
+      project.value = String(project.value || '').trim();
+      project.scope = String(project.scope || '').trim();
+      project.outOfScope = String(project.outOfScope || '').trim();
+      project.planVerified = project.planVerified === true;
+      project.planVerifiedBy = String(project.planVerifiedBy || '').trim();
+      project.planVerifiedAt = String(project.planVerifiedAt || '').trim();
       return project;
+    }
+
+    const MILESTONE_PLAN_FIELDS = [
+      'milestoneSeq', 'roleA', 'roleR', 'roleC', 'roleV',
+      'deliverables', 'acceptanceCriteria', 'completionEvidence',
+      'depsRisks', 'escalation', 'delayImpact', 'reopenConditions',
+    ];
+
+    /** 兼容历史：交付物/验收写在 desc「【交付物】…｜【验收】…」 */
+    function extractMilestonePlanFromDesc(desc) {
+      const text = String(desc || '').trim();
+      if (!text) return { deliverables: '', acceptanceCriteria: '' };
+      let deliverables = '';
+      let acceptanceCriteria = '';
+      const dIdx = text.indexOf('【交付物】');
+      const aIdx = text.indexOf('【验收】');
+      if (dIdx >= 0) {
+        const start = dIdx + '【交付物】'.length;
+        const end = aIdx > dIdx ? aIdx : text.length;
+        deliverables = text.slice(start, end).replace(/^[｜|\s]+|[｜|\s]+$/g, '').trim();
+      }
+      if (aIdx >= 0) {
+        acceptanceCriteria = text.slice(aIdx + '【验收】'.length).replace(/^[｜|\s]+|[｜|\s]+$/g, '').trim();
+      }
+      return { deliverables, acceptanceCriteria };
+    }
+
+    function getMilestoneDeliverablesText(m) {
+      const direct = String(m?.deliverables || '').trim();
+      if (direct) return direct;
+      return extractMilestonePlanFromDesc(m?.desc).deliverables;
+    }
+
+    function getMilestoneAcceptanceText(m) {
+      const direct = String(m?.acceptanceCriteria || '').trim();
+      if (direct) return direct;
+      return extractMilestonePlanFromDesc(m?.desc).acceptanceCriteria;
+    }
+
+    function hydrateMilestonePlanFromDesc(task) {
+      if (!task || !isMilestoneTask(task)) return task;
+      const parsed = extractMilestonePlanFromDesc(task.desc);
+      if (!String(task.deliverables || '').trim() && parsed.deliverables) {
+        task.deliverables = parsed.deliverables;
+      }
+      if (!String(task.acceptanceCriteria || '').trim() && parsed.acceptanceCriteria) {
+        task.acceptanceCriteria = parsed.acceptanceCriteria;
+      }
+      return task;
+    }
+
+    function normalizeMilestonePlanFields(task) {
+      if (!task) return task;
+      hydrateMilestonePlanFromDesc(task);
+      MILESTONE_PLAN_FIELDS.forEach((key) => {
+        task[key] = String(task[key] || '').trim();
+      });
+      return task;
+    }
+
+    function getNextMilestoneSeq(projectId) {
+      const list = tasks.filter(t => t.projectId === projectId && isMilestoneTask(t) && t.status !== 'abolished');
+      let maxN = 0;
+      list.forEach((m) => {
+        const raw = String(m.milestoneSeq || '').trim();
+        const match = raw.match(/(\d+)/);
+        if (match) maxN = Math.max(maxN, Number(match[1]) || 0);
+      });
+      return `M${maxN + 1}`;
+    }
+
+    function formatScopeCombo(project) {
+      const scope = String(project?.scope || '').trim();
+      const out = String(project?.outOfScope || '').trim();
+      if (scope && out) return `${scope} / 不做：${out}`;
+      if (scope) return scope;
+      if (out) return `不做：${out}`;
+      return '';
+    }
+
+    function getMilestonePlanRoles(m) {
+      return {
+        roleA: String(m?.roleA || '').trim(),
+        roleR: String(m?.roleR || m?.assignee || '').trim(),
+        roleC: String(m?.roleC || '').trim(),
+        roleV: String(m?.roleV || '').trim(),
+      };
+    }
+
+    function buildProjectPlanLedgerLines(project) {
+      if (!project) return [];
+      const milestones = getProjectMilestones(project);
+      const objective = String(project.objective || project.desc || '').trim();
+      const scopeCombo = formatScopeCombo(project);
+      const finalDue = normalizeDateStr(project.endDate) || project.endDate || '';
+      const projectName = String(project.name || '').trim();
+      if (!milestones.length) {
+        return [[
+          projectName, objective, scopeCombo, finalDue,
+          '', '', '', '', '', '', '', '', '', '', '',
+        ].join(' | ')];
+      }
+      return milestones.map((m, idx) => {
+        const roles = getMilestonePlanRoles(m);
+        const seq = String(m.milestoneSeq || `M${idx + 1}`).trim();
+        const start = normalizeDateStr(getEffectivePlanStart(m) || m.planStartDate) || '';
+        const end = normalizeDateStr(resolveTaskDueDate(m)) || m.dueDate || '';
+        const depsRisks = [
+          String(m.depsRisks || '').trim(),
+          String(m.escalation || '').trim() ? `升级：${String(m.escalation).trim()}` : '',
+          String(m.delayImpact || '').trim() ? `延期影响：${String(m.delayImpact).trim()}` : '',
+          String(m.reopenConditions || '').trim() ? `重开：${String(m.reopenConditions).trim()}` : '',
+        ].filter(Boolean).join('；');
+        return [
+          projectName,
+          objective,
+          scopeCombo,
+          finalDue,
+          seq,
+          String(m.title || '').trim(),
+          start,
+          end,
+          roles.roleA,
+          roles.roleR,
+          roles.roleC,
+          roles.roleV,
+          String(m.deliverables || '').trim() || extractMilestonePlanFromDesc(m.desc).deliverables,
+          String(m.acceptanceCriteria || '').trim() || extractMilestonePlanFromDesc(m.desc).acceptanceCriteria,
+          depsRisks,
+        ].join(' | ');
+      });
+    }
+
+    function getProjectPlanCompleteness(project) {
+      const hasObjective = !!(project.objective || '').trim();
+      const hasScope = !!(project.scope || '').trim() || !!(project.outOfScope || '').trim();
+      const hasFinalDue = !!(project.endDate || '').trim();
+      const milestones = getProjectMilestones(project);
+      let filledMs = 0;
+      milestones.forEach((m) => {
+        const roles = getMilestonePlanRoles(m);
+        const ok = !!(m.milestoneSeq || '').trim()
+          && !!(roles.roleA)
+          && !!(roles.roleR)
+          && !!getMilestoneDeliverablesText(m)
+          && !!getMilestoneAcceptanceText(m)
+          && !!(normalizeDateStr(getEffectivePlanStart(m) || m.planStartDate))
+          && !!(normalizeDateStr(resolveTaskDueDate(m)) || m.dueDate);
+        if (ok) filledMs += 1;
+      });
+      return {
+        hasObjective,
+        hasScope,
+        hasFinalDue,
+        milestoneTotal: milestones.length,
+        milestoneFilled: filledMs,
+        ready: hasObjective && hasScope && hasFinalDue && milestones.length > 0 && filledMs === milestones.length,
+      };
+    }
+
+    function canVerifyProjectPlan(project) {
+      if (!project) return false;
+      if (isFullAccess(currentUser.role)) return true;
+      return isSamePersonName(currentUser.name, '陈璇');
+    }
+
+    async function copyTextToClipboard(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+
+    async function copyProjectPlanLedger(projectId) {
+      const project = projects.find(p => p.id === projectId);
+      if (!project) return;
+      const lines = buildProjectPlanLedgerLines(project);
+      const header = '项目名称 | 目标 | 范围/不做范围 | 最终完成时间 | M序号 | 里程碑名称 | 开始日期 | 完成日期 | A | R | C | V | 交付物 | 验收标准 | 依赖/风险';
+      const text = [header, ...lines].join('\n');
+      try {
+        await copyTextToClipboard(text);
+        alert(`已复制 ${lines.length} 行计划台账（管线格式），可直接粘贴回复领导`);
+      } catch (e) {
+        alert('复制失败，请改用「导出计划台账」');
+      }
+    }
+
+    async function exportProjectPlanLedger(projectId) {
+      const project = projects.find(p => p.id === projectId);
+      if (!project) return;
+      const milestones = getProjectMilestones(project);
+      const headers = ['项目名称', '目标', '范围/不做范围', '最终完成时间', 'M序号', '里程碑名称', '开始日期', '完成日期', 'A', 'R', 'C', 'V', '交付物', '验收标准', '依赖/风险', '完成证据', '升级条件', '延期影响', '重开条件'];
+      const objective = String(project.objective || project.desc || '').trim();
+      const scopeCombo = formatScopeCombo(project);
+      const finalDue = normalizeDateStr(project.endDate) || project.endDate || '';
+      const rows = (milestones.length ? milestones : [null]).map((m, idx) => {
+        if (!m) {
+          return [project.name, objective, scopeCombo, finalDue, '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+        }
+        const roles = getMilestonePlanRoles(m);
+        return [
+          project.name,
+          objective,
+          scopeCombo,
+          finalDue,
+          String(m.milestoneSeq || `M${idx + 1}`).trim(),
+          m.title || '',
+          normalizeDateStr(getEffectivePlanStart(m) || m.planStartDate) || '',
+          normalizeDateStr(resolveTaskDueDate(m)) || m.dueDate || '',
+          roles.roleA,
+          roles.roleR,
+          roles.roleC,
+          roles.roleV,
+          m.deliverables || extractMilestonePlanFromDesc(m.desc).deliverables,
+          m.acceptanceCriteria || extractMilestonePlanFromDesc(m.desc).acceptanceCriteria,
+          m.depsRisks || '',
+          m.completionEvidence || '',
+          m.escalation || '',
+          m.delayImpact || '',
+          m.reopenConditions || '',
+        ];
+      });
+      await downloadExcel('项目计划台账', headers, rows, `项目计划台账_${project.name || project.id}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }
+
+    function toggleProjectPlanVerified(projectId) {
+      const project = projects.find(p => p.id === projectId);
+      if (!project || !canVerifyProjectPlan(project)) {
+        alert('仅陈璇或管理员可校验计划台账');
+        return;
+      }
+      if (project.planVerified) {
+        project.planVerified = false;
+        project.planVerifiedBy = '';
+        project.planVerifiedAt = '';
+      } else {
+        project.planVerified = true;
+        project.planVerifiedBy = currentUser.name;
+        project.planVerifiedAt = new Date().toLocaleString();
+      }
+      normalizeProjectRecord(project);
+      appendChangeLogEntry({
+        taskId: 'PROJECT-' + projectId,
+        operator: currentUser.name,
+        operateTime: new Date().toLocaleString(),
+        before: project.planVerified ? '未校验' : '已校验',
+        after: project.planVerified ? `已校验（${project.planVerifiedBy}）` : '未校验',
+        reason: '项目计划台账校验',
+        project: project.name,
+      });
+      save({ immediateSync: true });
+      render();
     }
 
     function normalizeAllProjects() {
@@ -4121,6 +4841,7 @@
       todoPageSize: 20,
       todoViewMode: 'all', // all | mine | created | handled
       todoViewLayout: 'board', // board | list
+      projectPlanView: 'table', // table | gantt
       navOpen: { todo: true, project: true, team: true, more: true },
       settingsOpen: false,
       showModal: null,
@@ -4141,6 +4862,8 @@
       staffSelectedDept: '信息中心',
       staffExpandedDepts: { '信息中心': true, '财务中心': true },
       staffDetailId: null,
+      scopedKeyStatusByUser: {},
+      scopedKeyStatusLoaded: false,
       staffDingTalkOpen: false,
       teamSearch: '',
       teamSort: 'saturation_desc',
@@ -4156,9 +4879,24 @@
       inboxUnreadCount: 0,
       inboxLoading: false,
       collabDropdownOpen: null,
+      todoActionMenuTaskId: null,
       uiSections: {},
       sqlToolGuids: '',
       sqlToolIsClearing: '0',
+      dataSecurityTab: 'database',
+      dataSecurityLoading: false,
+      dataSecurityError: null,
+      dataSecurityData: null,
+      dataSecurityApiAuthFilter: 'all',
+      dataSecurityApiRiskFilter: 'all',
+      rolePermissions: null,
+      permCatalog: null,
+      permDraft: null,
+      permLoading: false,
+      permSaving: false,
+      permError: null,
+      permCanEdit: false,
+      permDirty: false,
       kpiYearMonth: (() => {
         const d = new Date();
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -4172,6 +4910,7 @@
       kpiDepts: [],
       kpiFirstBootstrapMonth: '2026-08',
       kpiPlanLogs: [],
+      editingProjectFocus: false,
     };
 
     let authSession = {
@@ -4239,6 +4978,9 @@
         if (Array.isArray(data.pushLogs)) pushLogs = data.pushLogs.slice();
         resetLogSyncState();
         if (data.workCalendar) applyWorkCalendar(data.workCalendar);
+        if (data.rolePermissions && typeof data.rolePermissions === 'object') {
+          state.rolePermissions = data.rolePermissions;
+        }
         if (Array.isArray(data.users)) {
           if ((ApiConfig.enabled || AuthService.isDingTalkMode()) && !mergeUsers) {
             users = data.users.slice();
@@ -4422,6 +5164,18 @@
       desc: '任务描述',
       informCollaborators: '告知性协办人',
       assistCollaborators: '辅助性协办人',
+      milestoneSeq: 'M序号',
+      roleA: 'A唯一交付人',
+      roleR: 'R直接执行人',
+      roleC: 'C协作人',
+      roleV: 'V业务验收人',
+      deliverables: '交付物',
+      acceptanceCriteria: '验收标准',
+      completionEvidence: '完成证据',
+      depsRisks: '依赖/风险',
+      escalation: '升级条件',
+      delayImpact: '延期影响',
+      reopenConditions: '重开条件',
     };
 
     const LOG_DESC_MAX_LEN = 80;
@@ -4494,6 +5248,9 @@
       const keys = [
         'title', 'status', 'progress', 'assignee', 'planStartDate', 'estimatedHours', 'dueDate',
         'priority', 'desc', 'informCollaborators', 'assistCollaborators',
+        'milestoneSeq', 'roleA', 'roleR', 'roleC', 'roleV',
+        'deliverables', 'acceptanceCriteria', 'completionEvidence',
+        'depsRisks', 'escalation', 'delayImpact', 'reopenConditions',
       ];
       const diffs = [];
       keys.forEach(key => {
@@ -4890,10 +5647,13 @@
       } else {
         hideTaskCommentMentionDropdown();
       }
+      if (state.page === 'projectDetail' && state.projectPlanView === 'gantt') {
+        requestAnimationFrame(() => { mountProjectGantt(); });
+      }
     }
 
     function isLiteMorePage(page) {
-      return ['more', 'staff', 'archive', 'import', 'systemUpdates', 'kpiPlans'].includes(page);
+      return ['more', 'staff', 'permissions', 'dataSecurity', 'archive', 'import', 'systemUpdates', 'kpiPlans'].includes(page);
     }
 
     function isProjectNavPage(page) {
@@ -5014,27 +5774,16 @@
     }
 
     function getLiteMoreNavItems() {
-      if (isFullAccess(currentUser.role)) {
-        return [
-          { key: 'team', icon: 'fa-users', label: '团队管理', desc: '饱和度与成员看板' },
-          { key: 'staff', icon: 'fa-address-book', label: '人员档案', desc: '通讯录与角色' },
-          { key: 'archive', icon: 'fa-archive', label: '归档管理', desc: '已归档项目' },
-          { key: 'import', icon: 'fa-file-import', label: '数据导入', desc: 'Excel 导入' },
-          { key: 'systemUpdates', icon: 'fa-bullhorn', label: '更新记录', desc: '版本说明' },
-        ];
-      }
-      if (currentUser.role === 'manager') {
-        return [
-          { key: 'team', icon: 'fa-users', label: '团队管理', desc: '本部门看板' },
-          { key: 'staff', icon: 'fa-address-book', label: '人员档案', desc: '本部门人员' },
-          { key: 'archive', icon: 'fa-archive', label: '归档管理', desc: '已归档项目' },
-          { key: 'import', icon: 'fa-file-import', label: '数据导入', desc: 'Excel 导入' },
-          { key: 'systemUpdates', icon: 'fa-bullhorn', label: '更新记录', desc: '版本说明' },
-        ];
-      }
-      return [
-        { key: 'systemUpdates', icon: 'fa-bullhorn', label: '更新记录', desc: '版本说明' },
+      const catalog = [
+        { key: 'team', icon: 'fa-users', label: '团队管理', desc: currentUser.role === 'manager' ? '本部门看板' : '饱和度与成员看板', cap: 'nav.team' },
+        { key: 'staff', icon: 'fa-address-book', label: '人员档案', desc: currentUser.role === 'manager' ? '本部门人员' : '通讯录与角色', cap: 'nav.staff' },
+        { key: 'permissions', icon: 'fa-user-shield', label: '权限管理', desc: '角色能力矩阵', cap: 'nav.permissions' },
+        { key: 'dataSecurity', icon: 'fa-shield-alt', label: '数据安全', desc: '库表与接口可视化', cap: 'nav.dataSecurity' },
+        { key: 'archive', icon: 'fa-archive', label: '归档管理', desc: '已归档项目', cap: 'nav.archive' },
+        { key: 'import', icon: 'fa-file-import', label: '数据导入', desc: 'Excel 导入', cap: 'nav.import' },
+        { key: 'systemUpdates', icon: 'fa-bullhorn', label: '更新记录', desc: '版本说明', cap: 'nav.systemUpdates' },
       ];
+      return catalog.filter(item => capOn(currentUser, item.cap));
     }
 
     function renderMobileNav() {
@@ -5088,7 +5837,8 @@
     function renderSidebar() {
       const showTeam = canShowTeamNav();
       const roleName = roleDisplayName(currentUser.role);
-      const showNcc = isFullAccess(currentUser.role);
+      const showNcc = capOn(currentUser, 'nav.ncc');
+      const showSqlTools = capOn(currentUser, 'nav.sqlTools');
       const primary = [
         {
           key: 'dashboard', label: '工作台', icon: 'fa-th-large',
@@ -5136,17 +5886,20 @@
                 <i class="fas ${item.icon}"></i><span>${item.label}</span>
               </button>
             `).join('')}
-            ${showNcc ? `
+            ${(showNcc || showSqlTools || isFullAccess(currentUser.role)) ? `
               <div class="nav-divider" role="separator"></div>
+              ${showNcc ? `
               <button type="button" class="nav-item nav-item--flat ${state.page === 'nccMonitor' ? 'active' : ''}" onclick="goTo('nccMonitor')">
                 <i class="fas fa-tower-broadcast"></i><span>NCC异常看板</span>
-              </button>
+              </button>` : ''}
+              ${showSqlTools ? `
               <button type="button" class="nav-item nav-item--flat ${state.page === 'sqlTools' ? 'active' : ''}" onclick="goTo('sqlTools')">
                 <i class="fas fa-code"></i><span>SQL脚本</span>
-              </button>
+              </button>` : ''}
+              ${isFullAccess(currentUser.role) ? `
               <button type="button" class="nav-item nav-item--flat" onclick="openHandaOmExternal()">
                 <i class="fas fa-server"></i><span>Handa-OM</span>
-              </button>
+              </button>` : ''}
             ` : ''}
           </nav>
           <div class="sidebar-footer">
@@ -5383,11 +6136,13 @@
         dashboard: '工作台',
         nccMonitor: 'NCC异常看板',
         sqlTools: 'SQL脚本生成',
+        dataSecurity: '数据安全',
         kpiPlans: 'KPI 计划',
         tasks: getTodoViewTitle(),
         more: '更多',
         projects: '项目列表',
         staff: '人员档案',
+        permissions: '权限管理',
         archive: '归档管理',
         team: '团队管理',
         import: '数据导入',
@@ -5398,13 +6153,19 @@
       const roleName = roleDisplayName(currentUser.role);
       const pageTitle = titles[state.page] || '工作台';
       const isTodoPage = state.page === 'tasks';
+      const crumbHome = state.page === 'dashboard'
+        ? `<span class="current">恒慧管</span>`
+        : `<button type="button" class="crumb-link" onclick="goBreadcrumbHome()" title="返回上一步">恒慧管</button>`;
+      const crumbMiddle = state.page === 'projectDetail'
+        ? `<span class="sep">/</span><button type="button" class="crumb-link" onclick="goBack()" title="返回项目列表">项目</button>`
+        : '';
       return `
         <div class="main-header">
           <button type="button" class="topbar-toggle hide-mobile" aria-label="菜单"><i class="fas fa-bars"></i></button>
           <div class="breadcrumb">
-            <span>恒慧管</span>
-            <span class="sep">/</span>
-            <span class="current">${pageTitle}</span>
+            ${crumbHome}
+            ${crumbMiddle}
+            ${state.page === 'dashboard' ? '' : `<span class="sep">/</span><span class="current">${pageTitle}</span>`}
           </div>
           <div class="global-search">
             <i class="fas fa-search"></i>
@@ -5414,6 +6175,9 @@
           <div class="main-header-actions">
             ${state.page === 'projects' || state.page === 'projectDetail' ? `
               <button class="btn btn-ghost hide-mobile" onclick="exportProjects()"><i class="fas fa-file-export"></i><span class="btn-text">导出</span></button>
+              ${state.page === 'projectDetail' && state.form.projectId ? `
+                <button class="btn btn-ghost hide-mobile" onclick="copyProjectPlanLedger('${state.form.projectId}')"><i class="fas fa-copy"></i><span class="btn-text">复制计划台账</span></button>
+              ` : ''}
               ${canCreateProject() ? `<button class="btn btn-primary" onclick="showProjectModal()"><i class="fas fa-plus"></i><span class="btn-text">新建项目</span></button>` : ''}
             ` : ''}
             ${isTodoPage ? `
@@ -5421,9 +6185,9 @@
               <button class="btn btn-primary" onclick="showQuickTempTaskModal()"><i class="fas fa-plus"></i><span class="btn-text">新建事项</span></button>
             ` : ''}
             ${state.page === 'team' ? `<button class="btn btn-ghost hide-mobile" onclick="exportTeam()"><i class="fas fa-file-export"></i><span class="btn-text">导出</span></button>` : ''}
-            ${state.page === 'staff' && isFullAccess(currentUser.role) ? `
-              <button class="btn btn-ghost" onclick="showDingTalkSyncModal()"><i class="fas fa-sync-alt"></i><span class="btn-text">同步钉钉</span></button>
-              <button class="btn btn-primary" onclick="showAddStaffModal()"><i class="fas fa-plus"></i><span class="btn-text">添加人员</span></button>
+            ${state.page === 'staff' ? `
+              ${capOn(currentUser, 'staff.dingSync') ? `<button class="btn btn-ghost" onclick="showDingTalkSyncModal()"><i class="fas fa-sync-alt"></i><span class="btn-text">同步钉钉</span></button>` : ''}
+              ${resolveCap(currentUser, 'staff.edit') === 'all' ? `<button class="btn btn-primary" onclick="showAddStaffModal()"><i class="fas fa-plus"></i><span class="btn-text">添加人员</span></button>` : ''}
             ` : ''}
             ${renderInboxBell()}
             <span class="hide-desktop">${renderSettingsGearButton()}</span>
@@ -5442,10 +6206,12 @@
         projects: '项目列表',
         tasks: getTodoViewTitle(),
         staff: '人员档案',
+        permissions: '权限管理',
         archive: '归档管理',
         team: '团队管理',
         import: '数据导入',
         sqlTools: 'SQL脚本生成',
+        dataSecurity: '数据安全',
         kpiPlans: 'KPI 计划',
         systemUpdates: '更新记录',
         projectDetail: '项目详情',
@@ -5455,12 +6221,14 @@
         case 'dashboard': return renderWorkbenchHome();
         case 'nccMonitor': return renderNccMonitor();
         case 'sqlTools': body = renderSqlTools(); break;
+        case 'dataSecurity': body = renderDataSecurity(); break;
         case 'kpiPlans': body = renderKpiPlans(); break;
         case 'tasks': body = renderTasks(); break;
         case 'more': body = renderMorePage(); break;
         case 'projects': body = renderProjects(); break;
         case 'projectDetail': body = renderProjectDetail(); break;
         case 'staff': body = renderStaff(); break;
+        case 'permissions': body = renderPermissions(); break;
         case 'archive': body = renderArchive(); break;
         case 'team': body = renderTeam(); break;
         case 'import': body = renderImport(); break;
@@ -5681,6 +6449,495 @@
             <div class="sql-tool-desc">输入 GUID 后实时生成，可直接复制到 SSMS 执行。</div>
             <pre id="sqlToolOutput" class="sql-tool-output${output ? '' : ' is-empty'}">${escapeHtml(output || '（请输入 InputGuid 后自动生成）')}</pre>
           </div>
+        </div>
+      `;
+    }
+
+    // ========== 权限管理 ==========
+    function clonePermMatrix(matrix) {
+      const src = matrix || DEFAULT_ROLE_PERMISSIONS;
+      return {
+        full: { ...(src.full || {}) },
+        manager: { ...(src.manager || {}) },
+        staff: { ...(src.staff || {}) },
+      };
+    }
+
+    async function loadPermissionsPage(force) {
+      if (!canAccessPermissionsPage()) return;
+      if (!force && state.permDraft && !state.permDirty) return;
+      if (!ApiConfig.enabled || !authSession.token) {
+        state.rolePermissions = state.rolePermissions || clonePermMatrix(DEFAULT_ROLE_PERMISSIONS);
+        state.permCatalog = PERM_CAP_DEFS;
+        state.permDraft = clonePermMatrix(state.rolePermissions);
+        state.permCanEdit = canEditPermissionsMatrix();
+        state.permError = null;
+        state.permLoading = false;
+        if (state.page === 'permissions') render();
+        return;
+      }
+      if (state.permLoading) return;
+      state.permLoading = true;
+      state.permError = null;
+      if (state.page === 'permissions') render();
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/permissions', {
+          headers: { ...AuthService.getAuthHeaders() },
+          signal: AbortSignal.timeout(ApiConfig.timeout),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message || '加载失败');
+        state.rolePermissions = json.matrix || DEFAULT_ROLE_PERMISSIONS;
+        state.permCatalog = Array.isArray(json.catalog) && json.catalog.length ? json.catalog : PERM_CAP_DEFS;
+        state.permDraft = clonePermMatrix(state.rolePermissions);
+        state.permCanEdit = !!json.canEdit && canEditPermissionsMatrix();
+        state.permDirty = false;
+        state.permError = null;
+      } catch (e) {
+        state.permError = e.message || '加载失败';
+        state.rolePermissions = state.rolePermissions || clonePermMatrix(DEFAULT_ROLE_PERMISSIONS);
+        state.permCatalog = PERM_CAP_DEFS;
+        state.permDraft = clonePermMatrix(state.rolePermissions);
+        state.permCanEdit = canEditPermissionsMatrix();
+      } finally {
+        state.permLoading = false;
+        if (state.page === 'permissions') render();
+      }
+    }
+
+    function onPermCellChange(bucket, key, value) {
+      if (!state.permCanEdit || !state.permDraft) return;
+      if (!state.permDraft[bucket]) state.permDraft[bucket] = {};
+      state.permDraft[bucket][key] = value;
+      state.permDirty = true;
+      render();
+    }
+
+    async function savePermissionsMatrix() {
+      if (!state.permCanEdit || !state.permDraft) return;
+      if (!ApiConfig.enabled || !authSession.token) {
+        alert('请连接服务端后再保存权限矩阵');
+        return;
+      }
+      state.permSaving = true;
+      render();
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/permissions', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+          body: JSON.stringify({ matrix: state.permDraft }),
+          signal: AbortSignal.timeout(ApiConfig.timeout),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message || '保存失败');
+        state.rolePermissions = json.matrix || state.permDraft;
+        state.permDraft = clonePermMatrix(state.rolePermissions);
+        state.permDirty = false;
+        alert('权限矩阵已保存，刷新后其他账号也会生效');
+      } catch (e) {
+        alert(e.message || '保存失败');
+      } finally {
+        state.permSaving = false;
+        render();
+      }
+    }
+
+    async function resetPermissionsMatrix() {
+      if (!state.permCanEdit) return;
+      if (!confirm('确定恢复为系统默认权限矩阵？未保存的修改将丢失。')) return;
+      if (!ApiConfig.enabled || !authSession.token) {
+        state.permDraft = clonePermMatrix(DEFAULT_ROLE_PERMISSIONS);
+        state.permDirty = true;
+        render();
+        return;
+      }
+      state.permSaving = true;
+      render();
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/permissions/reset', {
+          method: 'POST',
+          headers: { ...AuthService.getAuthHeaders() },
+          signal: AbortSignal.timeout(ApiConfig.timeout),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message || '重置失败');
+        state.rolePermissions = json.matrix || DEFAULT_ROLE_PERMISSIONS;
+        state.permDraft = clonePermMatrix(state.rolePermissions);
+        state.permDirty = false;
+        alert('已恢复默认权限');
+      } catch (e) {
+        alert(e.message || '重置失败');
+      } finally {
+        state.permSaving = false;
+        render();
+      }
+    }
+
+    function discardPermissionsDraft() {
+      state.permDraft = clonePermMatrix(state.rolePermissions || DEFAULT_ROLE_PERMISSIONS);
+      state.permDirty = false;
+      render();
+    }
+
+    function renderPermissions() {
+      if (!canAccessPermissionsPage()) {
+        return `<div class="panel"><div class="panel-body" style="padding:24px;color:#9CA3AF;">无权查看权限管理</div></div>`;
+      }
+      const catalog = state.permCatalog || PERM_CAP_DEFS;
+      const draft = state.permDraft || clonePermMatrix(state.rolePermissions || DEFAULT_ROLE_PERMISSIONS);
+      const canEdit = !!state.permCanEdit;
+      const buckets = [
+        { id: 'full', label: '总经理/管理员' },
+        { id: 'manager', label: '部门经理' },
+        { id: 'staff', label: '执行人员' },
+      ];
+      let lastGroup = '';
+      const rows = catalog.map(cap => {
+        const groupRow = cap.group !== lastGroup
+          ? `<tr class="perm-group-row"><td colspan="4">${escapeHtml(cap.group)}</td></tr>`
+          : '';
+        lastGroup = cap.group;
+        const cells = buckets.map(b => {
+          const val = draft[b.id]?.[cap.key] ?? DEFAULT_ROLE_PERMISSIONS[b.id]?.[cap.key] ?? '';
+          const label = (cap.valueLabels && cap.valueLabels[val]) || val;
+          if (!canEdit) {
+            return `<td><span class="perm-ro">${escapeHtml(label)}</span></td>`;
+          }
+          const opts = (cap.values || []).map(v =>
+            `<option value="${escapeHtml(v)}" ${v === val ? 'selected' : ''}>${escapeHtml((cap.valueLabels && cap.valueLabels[v]) || v)}</option>`
+          ).join('');
+          return `<td><select onchange="onPermCellChange('${b.id}','${cap.key}',this.value)">${opts}</select></td>`;
+        }).join('');
+        return `${groupRow}<tr><td>${escapeHtml(cap.label)}</td>${cells}</tr>`;
+      }).join('');
+
+      return `
+        <div class="perm-page">
+          <div class="perm-toolbar">
+            <div class="perm-hint">
+              按角色配置菜单与能力档位。归属规则（本人负责的项目/任务等）仍按业务关系生效。
+              ${canEdit ? '' : '当前为只读（仅总经理/管理员可修改）。'}
+              ${state.permDirty ? '<span class="perm-dirty">有未保存修改</span>' : ''}
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              ${canEdit ? `
+                <button type="button" class="btn btn-ghost btn-sm" onclick="discardPermissionsDraft()" ${state.permDirty ? '' : 'disabled'}>撤销修改</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="resetPermissionsMatrix()" ${state.permSaving ? 'disabled' : ''}>恢复默认</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="savePermissionsMatrix()" ${state.permSaving || !state.permDirty ? 'disabled' : ''}>
+                  ${state.permSaving ? '保存中…' : '保存'}
+                </button>
+              ` : ''}
+              <button type="button" class="btn btn-ghost btn-sm" onclick="loadPermissionsPage(true)"><i class="fas fa-sync-alt"></i> 刷新</button>
+            </div>
+          </div>
+          ${state.permLoading ? `<div class="wb-empty" style="padding:24px;">加载中…</div>` : ''}
+          ${state.permError ? `<div style="color:#B91C1C;font-size:13px;margin-bottom:10px;">${escapeHtml(state.permError)}</div>` : ''}
+          <div class="perm-table-wrap">
+            <table class="perm-table">
+              <thead>
+                <tr>
+                  <th style="width:28%;">能力</th>
+                  ${buckets.map(b => `<th>${escapeHtml(b.label)}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // ========== 数据安全（管理员）==========
+    async function loadDataSecurityOverview(force) {
+      if (!capOn(currentUser, 'nav.dataSecurity')) return;
+      if (!ApiConfig.enabled || !authSession.token) {
+        state.dataSecurityError = '请连接服务端后查看数据安全';
+        state.dataSecurityLoading = false;
+        state.dataSecurityData = null;
+        if (state.page === 'dataSecurity') render();
+        return;
+      }
+      if (state.dataSecurityLoading) return;
+      if (!force && state.dataSecurityData) return;
+      state.dataSecurityLoading = true;
+      state.dataSecurityError = null;
+      if (state.page === 'dataSecurity') render();
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/data-security/overview', {
+          headers: { Authorization: 'Bearer ' + authSession.token },
+          signal: AbortSignal.timeout(ApiConfig.timeout || 15000),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json.success === false) {
+          throw new Error(json.message || `加载失败 (${res.status})`);
+        }
+        state.dataSecurityData = json.data || null;
+        state.dataSecurityError = null;
+      } catch (e) {
+        state.dataSecurityError = e.message || '加载失败';
+        state.dataSecurityData = null;
+      } finally {
+        state.dataSecurityLoading = false;
+        if (state.page === 'dataSecurity') render();
+      }
+    }
+
+    function setDataSecurityTab(tab) {
+      state.dataSecurityTab = tab === 'api' ? 'api' : 'database';
+      render();
+    }
+
+    function dsSensitivityLabel(key) {
+      return ({ high: '高敏感', medium: '中敏感', low: '低敏感', critical: '极高' })[key] || key;
+    }
+
+    function renderDataSecurityDatabase(dbData) {
+      if (!dbData) return '<div class="ds-loading">暂无数据</div>';
+      const maxCount = Math.max(1, ...(dbData.collections || []).map(c => c.count || 0));
+      const conn = dbData.connection || {};
+      const file = dbData.file || null;
+      const bars = (dbData.collections || []).slice(0, 12).map(c => {
+        const pct = Math.round(((c.count || 0) / maxCount) * 100);
+        return `
+          <div class="ds-bar-row" title="${escapeHtml(c.note || '')}">
+            <div class="ds-bar-name">${escapeHtml(c.label)}</div>
+            <div class="ds-bar-track"><div class="ds-bar-fill is-${escapeHtml(c.sensitivity)}" style="width:${pct}%"></div></div>
+            <div class="ds-bar-count">${c.count || 0}</div>
+          </div>`;
+      }).join('');
+
+      const rows = (dbData.collections || []).map(c => `
+        <tr>
+          <td>${escapeHtml(c.label)}</td>
+          <td><code>${escapeHtml(c.key)}</code></td>
+          <td><code>${escapeHtml(c.table || '—')}</code></td>
+          <td>${c.count || 0}</td>
+          <td><span class="ds-badge is-${escapeHtml(c.sensitivity)}">${dsSensitivityLabel(c.sensitivity)}</span></td>
+          <td>${escapeHtml(c.note || '')}</td>
+        </tr>`).join('');
+
+      const retiredList = dbData.retiredCollectionsList || [];
+      const retiredRows = retiredList.map(c => `
+        <tr>
+          <td>${escapeHtml(c.label)} <span class="ds-badge is-medium">已下线</span></td>
+          <td><code>${escapeHtml(c.key)}</code></td>
+          <td><code>${escapeHtml(c.table || '—')}</code></td>
+          <td>${c.count || 0}</td>
+          <td><span class="ds-badge is-${escapeHtml(c.sensitivity)}">${dsSensitivityLabel(c.sensitivity)}</span></td>
+          <td>${escapeHtml(c.note || '')}</td>
+        </tr>`).join('');
+
+      const retiredPanel = retiredList.length ? `
+        <div class="ds-panel">
+          <h3><i class="fas fa-box-archive" style="color:#9CA3AF;"></i>已下线残留（界面不可用）</h3>
+          <div class="ds-stat-sub" style="margin:-4px 0 12px;">绩效管理、工作汇报功能已下线；以下仅为库内残留数据，不计入上方统计。</div>
+          <div class="ds-table-wrap">
+            <table class="ds-table">
+              <thead>
+                <tr><th>名称</th><th>键</th><th>表名</th><th>数量</th><th>敏感度</th><th>说明</th></tr>
+              </thead>
+              <tbody>${retiredRows}</tbody>
+            </table>
+          </div>
+        </div>` : '';
+
+      return `
+        <div class="ds-stats">
+          <div class="ds-stat">
+            <div class="ds-stat-label">存储驱动</div>
+            <div class="ds-stat-value" style="font-size:16px;">${escapeHtml(dbData.storageLabel || dbData.driver)}</div>
+            <div class="ds-stat-sub">${escapeHtml(dbData.driver || '')}</div>
+          </div>
+          <div class="ds-stat">
+            <div class="ds-stat-label">集合 / 表</div>
+            <div class="ds-stat-value">${dbData.totalCollections || 0}</div>
+            <div class="ds-stat-sub">在用业务数据</div>
+          </div>
+          <div class="ds-stat">
+            <div class="ds-stat-label">记录总量</div>
+            <div class="ds-stat-value">${dbData.totalRecords || 0}</div>
+            <div class="ds-stat-sub">不含已下线残留</div>
+          </div>
+          <div class="ds-stat">
+            <div class="ds-stat-label">高敏感集合</div>
+            <div class="ds-stat-value">${(dbData.bySensitivity && dbData.bySensitivity.high) || 0}</div>
+            <div class="ds-stat-sub">中 ${(dbData.bySensitivity && dbData.bySensitivity.medium) || 0} · 低 ${(dbData.bySensitivity && dbData.bySensitivity.low) || 0}</div>
+          </div>
+        </div>
+        <div class="ds-panel">
+          <h3><i class="fas fa-plug" style="color:var(--brand);"></i>连接信息</h3>
+          <div class="ds-meta-grid">
+            ${dbData.driver === 'mysql' ? `
+              <div class="ds-meta-item"><span class="ds-meta-k">主机</span><span class="ds-meta-v">${escapeHtml(String(conn.host || '—'))}:${escapeHtml(String(conn.port || ''))}</span></div>
+              <div class="ds-meta-item"><span class="ds-meta-k">数据库</span><span class="ds-meta-v">${escapeHtml(conn.database || '—')}</span></div>
+              <div class="ds-meta-item"><span class="ds-meta-k">应用账号</span><span class="ds-meta-v">${escapeHtml(conn.user || '—')}</span></div>
+              <div class="ds-meta-item"><span class="ds-meta-k">密码</span><span class="ds-meta-v">（不展示，见 .env）</span></div>
+            ` : `
+              <div class="ds-meta-item"><span class="ds-meta-k">文件</span><span class="ds-meta-v">${escapeHtml((file && file.fileName) || '—')}</span></div>
+              <div class="ds-meta-item"><span class="ds-meta-k">大小</span><span class="ds-meta-v">${escapeHtml((file && file.sizeLabel) || '—')}</span></div>
+              <div class="ds-meta-item"><span class="ds-meta-k">修改时间</span><span class="ds-meta-v">${escapeHtml((file && file.mtime) || '—')}</span></div>
+              <div class="ds-meta-item"><span class="ds-meta-k">路径</span><span class="ds-meta-v">${escapeHtml((file && file.path) || '—')}</span></div>
+            `}
+          </div>
+        </div>
+        <div class="ds-panel">
+          <h3><i class="fas fa-chart-bar" style="color:var(--brand);"></i>数据量分布</h3>
+          <div class="ds-bar-list">${bars || '<div class="ds-loading">暂无集合</div>'}</div>
+        </div>
+        <div class="ds-panel">
+          <h3><i class="fas fa-table" style="color:var(--brand);"></i>集合明细</h3>
+          <div class="ds-table-wrap">
+            <table class="ds-table">
+              <thead>
+                <tr><th>名称</th><th>键</th><th>表名</th><th>数量</th><th>敏感度</th><th>说明</th></tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>
+        ${retiredPanel}
+        <div class="ds-panel">
+          <h3><i class="fas fa-lock" style="color:var(--brand);"></i>安全提示</h3>
+          <ul class="ds-notes">${(dbData.securityNotes || []).map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul>
+        </div>
+      `;
+    }
+
+    function renderDataSecurityApis(apiData) {
+      if (!apiData) return '<div class="ds-loading">暂无数据</div>';
+      const authFilter = state.dataSecurityApiAuthFilter || 'all';
+      const riskFilter = state.dataSecurityApiRiskFilter || 'all';
+      const authOpts = ['all', ...((apiData.byAuth || []).map(a => a.key))];
+      const riskOpts = ['all', 'low', 'medium', 'high', 'critical'];
+
+      const chips = `
+        <div class="ds-chip-row">
+          ${(apiData.byAuth || []).map(a => `<span class="ds-chip">${escapeHtml(a.label)}<strong>${a.count}</strong></span>`).join('')}
+        </div>
+        <div class="ds-chip-row">
+          ${(apiData.byRisk || []).map(r => `<span class="ds-chip">风险 ${escapeHtml(r.label)}<strong>${r.count}</strong></span>`).join('')}
+          <span class="ds-chip">API_KEY ${apiData.apiKeyConfigured ? '已配置' : '未配置'}</span>
+          <span class="ds-chip">演示登录 ${apiData.allowDemoLogin ? '开启' : '关闭'}</span>
+        </div>`;
+
+      const groupsHtml = (apiData.groups || []).map(g => {
+        const eps = (g.endpoints || []).filter(ep => {
+          if (authFilter !== 'all' && ep.auth !== authFilter) return false;
+          if (riskFilter !== 'all' && ep.risk !== riskFilter) return false;
+          return true;
+        });
+        if (!eps.length) return '';
+        const rows = eps.map(ep => {
+          const methodClass = String(ep.method || 'get').toLowerCase();
+          return `
+            <tr>
+              <td><span class="ds-method is-${escapeHtml(methodClass)}">${escapeHtml(ep.method)}</span></td>
+              <td><code>${escapeHtml(ep.path)}</code></td>
+              <td>${escapeHtml(ep.authLabel || ep.auth)}</td>
+              <td><span class="ds-badge is-${escapeHtml(ep.risk)}">${escapeHtml(ep.riskLabel || ep.risk)}</span></td>
+              <td>${escapeHtml(ep.desc || '')}</td>
+            </tr>`;
+        }).join('');
+        return `
+          <div class="ds-group-title">
+            <span>${escapeHtml(g.label)}</span>
+            <span style="font-size:11px;color:#94A3B8;font-weight:500;">${eps.length} 个接口</span>
+          </div>
+          <div class="ds-table-wrap">
+            <table class="ds-table">
+              <thead>
+                <tr><th>方法</th><th>路径</th><th>鉴权</th><th>风险</th><th>说明</th></tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
+      }).join('');
+
+      return `
+        <div class="ds-stats">
+          <div class="ds-stat">
+            <div class="ds-stat-label">接口总数</div>
+            <div class="ds-stat-value">${apiData.totalEndpoints || 0}</div>
+            <div class="ds-stat-sub">${apiData.totalGroups || 0} 个模块</div>
+          </div>
+          <div class="ds-stat">
+            <div class="ds-stat-label">公开接口</div>
+            <div class="ds-stat-value">${((apiData.byAuth || []).find(a => a.key === 'none') || {}).count || 0}</div>
+            <div class="ds-stat-sub">无鉴权</div>
+          </div>
+          <div class="ds-stat">
+            <div class="ds-stat-label">高 / 极高风险</div>
+            <div class="ds-stat-value">${
+              (((apiData.byRisk || []).find(r => r.key === 'high') || {}).count || 0)
+              + (((apiData.byRisk || []).find(r => r.key === 'critical') || {}).count || 0)
+            }</div>
+            <div class="ds-stat-sub">需重点管控</div>
+          </div>
+          <div class="ds-stat">
+            <div class="ds-stat-label">API Key</div>
+            <div class="ds-stat-value" style="font-size:16px;">${apiData.apiKeyConfigured ? '已启用' : '未配置'}</div>
+            <div class="ds-stat-sub">第三方写入</div>
+          </div>
+        </div>
+        <div class="ds-panel">
+          <h3><i class="fas fa-project-diagram" style="color:var(--brand);"></i>鉴权与风险分布</h3>
+          ${chips}
+          <div class="ds-toolbar">
+            <select class="ds-filter" onchange="state.dataSecurityApiAuthFilter=this.value;render()">
+              ${authOpts.map(k => {
+                const label = k === 'all' ? '全部鉴权' : ((apiData.authLabels && apiData.authLabels[k]) || k);
+                return `<option value="${escapeHtml(k)}" ${authFilter === k ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+              }).join('')}
+            </select>
+            <select class="ds-filter" onchange="state.dataSecurityApiRiskFilter=this.value;render()">
+              ${riskOpts.map(k => {
+                const label = k === 'all' ? '全部风险' : ((apiData.riskLabels && apiData.riskLabels[k]) || k);
+                return `<option value="${escapeHtml(k)}" ${riskFilter === k ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+              }).join('')}
+            </select>
+          </div>
+          ${groupsHtml || '<div class="ds-loading">无匹配接口</div>'}
+        </div>
+        <div class="ds-panel">
+          <h3><i class="fas fa-lock" style="color:var(--brand);"></i>安全提示</h3>
+          <ul class="ds-notes">${(apiData.securityNotes || []).map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul>
+        </div>
+      `;
+    }
+
+    function renderDataSecurity() {
+      if (!isFullAccess(currentUser.role)) {
+        return `<div class="panel"><div class="panel-body" style="padding:24px;color:#9CA3AF;">仅管理员可查看数据安全</div></div>`;
+      }
+      const tab = state.dataSecurityTab === 'api' ? 'api' : 'database';
+      const data = state.dataSecurityData;
+      let body = '';
+      if (state.dataSecurityLoading && !data) {
+        body = '<div class="ds-loading"><i class="fas fa-spinner fa-spin"></i> 加载中…</div>';
+      } else if (state.dataSecurityError && !data) {
+        body = `<div class="ds-error">${escapeHtml(state.dataSecurityError)}</div>`;
+      } else if (tab === 'api') {
+        body = renderDataSecurityApis(data && data.apis);
+      } else {
+        body = renderDataSecurityDatabase(data && data.database);
+      }
+      return `
+        <div class="ds-wrap">
+          <div class="ds-tabs" role="tablist">
+            <button type="button" class="ds-tab ${tab === 'database' ? 'active' : ''}" onclick="setDataSecurityTab('database')">
+              <i class="fas fa-database"></i> 数据库可视化
+            </button>
+            <button type="button" class="ds-tab ${tab === 'api' ? 'active' : ''}" onclick="setDataSecurityTab('api')">
+              <i class="fas fa-network-wired"></i> API 可视化
+            </button>
+          </div>
+          <div class="ds-toolbar" style="margin-top:-6px;">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="loadDataSecurityOverview(true)">
+              <i class="fas fa-rotate-right"></i> 刷新
+            </button>
+            ${state.dataSecurityError && data ? `<span style="font-size:12px;color:#B91C1C;">${escapeHtml(state.dataSecurityError)}</span>` : ''}
+          </div>
+          ${body}
         </div>
       `;
     }
@@ -6406,10 +7663,17 @@
      * 工作台待办：项目任务所属一级目录仍为「待开始」时不展示
      *（含一级目录自身；临时任务不受影响）
      * 所属阶段里程碑仍为待开始时同样隐藏。
+     * 例外：计划开始日已到或落在近一周窗口内的任务仍展示，避免被未启动里程碑挡住。
      */
     function shouldHideWorkbenchTodoUnderUnstartedFirstLevel(task) {
       if (!task || !task.projectId || task.type === 'temp') return false;
       if (shouldHideMilestoneLikeTask(task)) return false;
+
+      const start = normalizeDateStr(getEffectivePlanStart(task) || task.planStartDate) || '';
+      if (start) {
+        const weekEnd = formatLocalDate(addDaysLocal(parseLocalDate(todayStr()), 6));
+        if (start <= weekEnd) return false;
+      }
 
       let cur = task;
       const visited = new Set();
@@ -6567,7 +7831,8 @@
         </div>`;
     }
 
-    /** 工作台展示的项目推进：进行中/已暂停、当前用户相关的项目
+    /** 工作台展示的项目推进：进行中/已暂停
+     *  可见范围与项目列表一致：总经理/管理员/部门经理看全公司；执行人员仅相关项目。
      *  [本地改动 2026-09-03] 原仅纳入 status==='active'，导致「已暂停」项目（专属钉钉等）在此完全不可见。
      *  现放宽为 active + paused；已完成(done) / 已归档(archived) 仍不在此展示。
      */
@@ -6575,12 +7840,13 @@
       return getViewableProjects()
         .filter(p => !isProjectArchived(p) && (p.status === 'active' || p.status === 'paused'))
         .filter(p => {
-          const related =
+          if (canViewAllProjects()) return true;
+          return (
             isSamePersonName(p.manager, currentUser.name) ||
             isSamePersonName(p.creator, currentUser.name) ||
             (Array.isArray(p.teamMembers) && p.teamMembers.some(n => isSamePersonName(n, currentUser.name))) ||
-            tasks.some(t => t.projectId === p.id && isRelatedToTask(t));
-          return related || isFullAccess(currentUser.role);
+            tasks.some(t => t.projectId === p.id && isRelatedToTask(t))
+          );
         })
         .sort((a, b) => {
           // 进行中优先，已暂停排后
@@ -6658,16 +7924,22 @@
       const overdue = isOverdue(task) && task.status !== 'done';
       const dueSoon = !overdue && isDueSoon(task) && task.status !== 'done';
       const urgencyClass = overdue ? 'is-overdue' : (dueSoon ? 'is-duesoon' : '');
+      // 截止情况徽标（与进度状态分列，不互相覆盖）
       const badge = overdue
         ? '<span class="wb-todo-badge is-overdue">已逾期</span>'
-        : (dueSoon ? '<span class="wb-todo-badge is-duesoon">即将到期</span>' : '');
+        : (dueSoon ? '<span class="wb-todo-badge is-duesoon">临期</span>' : '');
+      const start = normalizeDateStr(getEffectivePlanStart(task) || task.planStartDate) || '';
       const due = normalizeDateStr(resolveTaskDueDate(task)) || task.dueDate || '';
-      const actions = buildTodoQuickActionButtons(task);
-      const titleText = isAitableIntakeTask(task) ? getIntakeTaskTitle(task) : String(task.title || '');
+      const parts = getTaskCenterDisplayParts(task);
+      const actionMenu = renderTodoActionDropdown(task);
       const submitterName = typeof displayTaskSubmitterName === 'function' ? displayTaskSubmitterName(task) : '';
       const systemName = typeof getIntakeSystemName === 'function' ? getIntakeSystemName(task) : '';
+      const displayStatus = getTaskDisplayStatus(task);
+      const st = statusMap[displayStatus] || statusMap[task.status] || statusMap.todo;
+      const source = getWorkbenchTodoSource(task);
       const metaBits = [];
-      if (due) metaBits.push(`<span class="tag"><i class="far fa-calendar"></i> ${escapeHtml(due)}</span>`);
+      if (start) metaBits.push(`<span class="tag"><i class="far fa-calendar-plus"></i> 开始 ${escapeHtml(start)}</span>`);
+      if (due) metaBits.push(`<span class="tag"><i class="far fa-calendar"></i> 截止 ${escapeHtml(due)}</span>`);
       if (systemName) metaBits.push(`<span class="tag"><i class="fas fa-server"></i> 系统 ${escapeHtml(systemName)}</span>`);
       if (submitterName) metaBits.push(`<span class="tag"><i class="fas fa-user"></i> 提单人 ${escapeHtml(submitterName)}</span>`);
 
@@ -6676,15 +7948,59 @@
           <div class="wb-todo-bar">
             <div class="wb-todo-bar-main">
               <div class="wb-todo-top">
-                <div class="wb-todo-title">${escapeHtml(titleText)}</div>
+                <div class="wb-todo-title">
+                  <span class="wb-todo-title-main">${escapeHtml(parts.title)}</span>
+                </div>
                 ${badge}
               </div>
+              <div class="wb-todo-status-row">
+                <span class="status-tag status-${displayStatus}" style="font-size:10px;"><i class="fas ${st.icon}"></i>${st.label}</span>
+                <span class="wb-todo-source ${source.mod}" title="${escapeHtml(source.detail || source.label)}">
+                  <i class="fas ${source.icon}"></i>${escapeHtml(source.label)}
+                </span>
+              </div>
             </div>
-            ${actions.length ? `<div class="wb-todo-actions" onclick="event.stopPropagation()">${actions.join('')}</div>` : ''}
+            ${actionMenu || ''}
           </div>
           ${metaBits.length ? `<div class="wb-todo-meta">${metaBits.join('')}</div>` : ''}
         </div>
       `;
+    }
+
+    /** 工作台待办来源：项目 / 临时 / 表单提报 / 告知协办 */
+    function getWorkbenchTodoSource(task) {
+      if (!task) return { label: '未知', icon: 'fa-question', mod: '', detail: '' };
+      if (isAitableIntakeTask(task)) {
+        const sys = getIntakeSystemName(task);
+        return {
+          label: sys ? `表单 · ${sys}` : '表单提报',
+          icon: 'fa-file-alt',
+          mod: 'is-intake',
+          detail: sys || '钉钉表单提报',
+        };
+      }
+      const type = getTodoTaskType(task);
+      if (type === 'inform') {
+        return { label: '告知协办', icon: 'fa-bell', mod: 'is-inform', detail: getTaskProjectLabel(task) };
+      }
+      if (type === 'temp') {
+        return { label: '临时任务', icon: 'fa-bolt', mod: 'is-temp', detail: '临时事项' };
+      }
+      const proj = getTaskProjectLabel(task);
+      return { label: proj, icon: 'fa-folder', mod: 'is-project', detail: `项目任务 · ${proj}` };
+    }
+
+    /**
+     * 工作台「我的待办」时间窗：开始日期在今天起一周内（含今天），
+     * 或开始日已过但仍未完成（应已开工）；无开始日的仍展示以免漏项。
+     */
+    function isWorkbenchStartWithinNextWeek(task) {
+      const start = normalizeDateStr(getEffectivePlanStart(task) || task.planStartDate) || '';
+      if (!start) return true;
+      const today = todayStr();
+      const end = formatLocalDate(addDaysLocal(parseLocalDate(today), 6));
+      if (start > end) return false;
+      return true;
     }
 
     function renderWorkbenchHome() {
@@ -6710,11 +8026,13 @@
             .filter(t => t.status !== 'done' && t.status !== 'abolished' && t.status !== 'archived')
             .filter(t => !shouldHideFromWorkbenchTodos(t))
             .filter(t => !shouldHideWorkbenchTodoUnderUnstartedFirstLevel(t))
+            .filter(isWorkbenchStartWithinNextWeek)
         );
       } catch { myTodos = []; }
       const overdueCount = myTodos.filter(t => isOverdue(t)).length;
       const soonCount = myTodos.filter(t => !isOverdue(t) && isDueSoon(t)).length;
-      const preview = myTodos.slice(0, 8);
+      const preview = myTodos.slice(0, 12);
+      const weekEndLabel = formatLocalDate(addDaysLocal(parseLocalDate(todayStr()), 6));
 
       return `
         <div class="wb-wrap">
@@ -6738,6 +8056,7 @@
                 <div class="wb-section-title">
                   我的待办
                   <span class="wb-count">${myTodos.length}</span>
+                  <span class="wb-section-sub">开始日 ≤ ${escapeHtml(weekEndLabel)}</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:10px;">
                   <div class="wb-urgency-chips">
@@ -6750,7 +8069,7 @@
               <div class="wb-todo-list">
                 ${preview.length
                   ? preview.map(renderWorkbenchTodoCard).join('')
-                  : `<div class="wb-empty">暂无待办任务，继续保持！</div>`}
+                  : `<div class="wb-empty">近一周暂无待办（按开始日期），继续保持！</div>`}
               </div>
             </div>
             <div>
@@ -6794,27 +8113,29 @@
       );
     }
 
-    /** 可管理项目：项目负责人/创建人，或总经理/管理员 */
+    /** 可管理项目：矩阵 projects.manage=all 则可管全部；own 则本人负责/创建；none 不可管 */
     function canManageProject(project) {
       if (!project || isProjectArchived(project)) return false;
-      if (isFullAccess(currentUser.role)) return true;
+      const mode = resolveCap(currentUser, 'projects.manage');
+      if (mode === 'all') return true;
+      if (mode === 'none') return false;
       return isSamePersonName(project.manager, currentUser.name) || isSamePersonName(project.creator, currentUser.name);
     }
 
-    /** 可新建项目：全部登录用户 */
+    /** 可新建项目 */
     function canCreateProject() {
-      return true;
+      return capOn(currentUser, 'projects.create');
     }
 
-    /** 可删除项目：仅总经理/管理员 */
+    /** 可删除项目 */
     function canDeleteProject() {
-      return isFullAccess(currentUser.role);
+      return capOn(currentUser, 'projects.delete');
     }
 
-    /** 可编辑任务：负责人/协办人/创建人/项目负责人，或总经理/管理员 */
+    /** 可编辑任务：负责人/协办人/创建人/项目负责人，或项目管理档位为全部可管 */
     function canEditTask(task) {
       if (!task || task.status === 'archived' || task.status === 'abolished') return false;
-      if (isFullAccess(currentUser.role)) return true;
+      if (resolveCap(currentUser, 'projects.manage') === 'all') return true;
       return isRelatedToTask(task);
     }
 
@@ -6868,7 +8189,7 @@
 
     /** 任务中心是否显示「部门」范围页签 */
     function canViewDeptTaskScope() {
-      return isFullAccess(currentUser.role) || currentUser.role === 'manager';
+      return capOn(currentUser, 'tasks.deptScope');
     }
 
     function getUserDeptByName(name) {
@@ -8883,6 +10204,432 @@
       `;
     }
 
+    /** 任务所属里程碑（祖先链中最近的里程碑） */
+    function getOwningMilestone(task) {
+      if (!task) return null;
+      const chain = getTaskBreadcrumb(task.id);
+      for (let i = chain.length - 1; i >= 0; i--) {
+        if (isMilestoneTask(chain[i])) return chain[i];
+      }
+      return null;
+    }
+
+    /** 项目下里程碑列表（排除作废） */
+    function getProjectMilestones(project) {
+      if (!project) return [];
+      const all = tasks.filter(t => t.projectId === project.id && t.status !== 'abolished');
+      return getProjectRootTasks(all)
+        .filter(isMilestoneTask)
+        .slice()
+        .sort((a, b) => {
+          const sa = String(a.milestoneSeq || '').trim();
+          const sb = String(b.milestoneSeq || '').trim();
+          const na = (sa.match(/(\d+)/) || [])[1];
+          const nb = (sb.match(/(\d+)/) || [])[1];
+          if (na != null && nb != null && Number(na) !== Number(nb)) return Number(na) - Number(nb);
+          if (sa && sb && sa !== sb) return sa.localeCompare(sb, 'zh');
+          const da = normalizeDateStr(resolveTaskDueDate(a)) || a.dueDate || '';
+          const db = normalizeDateStr(resolveTaskDueDate(b)) || b.dueDate || '';
+          if (da && db && da !== db) return da.localeCompare(db);
+          return String(a.title || '').localeCompare(String(b.title || ''), 'zh');
+        });
+    }
+
+    /** 项目下普通任务（平铺，按里程碑分组再树序） */
+    function getProjectWorkTasksFlat(project) {
+      if (!project) return [];
+      const all = tasks.filter(t => t.projectId === project.id && t.status !== 'abolished' && !isMilestoneTask(t));
+      const milestones = getProjectMilestones(project);
+      const ordered = [];
+      const pushTree = (parentId) => {
+        all
+          .filter(t => (t.parentId || null) === parentId)
+          .sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'zh'))
+          .forEach(t => {
+            ordered.push(t);
+            pushTree(t.id);
+          });
+      };
+      milestones.forEach(m => pushTree(m.id));
+      // 无里程碑父级的散落任务
+      all.forEach(t => {
+        if (!ordered.some(x => x.id === t.id)) ordered.push(t);
+      });
+      return ordered;
+    }
+
+    // ========== 项目甘特图（只读） ==========
+    const FRAPPE_GANTT_JS = 'https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js';
+    const FRAPPE_GANTT_CSS = 'https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css';
+    let _frappeGanttLoadPromise = null;
+
+    function ensureFrappeGanttLoaded() {
+      if (typeof Gantt !== 'undefined') return Promise.resolve(true);
+      if (_frappeGanttLoadPromise) return _frappeGanttLoadPromise;
+      _frappeGanttLoadPromise = new Promise((resolve, reject) => {
+        if (!document.querySelector('link[data-frappe-gantt]')) {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = FRAPPE_GANTT_CSS;
+          link.setAttribute('data-frappe-gantt', '1');
+          document.head.appendChild(link);
+        }
+        const s = document.createElement('script');
+        s.src = FRAPPE_GANTT_JS;
+        s.async = true;
+        s.onload = () => resolve(true);
+        s.onerror = () => {
+          _frappeGanttLoadPromise = null;
+          reject(new Error('甘特图组件加载失败'));
+        };
+        document.head.appendChild(s);
+      });
+      return _frappeGanttLoadPromise;
+    }
+
+    function addCalendarDaysStr(dateStr, days) {
+      const d = parseLocalDate(dateStr);
+      if (!d) return '';
+      return formatLocalDate(addDaysLocal(d, days));
+    }
+
+    function getTaskGanttDateRange(task) {
+      if (!task) return null;
+      let start = normalizeDateStr(getEffectivePlanStart(task) || task.planStartDate) || '';
+      let end = normalizeDateStr(resolveTaskDueDate(task)) || normalizeDateStr(task.dueDate) || '';
+      if (!start && !end) return null;
+      if (!start) start = end;
+      if (!end) end = start;
+      if (end < start) end = start;
+      // Frappe 对同日条显示过短，展示上至少跨到次日
+      if (end === start) end = addCalendarDaysStr(start, 1) || start;
+      return { start, end };
+    }
+
+    function buildProjectGanttTasks(project) {
+      if (!project) return { rows: [], unscheduled: 0 };
+      const milestones = getProjectMilestones(project);
+      const workTasks = getProjectWorkTasksFlat(project);
+      const candidates = [];
+      milestones.forEach(m => candidates.push(m));
+      workTasks.forEach(t => candidates.push(t));
+      const scheduled = [];
+      let unscheduled = 0;
+      candidates.forEach(task => {
+        const range = getTaskGanttDateRange(task);
+        if (!range) {
+          unscheduled += 1;
+          return;
+        }
+        const isMs = isMilestoneTask(task);
+        const progress = Math.max(0, Math.min(100, Number(getDisplayProgress(task)) || 0));
+        const classes = [];
+        if (isMs) classes.push('gantt-row-milestone');
+        if (task.status === 'done') classes.push('gantt-row-done');
+        else if (isOverdue(task)) classes.push('gantt-row-overdue');
+        const depIds = getTaskPredecessorDeps(task.id)
+          .map(d => d.predecessorTaskId)
+          .filter(Boolean);
+        scheduled.push({
+          id: task.id,
+          name: String(task.title || task.id),
+          start: range.start,
+          end: range.end,
+          progress,
+          custom_class: classes.join(' '),
+          _depIds: depIds,
+        });
+      });
+      // 第二遍：仅保留同图内前置
+      const finalIds = new Set(scheduled.map(r => r.id));
+      const rows = scheduled.map(row => {
+        const deps = (row._depIds || []).filter(id => finalIds.has(id) && id !== row.id);
+        const out = {
+          id: row.id,
+          name: row.name,
+          start: row.start,
+          end: row.end,
+          progress: row.progress,
+          custom_class: row.custom_class,
+        };
+        if (deps.length) out.dependencies = deps.join(',');
+        return out;
+      });
+      return { rows, unscheduled };
+    }
+
+    function setProjectPlanView(view) {
+      state.projectPlanView = view === 'gantt' ? 'gantt' : 'table';
+      render();
+    }
+
+    function renderProjectPlanViewToggle() {
+      const view = state.projectPlanView === 'gantt' ? 'gantt' : 'table';
+      return `
+        <div class="project-plan-view-toggle" role="tablist" aria-label="计划视图">
+          <button type="button" class="${view === 'table' ? 'active' : ''}" onclick="setProjectPlanView('table')">
+            <i class="fas fa-table"></i>表格
+          </button>
+          <button type="button" class="${view === 'gantt' ? 'active' : ''}" onclick="setProjectPlanView('gantt')">
+            <i class="fas fa-chart-gantt"></i>甘特
+          </button>
+        </div>
+      `;
+    }
+
+    function renderProjectGanttSection(project) {
+      return `
+        <section class="project-gantt-section">
+          <div class="project-detail-section-title">
+            <span>项目甘特图</span>
+            <span style="font-size:11px;font-weight:500;color:var(--text-muted);">只读 · 点击条查看任务</span>
+          </div>
+          <div id="project-gantt" class="project-gantt-wrap" data-project-id="${escapeHtml(project.id)}"></div>
+          <div id="project-gantt-meta" class="project-gantt-meta"></div>
+        </section>
+      `;
+    }
+
+    async function mountProjectGantt() {
+      const el = document.getElementById('project-gantt');
+      if (!el) return;
+      const projectId = el.getAttribute('data-project-id');
+      const project = projects.find(p => p.id === projectId);
+      const meta = document.getElementById('project-gantt-meta');
+      if (!project) {
+        el.innerHTML = '<div style="padding:24px;color:#9CA3AF;font-size:13px;">项目不存在</div>';
+        return;
+      }
+      el.innerHTML = '<div style="padding:24px;color:#9CA3AF;font-size:13px;"><i class="fas fa-spinner fa-spin" style="margin-right:6px;"></i>加载甘特图…</div>';
+      try {
+        await ensureFrappeGanttLoaded();
+      } catch (err) {
+        el.innerHTML = `<div style="padding:24px;color:#DC2626;font-size:13px;">${escapeHtml(err.message || '加载失败')}</div>`;
+        return;
+      }
+      // 异步加载后页面可能已切走
+      const host = document.getElementById('project-gantt');
+      if (!host || state.projectPlanView !== 'gantt' || host.getAttribute('data-project-id') !== projectId) return;
+      const { rows, unscheduled } = buildProjectGanttTasks(project);
+      if (!rows.length) {
+        host.innerHTML = renderEmptyState({
+          icon: 'fa-chart-gantt',
+          title: '暂无可展示的排期',
+          hint: unscheduled
+            ? `有 ${unscheduled} 项缺少计划开始/截止日期，请先在表格中补全日期`
+            : '请先添加带日期的里程碑或任务',
+        });
+        if (meta) meta.textContent = '';
+        return;
+      }
+      host.innerHTML = '';
+      try {
+        // eslint-disable-next-line no-undef
+        new Gantt(host, rows, {
+          view_mode: 'Week',
+          bar_height: 22,
+          padding: 14,
+          on_click: (task) => {
+            if (task && task.id) viewTask(task.id);
+          },
+          on_date_change: () => {},
+          on_progress_change: () => {},
+          custom_popup_html: (task) => {
+            const src = tasks.find(t => t.id === task.id);
+            const start = task.start instanceof Date ? formatLocalDate(task.start) : String(task.start || '').slice(0, 10);
+            const endRaw = task.end instanceof Date ? formatLocalDate(task.end) : String(task.end || '').slice(0, 10);
+            // 展示截止用实际 due（同日条在图上多画了一天）
+            const dueShow = src ? (normalizeDateStr(resolveTaskDueDate(src)) || src.dueDate || endRaw) : endRaw;
+            const assignee = src ? (src.assignee || '-') : '-';
+            return `
+              <div class="details-container" style="min-width:180px;">
+                <h5 style="margin:0 0 6px;font-size:13px;">${escapeHtml(task.name || '')}</h5>
+                <p style="margin:0;font-size:12px;color:#6B7280;">${escapeHtml(start)} ~ ${escapeHtml(dueShow)}</p>
+                <p style="margin:4px 0 0;font-size:12px;color:#6B7280;">负责人：${escapeHtml(assignee)} · 进度 ${task.progress || 0}%</p>
+              </div>
+            `;
+          },
+        });
+      } catch (err) {
+        host.innerHTML = `<div style="padding:24px;color:#DC2626;font-size:13px;">甘特图渲染失败：${escapeHtml(err.message || String(err))}</div>`;
+        return;
+      }
+      if (meta) {
+        meta.textContent = unscheduled
+          ? `已展示 ${rows.length} 项；另有 ${unscheduled} 项未排期（缺开始/截止日期）`
+          : `已展示 ${rows.length} 项`;
+      }
+    }
+
+    function renderProjectMilestonesTableSection(project) {
+      const list = getProjectMilestones(project);
+      const canManage = canManageProject(project) && !isProjectArchived(project);
+      const rows = list.map((m, idx) => {
+        const displayStatus = getTaskDisplayStatus(m);
+        const st = statusMap[displayStatus] || statusMap[m.status] || statusMap.todo;
+        const start = normalizeDateStr(getEffectivePlanStart(m) || m.planStartDate) || '-';
+        const due = normalizeDateStr(resolveTaskDueDate(m)) || m.dueDate || '-';
+        const workCount = getMilestoneDescendantTasks(m.id).length;
+        const progress = calcProgress(m.id);
+        const roles = getMilestonePlanRoles(m);
+        const seq = String(m.milestoneSeq || `M${idx + 1}`).trim();
+        const deliverables = getMilestoneDeliverablesText(m);
+        const overdueCls = isOverdue(m) ? ' todo-row--overdue' : '';
+        return `
+          <tr class="${overdueCls.trim()}" onclick="viewTask('${m.id}')">
+            <td style="font-variant-numeric:tabular-nums;font-weight:600;color:#4B5563;">${escapeHtml(seq)}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                <i class="fas fa-flag" style="color:var(--brand);flex-shrink:0;"></i>
+                <span style="font-weight:600;color:#1F2937;">${escapeHtml(m.title || m.id)}</span>
+              </div>
+            </td>
+            <td style="max-width:280px;min-width:140px;">
+              <div style="font-size:13px;color:${deliverables ? '#374151' : '#9CA3AF'};line-height:1.45;white-space:pre-wrap;word-break:break-word;" title="${escapeHtml(deliverables || '')}">
+                ${escapeHtml(deliverables || '待填写')}
+              </div>
+            </td>
+            <td><span class="status-tag status-${displayStatus}" style="font-size:10px;"><i class="fas ${st.icon}"></i>${st.label}</span></td>
+            <td>
+              <div style="display:flex;flex-wrap:wrap;gap:4px;">
+                ${roles.roleA ? `<span class="arcv-chip"><b>A</b>${escapeHtml(roles.roleA)}</span>` : ''}
+                ${roles.roleR ? `<span class="arcv-chip"><b>R</b>${escapeHtml(roles.roleR)}</span>` : `<span class="arcv-chip"><b>R</b>${escapeHtml(m.assignee || '-')}</span>`}
+                ${roles.roleC ? `<span class="arcv-chip"><b>C</b>${escapeHtml(roles.roleC)}</span>` : ''}
+                ${roles.roleV ? `<span class="arcv-chip"><b>V</b>${escapeHtml(roles.roleV)}</span>` : ''}
+              </div>
+            </td>
+            <td>${escapeHtml(start)}</td>
+            <td>${escapeHtml(due)}</td>
+            <td style="font-variant-numeric:tabular-nums;">${workCount}</td>
+            <td style="min-width:110px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div class="progress-bar" style="flex:1;height:6px;"><div class="progress-fill" style="width:${progress}%;"></div></div>
+                <span style="font-size:12px;color:#6B7280;font-variant-numeric:tabular-nums;">${progress}%</span>
+              </div>
+            </td>
+            <td class="col-actions" onclick="event.stopPropagation();">
+              ${canManage ? `
+                <button type="button" class="btn btn-ghost btn-sm" onclick="showNewSubTaskModal('${m.id}')" title="添加任务"><i class="fas fa-plus"></i></button>
+              ` : ''}
+              ${canCompleteMilestone(m) && canOperateTask(m) ? `
+                <button type="button" class="btn btn-success btn-sm" onclick="updateTaskStatus('${m.id}', 'done')"><i class="fas fa-check"></i></button>
+              ` : ''}
+            </td>
+          </tr>`;
+      }).join('');
+
+      return `
+        <section style="margin-top:16px;">
+          <div class="project-detail-section-title">
+            <span>里程碑</span>
+            ${canManage ? `
+              <button type="button" class="btn btn-ghost btn-sm" onclick="showNewMilestoneModal('${project.id}')"><i class="fas fa-flag"></i>添加里程碑</button>
+            ` : ''}
+          </div>
+          <div class="todo-table-card">
+            <div class="todo-table-wrap">
+              <table class="todo-table todo-table--slim">
+                <thead>
+                  <tr>
+                    <th>M序号</th>
+                    <th>里程碑</th>
+                    <th>交付物</th>
+                    <th>状态</th>
+                    <th>A/R/C/V</th>
+                    <th>开始日期</th>
+                    <th>截止日期</th>
+                    <th>任务数</th>
+                    <th>进度</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${list.length
+                    ? rows
+                    : `<tr><td colspan="10">${renderEmptyState({ icon: 'fa-flag', title: '暂无里程碑', hint: canManage ? '点击右上角添加里程碑' : '负责人可添加里程碑' })}</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+            <div class="todo-pager"><div class="todo-pager-info">共 ${list.length} 个里程碑</div></div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderProjectTasksTableSection(project) {
+      const list = getProjectWorkTasksFlat(project);
+      const canManage = canManageProject(project) && !isProjectArchived(project);
+      const rows = list.map(t => {
+        const displayStatus = getTaskDisplayStatus(t);
+        const st = statusMap[displayStatus] || statusMap[t.status] || statusMap.todo;
+        const pr = priorityMap[t.priority] || priorityMap.normal;
+        const milestone = getOwningMilestone(t);
+        const start = normalizeDateStr(getEffectivePlanStart(t) || t.planStartDate) || '-';
+        const due = normalizeDateStr(resolveTaskDueDate(t)) || t.dueDate || '-';
+        const progress = getDisplayProgress(t);
+        const chain = getTaskBreadcrumb(t.id).filter(x => !isMilestoneTask(x));
+        const depth = Math.max(0, chain.length - 1);
+        const prefix = depth > 0 ? `${'　'.repeat(Math.min(depth, 4))}└ ` : '';
+        const overdueCls = isOverdue(t) ? ' todo-row--overdue' : '';
+        return `
+          <tr class="${overdueCls.trim()}" onclick="viewTask('${t.id}')">
+            <td>
+              <div style="min-width:0;">
+                <div style="font-weight:500;color:#1F2937;">${prefix}${escapeHtml(t.title || t.id)}</div>
+                ${t.type === 'temp' ? '<span class="tag tag-temp" style="font-size:10px;margin-top:2px;display:inline-block;"><i class="fas fa-bolt"></i>临时</span>' : ''}
+              </div>
+            </td>
+            <td>${escapeHtml((milestone && milestone.title) || '-')}</td>
+            <td>${escapeHtml(t.assignee || '-')}</td>
+            <td><span class="status-tag status-${displayStatus}" style="font-size:10px;">${st.label}</span></td>
+            <td><span style="color:${pr.color};font-size:12px;">${pr.label}</span></td>
+            <td>${escapeHtml(start)}</td>
+            <td>${escapeHtml(due)}</td>
+            <td style="min-width:100px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div class="progress-bar" style="flex:1;height:6px;"><div class="progress-fill" style="width:${progress}%;"></div></div>
+                <span style="font-size:12px;color:#6B7280;font-variant-numeric:tabular-nums;">${progress}%</span>
+              </div>
+            </td>
+          </tr>`;
+      }).join('');
+
+      return `
+        <section style="margin-top:16px;">
+          <div class="project-detail-section-title">
+            <span>项目任务</span>
+            ${canManage ? `
+              <button type="button" class="btn btn-primary btn-sm" onclick="showNewTaskModal('${project.id}')"><i class="fas fa-plus"></i>添加任务</button>
+            ` : ''}
+          </div>
+          <div class="todo-table-card">
+            <div class="todo-table-wrap">
+              <table class="todo-table">
+                <thead>
+                  <tr>
+                    <th>任务</th>
+                    <th>所属里程碑</th>
+                    <th>负责人</th>
+                    <th>状态</th>
+                    <th>优先级</th>
+                    <th>开始日期</th>
+                    <th>截止日期</th>
+                    <th>进度</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${list.length
+                    ? rows
+                    : `<tr><td colspan="8">${renderEmptyState({ icon: 'fa-check-square', title: '暂无项目任务', hint: canManage ? '可先添加里程碑，再在里程碑下拆解任务' : '暂无任务' })}</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+            <div class="todo-pager"><div class="todo-pager-info">共 ${list.length} 条任务</div></div>
+          </div>
+        </section>
+      `;
+    }
+
     function renderMilestonePlanSection(milestone, allTasks, mineIds = null) {
       const children = allTasks.filter(t => t.parentId === milestone.id && !isMilestoneTask(t));
       const progress = calcProgress(milestone.id);
@@ -8893,6 +10640,7 @@
       const canDone = canCompleteMilestone(milestone);
       const project = projects.find(p => p.id === milestone.projectId);
       const canManage = project && !isProjectArchived(project) && canManageProject(project);
+      const deliverables = getMilestoneDeliverablesText(milestone);
       return `
         <div class="plan-milestone" style="margin-bottom:16px;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;background:#fff;">
           <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:linear-gradient(90deg,#F8FAFC,#F1F5F9);border-bottom:1px solid #E5E7EB;">
@@ -8901,6 +10649,9 @@
               <div style="font-size:14px;font-weight:600;color:#1F2937;">${escapeHtml(milestone.title || '')}</div>
               <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">
                 ${workCount} 项任务 · 截止 ${escapeHtml(due)} · ${escapeHtml(milestone.assignee || '-')}
+              </div>
+              <div style="font-size:12px;margin-top:4px;color:${deliverables ? '#4B5563' : '#9CA3AF'};line-height:1.45;">
+                <span style="color:#9CA3AF;">交付物：</span>${escapeHtml(deliverables || '待填写')}
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:8px;min-width:120px;">
@@ -9099,6 +10850,10 @@
 
     /** 工作台待办：临时任务置顶，组内及其他任务均按截止时间升序（无日期靠后） */
     function sortWorkbenchTodos(list) {
+      const startKey = (task) => {
+        const start = normalizeDateStr(getEffectivePlanStart(task) || task?.planStartDate) || '';
+        return start || '9999-12-31';
+      };
       const dueKey = (task) => {
         const due = normalizeDateStr(resolveTaskDueDate(task)) || normalizeDateStr(task?.dueDate) || '';
         return due || '9999-12-31';
@@ -9107,6 +10862,8 @@
         const aTemp = getTodoTaskType(a) === 'temp' ? 0 : 1;
         const bTemp = getTodoTaskType(b) === 'temp' ? 0 : 1;
         if (aTemp !== bTemp) return aTemp - bTemp;
+        const byStart = startKey(a).localeCompare(startKey(b));
+        if (byStart !== 0) return byStart;
         const byDue = dueKey(a).localeCompare(dueKey(b));
         if (byDue !== 0) return byDue;
         return String(a.title || '').localeCompare(String(b.title || ''), 'zh-CN');
@@ -9174,34 +10931,112 @@
 
     /** 待办快捷操作按钮（工作台卡片 / 任务列表共用） */
     function buildTodoQuickActionButtons(task) {
+      return getTodoActionMenuItems(task).map(item =>
+        `<button type="button" class="btn btn-icon${item.mod ? ' ' + item.mod : ''}" title="${escapeHtml(item.label)}" onclick="event.stopPropagation();${item.run}"><i class="fas ${item.icon}"></i></button>`
+      );
+    }
+
+    /** 任务操作菜单项（开始/暂停/完成/留言/编辑/作废） */
+    function getTodoActionMenuItems(task) {
       if (!task) return [];
-      const bits = [];
+      const items = [];
       const canOp = typeof canOperateTask === 'function' && canOperateTask(task);
       const blocked = typeof hasHardBlock === 'function' && hasHardBlock(task);
       const hasKids = typeof hasActiveChildren === 'function' && hasActiveChildren(task.id);
       const isMs = typeof isMilestoneTask === 'function' && isMilestoneTask(task);
       if (!isMs && canOp && !blocked && !hasKids) {
         if (task.status === 'todo') {
-          bits.push(`<button type="button" class="btn btn-icon is-primary" title="开始" onclick="event.stopPropagation();updateTaskStatus('${task.id}','doing')"><i class="fas fa-play"></i></button>`);
-          bits.push(`<button type="button" class="btn btn-icon is-warning" title="暂停" onclick="event.stopPropagation();updateTaskStatus('${task.id}','paused')"><i class="fas fa-pause"></i></button>`);
+          items.push({ label: '开始', icon: 'fa-play', mod: 'is-primary', run: `runTodoAction('${task.id}','doing')` });
+          items.push({ label: '暂停', icon: 'fa-pause', mod: 'is-warning', run: `runTodoAction('${task.id}','paused')` });
         } else if (task.status === 'doing') {
-          bits.push(`<button type="button" class="btn btn-icon is-warning" title="暂停" onclick="event.stopPropagation();updateTaskStatus('${task.id}','paused')"><i class="fas fa-pause"></i></button>`);
-          bits.push(`<button type="button" class="btn btn-icon is-success" title="完成" onclick="event.stopPropagation();updateTaskStatus('${task.id}','done')"><i class="fas fa-check"></i></button>`);
+          items.push({ label: '暂停', icon: 'fa-pause', mod: 'is-warning', run: `runTodoAction('${task.id}','paused')` });
+          items.push({ label: '完成', icon: 'fa-check', mod: 'is-success', run: `runTodoAction('${task.id}','done')` });
         } else if (task.status === 'paused') {
-          bits.push(`<button type="button" class="btn btn-icon is-primary" title="继续" onclick="event.stopPropagation();updateTaskStatus('${task.id}','doing')"><i class="fas fa-play"></i></button>`);
+          items.push({ label: '继续', icon: 'fa-play', mod: 'is-primary', run: `runTodoAction('${task.id}','doing')` });
         }
       }
       if (typeof canPostTaskComment === 'function' && canPostTaskComment(task)) {
-        bits.push(`<button type="button" class="btn btn-icon" title="留言" onclick="event.stopPropagation();focusTaskComment('${task.id}')"><i class="fas fa-comment"></i></button>`);
+        items.push({ label: '留言', icon: 'fa-comment', mod: '', run: `runTodoAction('${task.id}','comment')` });
       }
-      return bits;
+      if (typeof canEditTask === 'function' && canEditTask(task)) {
+        items.push({ label: '编辑', icon: 'fa-pen', mod: '', run: `runTodoAction('${task.id}','edit')` });
+      }
+      if (typeof canAbolishTask === 'function' && canAbolishTask(task)
+        && task.status !== 'abolished' && task.status !== 'archived' && task.status !== 'done') {
+        items.push({ label: '作废', icon: 'fa-trash-alt', mod: 'is-danger', run: `runTodoAction('${task.id}','abolish')` });
+      }
+      return items;
+    }
+
+    function toggleTodoActionMenu(taskId, ev) {
+      if (ev) ev.stopPropagation();
+      const next = state.todoActionMenuTaskId === taskId ? null : taskId;
+      state.todoActionMenuTaskId = next;
+      if (next) {
+        state.settingsOpen = false;
+        state.inboxOpen = false;
+        setTimeout(() => {
+          document.addEventListener('click', closeTodoActionMenuOnOutside, { once: true });
+        }, 0);
+      }
+      render();
+    }
+
+    function closeTodoActionMenu() {
+      if (!state.todoActionMenuTaskId) return;
+      state.todoActionMenuTaskId = null;
+      render();
+    }
+
+    function closeTodoActionMenuOnOutside() {
+      if (state.todoActionMenuTaskId) closeTodoActionMenu();
+    }
+
+    function runTodoAction(taskId, action) {
+      state.todoActionMenuTaskId = null;
+      if (action === 'comment') {
+        focusTaskComment(taskId);
+        return;
+      }
+      if (action === 'edit') {
+        editTask(taskId);
+        return;
+      }
+      if (action === 'abolish') {
+        abolishTask(taskId);
+        return;
+      }
+      updateTaskStatus(taskId, action);
+    }
+
+    /** 待办操作下拉（任务中心看板/列表） */
+    function renderTodoActionDropdown(task) {
+      const items = getTodoActionMenuItems(task);
+      if (!items.length) return '';
+      const open = state.todoActionMenuTaskId === task.id;
+      return `
+        <div class="todo-action-menu" onclick="event.stopPropagation()">
+          <button type="button" class="btn btn-ghost btn-sm todo-action-menu-btn" onclick="toggleTodoActionMenu('${task.id}', event)">
+            操作 <i class="fas fa-caret-down"></i>
+          </button>
+          ${open ? `
+            <div class="todo-action-menu-panel">
+              ${items.map(item => `
+                <button type="button" class="todo-action-menu-item${item.mod ? ' ' + item.mod : ''}" onclick="${item.run}">
+                  <i class="fas ${item.icon}"></i><span>${escapeHtml(item.label)}</span>
+                </button>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `;
     }
 
     /** 待办行内快捷操作（权限与详情页一致） */
     function renderTodoRowQuickActions(task) {
-      const bits = buildTodoQuickActionButtons(task);
-      if (!bits.length) return '<td class="col-actions" onclick="event.stopPropagation()"></td>';
-      return `<td class="col-actions" onclick="event.stopPropagation()"><div class="todo-row-actions wb-todo-actions">${bits.join('')}</div></td>`;
+      const html = renderTodoActionDropdown(task);
+      if (!html) return '<td class="col-actions" onclick="event.stopPropagation()"></td>';
+      return `<td class="col-actions" onclick="event.stopPropagation()">${html}</td>`;
     }
 
     function setTodoViewLayout(layout) {
@@ -9246,27 +11081,21 @@
       const dueRaw = normalizeDateStr(resolveTaskDueDate(task)) || task.dueDate || '';
       const dueLabel = formatTodoBoardDate(dueRaw) || dueRaw || '-';
       const canDrag = canOperateTask(task) && !isMilestoneTask(task);
-      const canEdit = canEditTask(task);
-      const canAbolish = canAbolishTask(task) && task.status !== 'abolished' && task.status !== 'archived' && task.status !== 'done';
-      const statusActions = buildTodoQuickActionButtons(task);
-      const actions = [...statusActions];
-      const titleText = isAitableIntakeTask(task) ? getIntakeTaskTitle(task) : String(task.title || '');
+      const parts = getTaskCenterDisplayParts(task);
       const submitterName = typeof displayTaskSubmitterName === 'function' ? displayTaskSubmitterName(task) : '';
       const systemName = typeof getIntakeSystemName === 'function' ? getIntakeSystemName(task) : '';
-      if (canEdit) {
-        actions.push(`<button type="button" class="btn btn-icon" title="编辑" onclick="event.stopPropagation();editTask('${task.id}')"><i class="fas fa-pen"></i></button>`);
-      }
-      if (canAbolish) {
-        actions.push(`<button type="button" class="btn btn-icon is-danger" title="作废" onclick="event.stopPropagation();abolishTask('${task.id}')"><i class="fas fa-trash-alt"></i></button>`);
-      }
+      const actionMenu = renderTodoActionDropdown(task);
       return `
         <div class="todo-board-card${overdue ? ' is-overdue' : ''}${dueSoon ? ' is-duesoon' : ''}"
           draggable="${canDrag ? 'true' : 'false'}"
           ondragstart="event.dataTransfer.setData('text/taskId','${task.id}')"
           onclick="viewTask('${task.id}')">
           <div class="todo-board-card-top">
-            <div class="todo-board-card-title">${escapeHtml(titleText)}</div>
-            ${actions.length ? `<div class="todo-board-card-actions wb-todo-actions" onclick="event.stopPropagation()">${actions.join('')}</div>` : ''}
+            <div class="todo-board-card-title">
+              ${task.projectId ? `<span class="todo-board-card-title-proj">${escapeHtml(parts.projectLabel)}</span>` : ''}
+              <span class="todo-board-card-title-main">${escapeHtml(parts.title)}</span>
+            </div>
+            ${actionMenu ? `<div class="todo-board-card-actions">${actionMenu}</div>` : ''}
           </div>
           <div class="todo-board-card-footer">
             <span class="todo-board-date">${escapeHtml(dueLabel)}</span>
@@ -9609,6 +11438,7 @@
 
     function renderProjectFocusPanel(project, canManage) {
       const { currentPhase, nextPlan, blocker } = getProjectFocusFields(project);
+      const editing = !!(canManage && state.editingProjectFocus);
       const readRow = (label, icon, value, emptyText, mod) => `
         <div class="project-focus-row${mod ? ' ' + mod : ''}">
           <div class="project-focus-label"><i class="fas ${icon}"></i>${label}</div>
@@ -9629,6 +11459,7 @@
           <textarea class="project-focus-textarea" id="projectBlocker" placeholder="卡在哪儿？没有可留空">${escapeHtml(blocker)}</textarea>
         </div>
         <div class="project-focus-actions">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="cancelEditProjectFocus()"><i class="fas fa-times"></i> 取消</button>
           <button type="button" class="btn btn-primary btn-sm" onclick="saveProjectFocus('${project.id}')"><i class="fas fa-save"></i> 保存</button>
         </div>
       `;
@@ -9637,14 +11468,143 @@
         ${readRow('下一步计划', 'fa-arrow-right', nextPlan, '暂无下一步计划')}
         ${readRow('当前卡点', 'fa-exclamation-triangle', blocker, '暂无卡点', blocker ? 'is-blocker' : 'is-blocker')}
       `;
+      const headerAction = canManage
+        ? (editing
+          ? ''
+          : `<button type="button" class="btn btn-ghost btn-sm" onclick="startEditProjectFocus()"><i class="fas fa-edit"></i> 编辑</button>`)
+        : '';
       return `
         <section>
-          <h3 class="project-detail-section-title">推进情况</h3>
+          <h3 class="project-detail-section-title">
+            <span>推进情况</span>
+            ${headerAction}
+          </h3>
           <div class="project-focus-panel">
-            ${canManage ? editFields : readFields}
+            ${editing ? editFields : readFields}
           </div>
         </section>
       `;
+    }
+
+    function renderProjectPlanPanel(project, canManage) {
+      const editing = !!(canManage && state.editingProjectPlan);
+      const completeness = getProjectPlanCompleteness(project);
+      const pst = projectStatusMap[project.status] || projectStatusMap.active;
+      const item = (label, value, wide) => `
+        <div class="project-plan-item${wide ? ' is-wide' : ''}">
+          <div class="project-plan-k">${label}</div>
+          <div class="project-plan-v${value ? '' : ' is-empty'}">${escapeHtml(value || '待填写')}</div>
+        </div>
+      `;
+      const editFields = `
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">项目目标</label>
+          <textarea class="project-focus-textarea" id="projectPlanObjective" placeholder="本项目要达成什么？">${escapeHtml(project.objective || '')}</textarea>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">项目价值</label>
+          <textarea class="project-focus-textarea" id="projectPlanValue" placeholder="做成后带来什么价值？">${escapeHtml(project.value || '')}</textarea>
+        </div>
+        <div class="project-plan-grid">
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">范围（做什么）</label>
+            <textarea class="project-focus-textarea" id="projectPlanScope" placeholder="本期范围">${escapeHtml(project.scope || '')}</textarea>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">不做范围</label>
+            <textarea class="project-focus-textarea" id="projectPlanOutOfScope" placeholder="明确本期不做">${escapeHtml(project.outOfScope || '')}</textarea>
+          </div>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">最终完成时间</label>
+          <input class="input" type="date" id="projectPlanEndDate" style="width:100%;" value="${escapeHtml(project.endDate || '')}">
+        </div>
+        <div class="project-focus-actions">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="cancelEditProjectPlan()"><i class="fas fa-times"></i> 取消</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="saveProjectPlan('${project.id}')"><i class="fas fa-save"></i> 保存</button>
+        </div>
+      `;
+      const readFields = `
+        <div class="project-plan-grid">
+          ${item('项目目标', project.objective, true)}
+          ${item('项目价值', project.value, true)}
+          ${item('范围（做什么）', project.scope)}
+          ${item('不做范围', project.outOfScope)}
+          ${item('当前状态', `${pst.label}${project.currentPhase ? ' · ' + project.currentPhase : ''}`)}
+          ${item('最终完成时间', project.endDate || '')}
+        </div>
+      `;
+      const badge = completeness.ready
+        ? `<span class="project-plan-badge is-ok"><i class="fas fa-check-circle"></i>计划字段已齐</span>`
+        : `<span class="project-plan-badge is-warn"><i class="fas fa-exclamation-circle"></i>里程碑计划 ${completeness.milestoneFilled}/${completeness.milestoneTotal || 0}</span>`;
+      const verifiedBadge = project.planVerified
+        ? `<span class="project-plan-badge is-verified"><i class="fas fa-stamp"></i>已校验 · ${escapeHtml(project.planVerifiedBy || '')}</span>`
+        : '';
+      return `
+        <section>
+          <h3 class="project-detail-section-title">
+            <span>项目计划书</span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+              ${badge}
+              ${verifiedBadge}
+              <button type="button" class="btn btn-ghost btn-sm" onclick="copyProjectPlanLedger('${project.id}')" title="复制领导要求的管线格式"><i class="fas fa-copy"></i>复制台账</button>
+              <button type="button" class="btn btn-ghost btn-sm" onclick="exportProjectPlanLedger('${project.id}')"><i class="fas fa-file-excel"></i>导出</button>
+              ${canVerifyProjectPlan(project) ? `
+                <button type="button" class="btn btn-ghost btn-sm" onclick="toggleProjectPlanVerified('${project.id}')">
+                  <i class="fas fa-stamp"></i>${project.planVerified ? '取消校验' : '陈璇校验'}
+                </button>
+              ` : ''}
+              ${canManage && !editing ? `
+                <button type="button" class="btn btn-ghost btn-sm" onclick="startEditProjectPlan()"><i class="fas fa-edit"></i> 编辑</button>
+              ` : ''}
+            </div>
+          </h3>
+          <div class="project-plan-panel">
+            <div style="font-size:12px;color:#6B7280;line-height:1.5;">
+              按领导要求填写目标/范围/最终时间；里程碑需补齐 A/R/C/V、交付物、验收标准与依赖风险。C 协作人须本人确认后，由陈璇校验并记入台账。
+            </div>
+            ${editing ? editFields : readFields}
+          </div>
+        </section>
+      `;
+    }
+
+    function startEditProjectPlan() {
+      state.editingProjectPlan = true;
+      render();
+    }
+
+    function cancelEditProjectPlan() {
+      state.editingProjectPlan = false;
+      render();
+    }
+
+    function saveProjectPlan(projectId) {
+      const project = projects.find(p => p.id === projectId);
+      if (!project || !canManageProject(project)) {
+        alert('仅项目负责人或创建人可编辑');
+        return;
+      }
+      project.objective = (document.getElementById('projectPlanObjective')?.value || '').trim();
+      project.value = (document.getElementById('projectPlanValue')?.value || '').trim();
+      project.scope = (document.getElementById('projectPlanScope')?.value || '').trim();
+      project.outOfScope = (document.getElementById('projectPlanOutOfScope')?.value || '').trim();
+      const endDate = (document.getElementById('projectPlanEndDate')?.value || '').trim();
+      if (endDate) project.endDate = endDate;
+      normalizeProjectRecord(project);
+      state.editingProjectPlan = false;
+      save({ immediateSync: true });
+      render();
+    }
+
+    function startEditProjectFocus() {
+      state.editingProjectFocus = true;
+      render();
+    }
+
+    function cancelEditProjectFocus() {
+      state.editingProjectFocus = false;
+      render();
     }
 
     function saveProjectFocus(projectId) {
@@ -9655,6 +11615,7 @@
       }
       applyProjectFocusFields(project, readProjectFocusFromDom());
       syncProjectFocusToForm(projectId);
+      state.editingProjectFocus = false;
       save({ immediateSync: true });
       render();
     }
@@ -9768,7 +11729,7 @@
                     <h2 class="project-hero-title" style="margin:0;">${escapeHtml(project.name || '')}</h2>
                     ${renderProjectStatusDot(project.status)}
                   </div>
-                  <div class="project-hero-desc" style="margin-top:6px;">${escapeHtml(project.desc || '暂无描述')}</div>
+                  <div class="project-hero-desc" style="margin-top:6px;">${escapeHtml(project.objective || project.desc || '暂无目标/描述')}</div>
                   <div class="project-hero-meta">
                     <span><i class="fas fa-building"></i>${escapeHtml(project.dept || '-')}</span>
                     <span><i class="fas fa-calendar"></i>${escapeHtml((project.startDate || '-') + ' ~ ' + (project.endDate || '-'))}</span>
@@ -9818,6 +11779,7 @@
 
           <div class="project-detail-layout">
             <div class="project-detail-side">
+              ${renderProjectPlanPanel(project, canManage)}
               ${renderProjectFocusPanel(project, canManage)}
               <section>
                 <h3 class="project-detail-section-title">项目成员</h3>
@@ -9827,6 +11789,10 @@
                     : `<div class="project-member-empty">暂无成员</div>`}
                 </div>
               </section>
+              ${renderProjectPlanViewToggle()}
+              ${state.projectPlanView === 'gantt'
+                ? renderProjectGanttSection(project)
+                : `${renderProjectMilestonesTableSection(project)}${renderProjectTasksTableSection(project)}`}
               ${renderProjectChangeLogsSection(project)}
             </div>
           </div>
@@ -9892,6 +11858,18 @@
         priority: 'normal',
         progress: 0,
         assignee: project.manager || currentUser.name,
+        milestoneSeq: getNextMilestoneSeq(projectId),
+        roleA: project.manager || currentUser.name,
+        roleR: project.manager || currentUser.name,
+        roleC: '',
+        roleV: '',
+        deliverables: '',
+        acceptanceCriteria: '',
+        completionEvidence: '',
+        depsRisks: '',
+        escalation: '',
+        delayImpact: '',
+        reopenConditions: '',
         informCollaborators: [],
         assistCollaborators: [],
       };
@@ -10006,7 +11984,7 @@
     }
 
     function canAccessStaffPage() {
-      return isFullAccess(currentUser.role) || currentUser.role === 'manager';
+      return capOn(currentUser, 'nav.staff');
     }
 
     /** 人员档案 / 团队管理的数据范围：部门经理仅本部门；默认排除通知联系人 */
@@ -10053,22 +12031,19 @@
 
     // 判断是否有编辑权限
     function canEditStaff(targetUser) {
-      // 总经理和管理员可以编辑所有人
-      if (isFullAccess(currentUser.role)) return true;
-
-      // 部门经理只能编辑本部门的执行人员（不含联系人）
-      if (currentUser.role === 'manager') {
+      const mode = resolveCap(currentUser, 'staff.edit');
+      if (mode === 'all') return true;
+      if (mode === 'dept_staff') {
         return !isContactProfile(targetUser) &&
           targetUser.dept === currentUser.dept &&
           targetUser.role === 'staff';
       }
-
       return false;
     }
 
-    /** 仅总经理/管理员可人为停用/恢复；不可停用自己 */
+    /** 仅可全员编辑人员档案的角色可停用/恢复；不可停用自己 */
     function canToggleStaffActive(targetUser) {
-      if (!targetUser || !isFullAccess(currentUser.role)) return false;
+      if (!targetUser || resolveCap(currentUser, 'staff.edit') !== 'all') return false;
       if (targetUser.id === currentUser.id) return false;
       return true;
     }
@@ -12465,6 +14440,44 @@
       return chain;
     }
 
+    function getScopedKeyStatus(userId) {
+      return (state.scopedKeyStatusByUser && state.scopedKeyStatusByUser[userId]) || null;
+    }
+
+    function renderScopedKeyBadge(userId) {
+      if (!isFullAccess(currentUser.role)) return '';
+      const st = getScopedKeyStatus(userId);
+      if (st && st.hasActive) {
+        const tip = [
+          st.capability === 'read' ? '只读' : '读写',
+          st.keyPrefix ? st.keyPrefix + '…' : '',
+          st.lastSentAt ? '已发送' : '未发送',
+        ].filter(Boolean).join(' · ');
+        return `<span class="staff-key-badge is-on" title="${escapeHtml(tip)}">Key已签发</span>`;
+      }
+      return `<span class="staff-key-badge is-off" title="尚未签发有效作用域 Key">Key未签发</span>`;
+    }
+
+    async function loadScopedKeyStatus(force = false) {
+      if (!isFullAccess(currentUser.role)) return;
+      if (!ApiConfig.enabled || !authSession.token) return;
+      if (state.scopedKeyStatusLoaded && !force) return;
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/scoped-keys/status', {
+          headers: { ...AuthService.getAuthHeaders() },
+          signal: AbortSignal.timeout(ApiConfig.timeout),
+        });
+        const raw = await parseApiJsonResponse(res, '加载 Key 状态失败');
+        if (!res.ok || (raw.code && raw.code !== 200)) return;
+        const payload = raw.data || raw;
+        state.scopedKeyStatusByUser = payload.byUserId || {};
+        state.scopedKeyStatusLoaded = true;
+        if (state.page === 'staff') render();
+      } catch (e) {
+        console.warn('[scoped-keys] status load failed', e);
+      }
+    }
+
     function openStaffDetail(userId, ev) {
       if (ev) { ev.preventDefault(); ev.stopPropagation(); }
       state.staffDetailId = userId || null;
@@ -12519,6 +14532,13 @@
                 <span class="staff-chip role-badge ${roleBadgeClass(user.role)}" style="margin-top:0;">${roleDisplayName(user.role)}</span>
                 <span class="staff-chip" style="background:${inactive ? '#FEE2E2' : '#ECFDF5'};color:${inactive ? '#B91C1C' : '#047857'};">${inactive ? '已停用' : '在职'}</span>
                 <span class="staff-chip" style="background:${dingBound ? '#ECFDF5' : '#F3F4F6'};color:${dingBound ? '#047857' : '#6B7280'};">钉钉${dingBound ? '已绑定' : '未绑定'}</span>
+                ${!isContact ? (() => {
+                  const st = getScopedKeyStatus(user.id);
+                  if (st && st.hasActive) {
+                    return `<span class="staff-chip" style="background:#ECFDF5;color:#047857;">作用域Key已签发${st.lastSentAt ? '·已发送' : ''}</span>`;
+                  }
+                  return `<span class="staff-chip" style="background:#F3F4F6;color:#6B7280;">作用域Key未签发</span>`;
+                })() : ''}
               </div>
             </div>
             ${isContact ? '' : `
@@ -12555,12 +14575,21 @@
             `}
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
               ${canEdit ? `<button class="btn btn-primary btn-sm" onclick="editStaff('${user.id}')"><i class="fas fa-edit"></i>编辑</button>` : ''}
+              ${isFullAccess(currentUser.role) && !inactive && !isContact ? `
+                <button class="btn btn-ghost btn-sm" onclick="issueScopedApiKey('${user.id}')"><i class="fas fa-key"></i>生成作用域Key</button>
+                <button class="btn btn-ghost btn-sm" style="color:var(--brand);" onclick="sendScopedApiKeyPackage('${user.id}')"><i class="fas fa-paper-plane"></i>发送接入包</button>
+              ` : ''}
               ${canToggleStaffActive(user) ? (
                 inactive
                   ? `<button class="btn btn-ghost btn-sm" style="color:#059669;" onclick="toggleStaffActive('${user.id}')"><i class="fas fa-user-check"></i>恢复</button>`
                   : `<button class="btn btn-ghost btn-sm" style="color:#DC2626;" onclick="toggleStaffActive('${user.id}')"><i class="fas fa-user-slash"></i>停用</button>`
               ) : ''}
             </div>
+            ${isFullAccess(currentUser.role) && !isContact ? `
+            <div class="staff-drawer-section" style="margin-top:12px;">
+              <h4>钉钉 userid</h4>
+              <div style="font-size:12px;color:#6B7280;word-break:break-all;font-family:monospace;">${dingBound ? escapeHtml(String(user.dingTalkUserId)) : '未绑定（发送接入包前请先同步钉钉）'}</div>
+            </div>` : ''}
           </div>
         </aside>
       `;
@@ -12590,7 +14619,7 @@
               <div style="display:flex;align-items:center;gap:10px;">
                 <div style="width:36px;height:36px;border-radius:50%;background:${avatarBg};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600;flex-shrink:0;">${escapeHtml(u.name.charAt(0))}</div>
                 <div style="min-width:0;">
-                  <div class="staff-name">${escapeHtml(u.name)}${inactive ? ' <span class="tag" style="background:#FEE2E2;color:#B91C1C;margin-left:4px;">已停用</span>' : ''}${isContact ? ' <span class="tag" style="background:#FEF3C7;color:#B45309;margin-left:4px;">联系人</span>' : ''}</div>
+                  <div class="staff-name">${escapeHtml(u.name)}${inactive ? ' <span class="tag" style="background:#FEE2E2;color:#B91C1C;margin-left:4px;">已停用</span>' : ''}${isContact ? ' <span class="tag" style="background:#FEF3C7;color:#B45309;margin-left:4px;">联系人</span>' : ''}${!isContact ? renderScopedKeyBadge(u.id) : ''}</div>
                   <div class="staff-pos">${escapeHtml(u.position || '未设职位')}</div>
                 </div>
               </div>
@@ -12603,9 +14632,13 @@
                 ? `<button type="button" class="staff-leader-link" onclick="jumpToStaffLeader('${leader.id}', event)">${escapeHtml(leader.name)}</button>`
                 : (isContact ? '—' : '本部门负责人')}
             </td>
-            <td style="padding:12px 16px;text-align:center;" onclick="event.stopPropagation()">
-              <div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;">
+            <td class="staff-col-ops" style="padding:12px 12px;text-align:center;" onclick="event.stopPropagation()">
+              <div class="staff-ops">
                 ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="editStaff('${u.id}')" title="编辑"><i class="fas fa-edit"></i></button>` : '<span style="color:#9CA3AF;font-size:12px;">—</span>'}
+                ${isFullAccess(currentUser.role) && !inactive && !isContact ? `
+                  <button class="btn btn-ghost btn-sm" onclick="issueScopedApiKey('${u.id}')" title="生成作用域 Key"><i class="fas fa-key"></i></button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--brand);" onclick="sendScopedApiKeyPackage('${u.id}')" title="发送：说明文档 + Key + 接口"><i class="fas fa-paper-plane"></i></button>
+                ` : ''}
                 ${canToggleStaffActive(u) ? (
                   inactive
                     ? `<button class="btn btn-ghost btn-sm" style="color:#059669;" onclick="toggleStaffActive('${u.id}')" title="恢复"><i class="fas fa-user-check"></i></button>`
@@ -12646,6 +14679,9 @@
     function renderStaff() {
       if (!canAccessStaffPage()) {
         return '<div style="padding:40px;text-align:center;color:#9CA3AF;">无权访问人员档案</div>';
+      }
+      if (isFullAccess(currentUser.role) && ApiConfig.enabled && authSession.token && !state.scopedKeyStatusLoaded) {
+        loadScopedKeyStatus(false);
       }
       ensureStaffExpandedDefaults();
       const isStaffAdmin = isFullAccess(currentUser.role);
@@ -12792,13 +14828,13 @@
                 </div>
               </div>
               <div class="panel-body" style="padding:0;overflow-x:auto;">
-                <table style="width:100%;border-collapse:collapse;min-width:560px;">
+                <table style="width:100%;border-collapse:collapse;min-width:640px;">
                   <thead>
                     <tr style="background:#F9FAFB;border-bottom:1px solid #E5E7EB;">
                       <th style="padding:10px 16px;text-align:left;font-size:12px;font-weight:600;color:#6B7280;">人员</th>
                       <th style="padding:10px 16px;text-align:left;font-size:12px;font-weight:600;color:#6B7280;">角色</th>
                       <th style="padding:10px 16px;text-align:left;font-size:12px;font-weight:600;color:#6B7280;">汇报给</th>
-                      <th style="padding:10px 16px;text-align:center;font-size:12px;font-weight:600;color:#6B7280;width:100px;">操作</th>
+                      <th class="staff-col-ops" style="padding:10px 16px;text-align:center;font-size:12px;font-weight:600;color:#6B7280;">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -14093,6 +16129,7 @@
         case 'tempTask':
           return renderQuickCreateModal();
         case 'staffEdit': return renderStaffEditModal();
+        case 'scopedKeyResult': return renderScopedKeyResultModal();
         case 'projectDetail': return renderProjectDetailModal();
         case 'projectCreate': return renderProjectCreateModal();
         case 'projectEdit': return renderProjectEditModal();
@@ -14312,6 +16349,63 @@
               </div>
 
               ${renderCollaboratorReviewBlock(task)}
+
+              ${isMilestoneTask(task) ? `
+              <div class="detail-section">
+                <div class="detail-section-title"><i class="fas fa-clipboard-list"></i>里程碑计划（A/R/C/V）</div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+                  <div style="padding:10px 12px;background:#F9FAFB;border-radius:8px;">
+                    <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">M序号</div>
+                    <span style="font-size:13px;font-weight:600;">${escapeHtml(task.milestoneSeq || '-')}</span>
+                  </div>
+                  <div style="padding:10px 12px;background:#F9FAFB;border-radius:8px;">
+                    <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">开始 ~ 完成</div>
+                    <span style="font-size:13px;font-weight:500;">${escapeHtml((normalizeDateStr(getEffectivePlanStart(task) || task.planStartDate) || '-') + ' ~ ' + (normalizeDateStr(resolveTaskDueDate(task)) || task.dueDate || '-'))}</span>
+                  </div>
+                  <div style="padding:10px 12px;background:#EFF6FF;border-radius:8px;">
+                    <div style="font-size:11px;color:#2563EB;margin-bottom:4px;">A 唯一交付人</div>
+                    <span style="font-size:13px;font-weight:600;">${escapeHtml(task.roleA || '-')}</span>
+                  </div>
+                  <div style="padding:10px 12px;background:#EFF6FF;border-radius:8px;">
+                    <div style="font-size:11px;color:#2563EB;margin-bottom:4px;">R 直接执行人</div>
+                    <span style="font-size:13px;font-weight:600;">${escapeHtml(task.roleR || task.assignee || '-')}</span>
+                  </div>
+                  <div style="padding:10px 12px;background:#EFF6FF;border-radius:8px;">
+                    <div style="font-size:11px;color:#2563EB;margin-bottom:4px;">C 协作人</div>
+                    <span style="font-size:13px;font-weight:600;">${escapeHtml(task.roleC || '-')}</span>
+                  </div>
+                  <div style="padding:10px 12px;background:#EFF6FF;border-radius:8px;">
+                    <div style="font-size:11px;color:#2563EB;margin-bottom:4px;">V 业务验收人</div>
+                    <span style="font-size:13px;font-weight:600;">${escapeHtml(task.roleV || '-')}</span>
+                  </div>
+                  <div style="padding:10px 12px;background:#F9FAFB;border-radius:8px;grid-column:span 2;">
+                    <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">交付物</div>
+                    <div style="font-size:13px;white-space:pre-wrap;">${escapeHtml(getMilestoneDeliverablesText(task) || '待填写')}</div>
+                  </div>
+                  <div style="padding:10px 12px;background:#F9FAFB;border-radius:8px;grid-column:span 2;">
+                    <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">验收标准</div>
+                    <div style="font-size:13px;white-space:pre-wrap;">${escapeHtml(getMilestoneAcceptanceText(task) || '待填写')}</div>
+                  </div>
+                  ${task.completionEvidence ? `
+                  <div style="padding:10px 12px;background:#F9FAFB;border-radius:8px;grid-column:span 2;">
+                    <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">完成证据</div>
+                    <div style="font-size:13px;white-space:pre-wrap;">${escapeHtml(task.completionEvidence)}</div>
+                  </div>
+                  ` : ''}
+                  <div style="padding:10px 12px;background:#FFFBEB;border-radius:8px;grid-column:span 2;border:1px solid #FDE68A;">
+                    <div style="font-size:11px;color:#D97706;margin-bottom:4px;">依赖 / 风险</div>
+                    <div style="font-size:13px;white-space:pre-wrap;">${escapeHtml(task.depsRisks || '暂无')}</div>
+                    ${(task.escalation || task.delayImpact || task.reopenConditions) ? `
+                    <div style="margin-top:8px;font-size:12px;color:#92400E;line-height:1.6;">
+                      ${task.escalation ? `<div>升级条件：${escapeHtml(task.escalation)}</div>` : ''}
+                      ${task.delayImpact ? `<div>延期影响：${escapeHtml(task.delayImpact)}</div>` : ''}
+                      ${task.reopenConditions ? `<div>重开条件：${escapeHtml(task.reopenConditions)}</div>` : ''}
+                    </div>
+                    ` : ''}
+                  </div>
+                </div>
+              </div>
+              ` : ''}
 
               <div class="detail-section">
                 <div class="detail-section-title"><i class="fas fa-chart-line"></i>进度</div>
@@ -14543,10 +16637,79 @@
                   <label class="form-label">${isMilestoneForm ? '里程碑名称' : '任务标题'} <span class="form-required">*</span></label>
                   <input class="input" style="width:100%;" value="${task.title || ''}" onchange="state.form.title=this.value" placeholder="${isMilestoneForm ? '输入里程碑名称' : '输入任务标题'}" ${!canEdit ? 'disabled' : ''}>
                 </div>
+                ${isMilestoneForm ? `
                 <div class="form-group">
-                  <label class="form-label">任务描述</label>
-                  <textarea class="textarea" style="width:100%;height:80px;" onchange="state.form.desc=this.value" placeholder="描述任务内容" ${!canEdit ? 'disabled' : ''}>${task.desc || ''}</textarea>
+                  <label class="form-label">M序号</label>
+                  <input class="input" style="width:100%;" value="${escapeHtml(task.milestoneSeq || state.form.milestoneSeq || '')}" onchange="state.form.milestoneSeq=this.value" placeholder="如 M1、M2" ${!canEdit ? 'disabled' : ''}>
                 </div>
+                ` : ''}
+                <div class="form-group">
+                  <label class="form-label">${isMilestoneForm ? '里程碑说明' : '任务描述'}</label>
+                  <textarea class="textarea" style="width:100%;height:80px;" onchange="state.form.desc=this.value" placeholder="${isMilestoneForm ? '补充说明（可选）' : '描述任务内容'}" ${!canEdit ? 'disabled' : ''}>${task.desc || ''}</textarea>
+                </div>
+                ${isMilestoneForm ? `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                  <div class="form-group">
+                    <label class="form-label">开始日期</label>
+                    <input class="input" type="date" style="width:100%;" value="${task.planStartDate || ''}" onchange="state.form.planStartDate=this.value" ${!canEdit ? 'disabled' : ''}>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">完成日期</label>
+                    <input class="input" type="date" style="width:100%;" value="${task.dueDate || ''}" onchange="state.form.dueDate=this.value" ${!canEdit ? 'disabled' : ''}>
+                  </div>
+                </div>
+                <div class="form-section-title" style="margin-top:8px;"><i class="fas fa-user-check"></i>责任矩阵 A/R/C/V</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                  <div class="form-group">
+                    <label class="form-label">A 唯一交付人</label>
+                    <input class="input" style="width:100%;" value="${escapeHtml(task.roleA || state.form.roleA || '')}" onchange="state.form.roleA=this.value" placeholder="请输入姓名" ${!canEdit ? 'disabled' : ''}>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">R 直接执行人</label>
+                    <input class="input" style="width:100%;" value="${escapeHtml(task.roleR || task.assignee || state.form.roleR || '')}" onchange="state.form.roleR=this.value;state.form.assignee=this.value" placeholder="请输入姓名" ${!canEdit ? 'disabled' : ''}>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">C 协作人</label>
+                    <input class="input" style="width:100%;" value="${escapeHtml(task.roleC || state.form.roleC || '')}" onchange="state.form.roleC=this.value" placeholder="多人用顿号分隔，须本人确认" ${!canEdit ? 'disabled' : ''}>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">V 业务验收人</label>
+                    <input class="input" style="width:100%;" value="${escapeHtml(task.roleV || state.form.roleV || '')}" onchange="state.form.roleV=this.value" placeholder="请输入姓名" ${!canEdit ? 'disabled' : ''}>
+                  </div>
+                </div>
+                <div class="form-section-title" style="margin-top:8px;"><i class="fas fa-box-open"></i>交付与验收</div>
+                <div class="form-group">
+                  <label class="form-label">交付物</label>
+                  <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.deliverables=this.value" placeholder="本里程碑产出什么" ${!canEdit ? 'disabled' : ''}>${escapeHtml(getMilestoneDeliverablesText(task) || state.form.deliverables || '')}</textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">验收标准</label>
+                  <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.acceptanceCriteria=this.value" placeholder="怎样算验收通过" ${!canEdit ? 'disabled' : ''}>${escapeHtml(getMilestoneAcceptanceText(task) || state.form.acceptanceCriteria || '')}</textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">完成证据</label>
+                  <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.completionEvidence=this.value" placeholder="签字/链接/截图等" ${!canEdit ? 'disabled' : ''}>${escapeHtml(task.completionEvidence || state.form.completionEvidence || '')}</textarea>
+                </div>
+                <div class="form-section-title" style="margin-top:8px;"><i class="fas fa-exclamation-triangle"></i>依赖与风险</div>
+                <div class="form-group">
+                  <label class="form-label">依赖 / 风险 / 卡点</label>
+                  <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.depsRisks=this.value" placeholder="前置依赖、风险、当前卡点" ${!canEdit ? 'disabled' : ''}>${escapeHtml(task.depsRisks || state.form.depsRisks || '')}</textarea>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+                  <div class="form-group">
+                    <label class="form-label">升级条件</label>
+                    <input class="input" style="width:100%;" value="${escapeHtml(task.escalation || state.form.escalation || '')}" oninput="state.form.escalation=this.value" placeholder="何时升级" ${!canEdit ? 'disabled' : ''}>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">延期影响</label>
+                    <input class="input" style="width:100%;" value="${escapeHtml(task.delayImpact || state.form.delayImpact || '')}" oninput="state.form.delayImpact=this.value" placeholder="延期后果" ${!canEdit ? 'disabled' : ''}>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">重开条件</label>
+                    <input class="input" style="width:100%;" value="${escapeHtml(task.reopenConditions || state.form.reopenConditions || '')}" oninput="state.form.reopenConditions=this.value" placeholder="何时重开" ${!canEdit ? 'disabled' : ''}>
+                  </div>
+                </div>
+                ` : `
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                   <div class="form-group">
                     <label class="form-label">负责人</label>
@@ -14563,6 +16726,7 @@
                     </select>
                   </div>
                 </div>
+                `}
               </div>
               <div class="form-section">
                 <div class="form-section-title"><i class="fas fa-tasks"></i>进度与状态</div>
@@ -14691,7 +16855,25 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label">项目描述</label>
-                  <textarea class="textarea" style="width:100%;height:80px;" onchange="state.form.desc=this.value" placeholder="描述项目目标和范围">${project.desc || ''}</textarea>
+                  <textarea class="textarea" style="width:100%;height:80px;" onchange="state.form.desc=this.value" placeholder="补充说明（可选）">${project.desc || ''}</textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">项目目标</label>
+                  <textarea class="textarea" style="width:100%;height:60px;" onchange="state.form.objective=this.value" placeholder="本项目要达成什么？">${escapeHtml(project.objective || '')}</textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">项目价值</label>
+                  <textarea class="textarea" style="width:100%;height:60px;" onchange="state.form.value=this.value" placeholder="做成后带来什么价值？">${escapeHtml(project.value || '')}</textarea>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                  <div class="form-group">
+                    <label class="form-label">范围（做什么）</label>
+                    <textarea class="textarea" style="width:100%;height:60px;" onchange="state.form.scope=this.value" placeholder="本期范围">${escapeHtml(project.scope || '')}</textarea>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">不做范围</label>
+                    <textarea class="textarea" style="width:100%;height:60px;" onchange="state.form.outOfScope=this.value" placeholder="明确本期不做">${escapeHtml(project.outOfScope || '')}</textarea>
+                  </div>
                 </div>
                 <div class="form-group">
                   <label class="form-label">当前阶段</label>
@@ -14981,7 +17163,25 @@
               </div>
               <div class="form-group">
                 <label class="form-label">项目描述</label>
-                <textarea class="textarea" style="width:100%;height:80px;" onchange="state.form.desc=this.value" placeholder="描述项目目标和范围">${project.desc || ''}</textarea>
+                <textarea class="textarea" style="width:100%;height:80px;" onchange="state.form.desc=this.value" placeholder="补充说明（可选）">${project.desc || ''}</textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">项目目标</label>
+                <textarea class="textarea" style="width:100%;height:60px;" onchange="state.form.objective=this.value" placeholder="本项目要达成什么？">${escapeHtml(project.objective || '')}</textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">项目价值</label>
+                <textarea class="textarea" style="width:100%;height:60px;" onchange="state.form.value=this.value" placeholder="做成后带来什么价值？">${escapeHtml(project.value || '')}</textarea>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                <div class="form-group">
+                  <label class="form-label">范围（做什么）</label>
+                  <textarea class="textarea" style="width:100%;height:60px;" onchange="state.form.scope=this.value" placeholder="本期范围">${escapeHtml(project.scope || '')}</textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">不做范围</label>
+                  <textarea class="textarea" style="width:100%;height:60px;" onchange="state.form.outOfScope=this.value" placeholder="明确本期不做">${escapeHtml(project.outOfScope || '')}</textarea>
+                </div>
               </div>
               <div class="form-group">
                 <label class="form-label">当前阶段</label>
@@ -15184,6 +17384,125 @@
       render();
     }
 
+    async function issueScopedApiKey(userId) {
+      if (!isFullAccess(currentUser.role)) {
+        alert('仅总经理/管理员可签发作用域 Key');
+        return;
+      }
+      const user = users.find(u => u.id === userId);
+      if (!user) return;
+      if (!confirm(`为「${user.name}」生成作用域 Key（读写）？\n将吊销该人员已有有效 Key。明文仅显示一次。`)) return;
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/scoped-keys/users/' + encodeURIComponent(userId) + '/issue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+          body: JSON.stringify({ capability: 'read_write' }),
+          signal: AbortSignal.timeout(ApiConfig.timeout),
+        });
+        const raw = await parseApiJsonResponse(res, '签发失败');
+        if (!res.ok || (raw.code && raw.code !== 200)) throw new Error(raw.message || '签发失败');
+        const payload = raw.data || raw;
+        state.form = {
+          scopedKeySecret: payload.secret || '',
+          scopedKeyRecord: payload.record || null,
+          scopedKeyGuide: payload.guide || {},
+          scopedKeyUserName: user.name,
+          scopedKeyUserId: userId,
+          scopedKeySent: false,
+        };
+        state.showModal = 'scopedKeyResult';
+        state.scopedKeyStatusLoaded = false;
+        await loadScopedKeyStatus(true);
+        render();
+      } catch (e) {
+        alert(e.message || '签发失败');
+      }
+    }
+
+    async function sendScopedApiKeyPackage(userId) {
+      if (!isFullAccess(currentUser.role)) {
+        alert('仅总经理/管理员可发送接入包');
+        return;
+      }
+      const user = users.find(u => u.id === userId);
+      if (!user) return;
+      if (!user.dingTalkUserId) {
+        alert('该人员未绑定钉钉 userid，请先同步钉钉后再发送');
+        return;
+      }
+      if (!confirm(`向「${user.name}」钉钉发送：接入说明 + 作用域 Key + 接口地址？\n将重新签发一把读写 Key（旧 Key 作废）。`)) return;
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/scoped-keys/users/' + encodeURIComponent(userId) + '/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+          body: JSON.stringify({ capability: 'read_write' }),
+          signal: AbortSignal.timeout(ApiConfig.timeout),
+        });
+        const raw = await parseApiJsonResponse(res, '发送失败');
+        if (!res.ok || (raw.code && raw.code !== 200)) throw new Error(raw.message || '发送失败');
+        const payload = raw.data || raw;
+        state.form = {
+          scopedKeySecret: payload.secret || '',
+          scopedKeyRecord: payload.record || null,
+          scopedKeyGuide: payload.guide || {},
+          scopedKeyUserName: user.name,
+          scopedKeyUserId: userId,
+          scopedKeySent: true,
+        };
+        state.showModal = 'scopedKeyResult';
+        state.scopedKeyStatusLoaded = false;
+        await loadScopedKeyStatus(true);
+        render();
+      } catch (e) {
+        alert(e.message || '发送失败');
+      }
+    }
+
+    function copyScopedKeySecret() {
+      const secret = state.form?.scopedKeySecret || '';
+      if (!secret) return;
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(secret).then(() => alert('已复制作用域 Key')).catch(() => {
+          prompt('请手动复制：', secret);
+        });
+      } else {
+        prompt('请手动复制：', secret);
+      }
+    }
+
+    function renderScopedKeyResultModal() {
+      const secret = state.form?.scopedKeySecret || '';
+      const guide = state.form?.scopedKeyGuide || {};
+      const name = state.form?.scopedKeyUserName || '';
+      const sent = !!state.form?.scopedKeySent;
+      const userId = state.form?.scopedKeyUserId || '';
+      return `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal-box" style="max-width:520px;">
+            <div class="modal-header">
+              <h3 class="modal-title"><i class="fas fa-key" style="color:var(--brand);margin-right:8px;"></i>${sent ? '已发送接入包' : '作用域 Key 已生成'}</h3>
+              <button type="button" class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+              <p style="font-size:13px;color:#6B7280;margin-bottom:12px;">绑定人员：<strong>${escapeHtml(name)}</strong>。明文仅此一次，请复制或确认对方已收到钉钉。</p>
+              ${sent ? '<p style="font-size:12px;color:#047857;margin-bottom:12px;"><i class="fas fa-check-circle"></i> 已通过钉钉/站内信发送说明文档链接、Key 与接口地址。</p>' : ''}
+              <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:12px;word-break:break-all;font-family:monospace;font-size:12px;">${escapeHtml(secret)}</div>
+              <div style="margin-top:12px;font-size:12px;color:#6B7280;line-height:1.6;">
+                <div>服务地址：${escapeHtml(guide.baseUrl || '-')}</div>
+                <div>说明文档：${escapeHtml(guide.guideUrl || '-')}</div>
+                <div>查询示例：${escapeHtml(guide.workbuddyQuery || '-')}</div>
+              </div>
+            </div>
+            <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+              <button type="button" class="btn btn-ghost" onclick="copyScopedKeySecret()"><i class="fas fa-copy"></i>复制 Key</button>
+              ${!sent && userId ? `<button type="button" class="btn btn-primary" onclick="sendScopedApiKeyPackage('${userId}')"><i class="fas fa-paper-plane"></i>发送给本人</button>` : ''}
+              <button type="button" class="btn btn-ghost" onclick="closeModal()">关闭</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     function editStaff(userId) {
       const user = users.find(u => u.id === userId);
       if (!user) return;
@@ -15354,10 +17673,17 @@
         openHandaOmExternal();
         return;
       }
-      if (page === 'nccMonitor' && !isFullAccess(currentUser.role)) {
+      state.todoActionMenuTaskId = null;
+      if (page === 'nccMonitor' && !capOn(currentUser, 'nav.ncc')) {
         page = 'dashboard';
       }
-      if (page === 'sqlTools' && !isFullAccess(currentUser.role)) {
+      if (page === 'sqlTools' && !capOn(currentUser, 'nav.sqlTools')) {
+        page = 'dashboard';
+      }
+      if (page === 'dataSecurity' && !capOn(currentUser, 'nav.dataSecurity')) {
+        page = 'dashboard';
+      }
+      if (page === 'permissions' && !canAccessPermissionsPage()) {
         page = 'dashboard';
       }
       if (page === 'kpiPlans' && !canAccessKpiPlans()) {
@@ -15365,6 +17691,12 @@
       }
       state.page = page;
       state.settingsOpen = false;
+      if (page === 'permissions') {
+        loadPermissionsPage();
+      }
+      if (page === 'dataSecurity') {
+        loadDataSecurityOverview();
+      }
       if (page === 'kpiPlans' && ApiConfig.enabled && authSession.token) {
         await KpiPlanService.load(state.kpiYearMonth);
       }
@@ -15608,10 +17940,16 @@
       render();
     }
 
-    // 递归更新上级任务进度（按子任务进度比例平均）；任意子任务开始则上级自动开始，全部完成则上级自动完成
+    // 递归更新上级任务进度（按子任务进度比例平均）；里程碑状态随下属任务自动同步
     function updateParentProgress(taskId) {
       const task = tasks.find(t => t.id === taskId);
       if (!task) return;
+
+      if (isMilestoneTask(task)) {
+        applyDerivedMilestoneStatus(task);
+        if (task.parentId) updateParentProgress(task.parentId);
+        return;
+      }
 
       const activeChildren = tasks.filter(t => t.parentId === taskId && t.status !== 'abolished');
       if (activeChildren.length > 0) {
@@ -15627,10 +17965,7 @@
         }
 
         const allChildrenDone = activeChildren.every(c => c.status === 'done');
-        const canAutoDone = isMilestoneTask(task)
-          ? areAllMilestoneTasksDone(task.id)
-          : (allChildrenDone && task.progress === 100);
-        if (canAutoDone && task.status !== 'done' && task.status !== 'archived' && task.status !== 'abolished') {
+        if (allChildrenDone && task.progress === 100 && task.status !== 'done' && task.status !== 'archived' && task.status !== 'abolished') {
           applyTaskDoneFields(task);
           task.status = 'done';
           onTaskMarkedDone(task);
@@ -15747,6 +18082,7 @@
       state.prevPage = state.page;
       state.form = { projectId };
       state.detailMilestoneId = '';
+      state.editingProjectFocus = false;
       if (!state.detailTaskScope) state.detailTaskScope = 'all';
       state.page = 'projectDetail';
       render();
@@ -15758,8 +18094,19 @@
         target = 'projects';
       }
       state.prevPage = null;
+      state.editingProjectFocus = false;
       state.page = target;
       render();
+    }
+
+    /** 顶栏「恒慧管」：有上一页则返回，否则回工作台 */
+    function goBreadcrumbHome() {
+      if (state.page === 'dashboard') return;
+      if (state.page === 'projectDetail' || state.prevPage) {
+        goBack();
+        return;
+      }
+      goTo('dashboard');
     }
 
     function editTask(taskId) {
@@ -15768,6 +18115,7 @@
         alert('您没有编辑该任务的权限');
         return;
       }
+      if (isMilestoneTask(task)) hydrateMilestonePlanFromDesc(task);
       state.collabDropdownOpen = null;
       state.form = initTaskFormCollaborators(task);
       const hasAdvancedData = !!(
@@ -16212,6 +18560,10 @@
         id: genId('PRJ'),
         name: state.form.name,
         desc: state.form.desc || '',
+        objective: state.form.objective || '',
+        value: state.form.value || '',
+        scope: state.form.scope || '',
+        outOfScope: state.form.outOfScope || '',
         currentPhase: state.form.currentPhase || '',
         nextPlan: state.form.nextPlan || '',
         blocker: state.form.blocker || '',
@@ -16228,6 +18580,9 @@
         creator: currentUser.name,
         createdAt: getNowCreatedAt(),
         documents: [],
+        planVerified: false,
+        planVerifiedBy: '',
+        planVerifiedAt: '',
       };
 
       projects.push(newProject);
@@ -16278,17 +18633,34 @@
           attachments: [],
           desc: '',
           createdAt: getNowCreatedAt(),
+          milestoneSeq: '',
+          roleA: '',
+          roleR: '',
+          roleC: '',
+          roleV: '',
+          deliverables: '',
+          acceptanceCriteria: '',
+          completionEvidence: '',
+          depsRisks: '',
+          escalation: '',
+          delayImpact: '',
+          reopenConditions: '',
         };
         Object.assign(t, over);
         reconcileEffectivePlanStart(t);
         syncTaskScheduleFields(t);
         return t;
       };
+      let seq = 0;
       phases.forEach((ph) => {
+        seq += 1;
         const milestone = makeTask({
           isMilestone: true,
           title: ph.name,
           planStartDate: project.startDate || null,
+          milestoneSeq: `M${seq}`,
+          roleA: project.manager || '',
+          roleR: project.manager || '',
         });
         tasks.push(milestone);
         (gates[ph.key] || []).forEach((g) => {
@@ -16432,6 +18804,9 @@
         if (isMilestoneTask(task) || formIsMilestone) {
           task.isMilestone = true;
           task.parentId = null;
+          normalizeMilestonePlanFields(task);
+          if (task.roleR) task.assignee = task.roleR;
+          else if (task.assignee && !task.roleR) task.roleR = task.assignee;
         } else {
           task.isMilestone = false;
         }
@@ -16498,6 +18873,16 @@
           actualEndDate: null,
           attachments: [],
         };
+        if (creatingMilestone) {
+          normalizeMilestonePlanFields(newTask);
+          if (!newTask.milestoneSeq) newTask.milestoneSeq = getNextMilestoneSeq(newTask.projectId);
+          if (newTask.roleR) newTask.assignee = newTask.roleR;
+          else if (newTask.assignee && !newTask.roleR) newTask.roleR = newTask.assignee;
+          if (!newTask.roleA) {
+            const project = projects.find(p => p.id === newTask.projectId);
+            newTask.roleA = project?.manager || newTask.assignee || currentUser.name;
+          }
+        }
         reconcileEffectivePlanStart(newTask);
         syncTaskScheduleFields(newTask);
         tasks.push(newTask);

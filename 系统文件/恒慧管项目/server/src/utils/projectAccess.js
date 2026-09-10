@@ -1,15 +1,15 @@
 const INFO_CENTER_DEPT = '信息中心';
-const { isFullAccess } = require('./roles');
 const { isRelatedToTask, isRelatedToProject } = require('./taskRelations');
+const { resolveCap } = require('../services/permissions');
 
 function isInfoCenterMember(user) {
   return !!(user && user.dept === INFO_CENTER_DEPT);
 }
 
-/** 总经理/管理员/部门经理可见全公司项目；执行人员仅可见相关项目 */
+/** 总经理/管理员/部门经理可见全公司项目；执行人员仅可见相关项目（可由权限矩阵覆盖） */
 function canViewAllProjects(user) {
   if (!user?.id) return false;
-  return isFullAccess(user.role) || user.role === 'manager';
+  return resolveCap(user, 'projects.view') === 'all';
 }
 
 function filterProjectsForUser(user, projects, allTasks) {

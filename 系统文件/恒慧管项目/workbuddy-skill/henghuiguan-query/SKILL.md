@@ -28,6 +28,7 @@ description: "查询恒慧管项目与任务进度。触发词：恒慧管、项
 - 项目：`GET {BASE}/api/workbuddy/query?type=projects&keyword=关键词`
 - 任务：`GET {BASE}/api/workbuddy/query?type=tasks&assignee=姓名`
 - 项目详情：`GET {BASE}/api/workbuddy/projects/{id}`
+- 项目计划台账：`GET {BASE}/api/workbuddy/projects/{id}/plan-ledger`（返回 `text` 可直接回复领导）
 - 探活：`GET {BASE}/api/workbuddy/health`
 
 完整参数见服务端文档 `server/docs/workbuddy.md`。
@@ -35,5 +36,7 @@ description: "查询恒慧管项目与任务进度。触发词：恒慧管、项
 ## 回答要求
 
 - 用业务语言（进行中/待开始/已完成），少堆 JSON
+- 涉及项目计划时，优先读 `objective`/`scope`/`outOfScope` 与里程碑 `roleA`/`roleR`/`roleC`/`roleV`、交付物、验收标准
+- 需要「管线格式回复」时调用 `plan-ledger`，把 `data.text` 原样给出
 - 条数多时只报最相关的若干条，并说明总数
 - 无法连通时检查 Base URL、密钥与网络是否互通

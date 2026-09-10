@@ -51,7 +51,9 @@ copy .env.example .env
 |------|------|
 | `PORT` | 服务端口，默认 3000 |
 | `JWT_SECRET` | JWT 密钥，生产必改 |
-| `DB_PATH` | 数据文件路径（JSON） |
+| `DB_PATH` | 数据文件路径（JSON；`DB_DRIVER=json` 时使用） |
+| `DB_DRIVER` | `json`（默认）或 `mysql`（整库 JSON 存 MySQL） |
+| `MYSQL_*` | MySQL 连接：`HOST`/`PORT`/`USER`/`PASSWORD`/`DATABASE` |
 | `DINGTALK_*` | 钉钉应用凭证（可选） |
 | `ALLOW_DEMO_LOGIN` | 允许演示登录，默认 true |
 
@@ -73,8 +75,19 @@ copy .env.example .env
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/data/bootstrap` | 拉取全量数据（按角色过滤） |
+| GET | `/api/data/bootstrap` | 拉取全量数据（按角色过滤；含 `rolePermissions` 矩阵） |
 | PUT | `/api/data/sync` | 同步前端数据到服务端 |
+
+### 权限管理
+
+角色能力矩阵（`full`/`manager`/`staff`）。菜单与能力档位可配置；「本人负责项目/任务」等归属规则仍由业务代码约束。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/permissions` | 拉取目录 + 矩阵 + 默认值（需 `nav.permissions`；返回 `canEdit`） |
+| GET | `/api/permissions/matrix` | 登录用户拉取矩阵（前端 `can*` 依赖） |
+| PUT | `/api/permissions` | 保存矩阵（仅总经理/管理员；body `{ matrix }`） |
+| POST | `/api/permissions/reset` | 恢复默认矩阵（仅总经理/管理员） |
 
 ### 钉钉
 
@@ -112,6 +125,15 @@ del data\henghuiguan.json
 npm start
 ```
 
-## 迁移到 MySQL
+## 迁移到 MySQL（方案 B：按模块分表）
 
-当前使用 JSON 文件便于本地开发。上线时可替换 `database.js` 中的存储层为 `mysql2`，接口保持不变即可。
+详见 [docs/MySQL连接与第三方接入.md](docs/MySQL连接与第三方接入.md)。
+
+```bash
+# .env: DB_DRIVER=mysql 与 MYSQL_* 
+npm run migrate-mysql-tables   # 从 app_store 或 JSON 拆入 users/projects/tasks...
+npm run setup-mysql-users      # 创建 hhg_app / hhg_readonly
+```
+
+切回文件库：`DB_DRIVER=json`。  
+第三方：直连 MySQL（只读账号）或 HTTP `/api/external`（`X-Api-Key`）。

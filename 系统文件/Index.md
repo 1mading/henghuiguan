@@ -30,7 +30,7 @@
 | `恒慧管项目/滚动大屏.html` | 会议室大屏 |
 | `恒慧管项目/desktop-pet/` | 桌宠 Electron 源码 |
 | `恒慧管桌宠/` | 桌宠可分发封装（`启动桌宠.bat` + `app` + `runtime`） |
-| `恒慧管项目/server/src/` | API、鉴权、同步、权限工具 |
+| `恒慧管项目/server/src/` | API、鉴权、同步、权限工具；含数据安全可视化（`routes/dataSecurity.js`） |
 | `恒慧管项目/server/miniapp/` | 正式钉钉小程序 |
 | `恒慧管项目/server/恒慧管/` | 钉钉样例/演示（**AI 默认勿改**） |
 | `恒慧管项目/server/docs/` | 操作手册与钉钉配置指南 |

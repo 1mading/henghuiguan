@@ -9,6 +9,15 @@ module.exports = {
   jwtSecret: process.env.JWT_SECRET || 'henghuiguan-dev-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   dbPath: path.resolve(__dirname, '..', process.env.DB_PATH || './data/henghuiguan.json'),
+  /** json = 本地文件；mysql = 整库 JSON 存 MySQL（方案 A） */
+  dbDriver: String(process.env.DB_DRIVER || 'json').trim().toLowerCase() === 'mysql' ? 'mysql' : 'json',
+  mysql: {
+    host: process.env.MYSQL_HOST || '127.0.0.1',
+    port: parseInt(process.env.MYSQL_PORT || '3306', 10) || 3306,
+    user: process.env.MYSQL_USER || 'root',
+    password: process.env.MYSQL_PASSWORD != null ? String(process.env.MYSQL_PASSWORD) : '',
+    database: process.env.MYSQL_DATABASE || 'henghuiguan',
+  },
   staticDir: process.env.STATIC_DIR
     ? path.resolve(__dirname, '..', process.env.STATIC_DIR)
     : path.resolve(__dirname, '../..'),
@@ -32,6 +41,8 @@ module.exports = {
   publicBaseUrl: (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, ''),
   allowDemoLogin: process.env.ALLOW_DEMO_LOGIN !== 'false',
   apiKey: process.env.API_KEY || '',
+  /** WorkBuddy 查询专用密钥；未设则回退 API_KEY */
+  workbuddyApiKey: (process.env.WORKBUDDY_API_KEY || '').trim(),
   corsOrigins: (process.env.CORS_ORIGINS || '')
     .split(',')
     .map(s => s.trim())

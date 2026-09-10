@@ -15,10 +15,15 @@ function canAccessKpiPlans(user) {
   return isFullAccess(user.role) || user.role === 'manager' || isKpiDept(user);
 }
 
-/** 部门经理/管理员/总经理可查看全部部门计划 */
+/** 部门经理/管理员/总经理可查看全部部门计划（可由权限矩阵 kpi.viewAll 覆盖） */
 function canViewAllDeptKpiPlans(user) {
   if (!canAccessKpiPlans(user)) return false;
-  return isFullAccess(user.role) || user.role === 'manager';
+  try {
+    const { capOn } = require('../services/permissions');
+    return capOn(user, 'kpi.viewAll');
+  } catch {
+    return isFullAccess(user.role) || user.role === 'manager';
+  }
 }
 
 function canViewKpiPlan(user, plan) {
