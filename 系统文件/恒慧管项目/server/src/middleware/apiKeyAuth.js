@@ -11,7 +11,10 @@ function readIncomingKey(req) {
 
 function applyScoped(req, resolved) {
   req.apiKeyKind = 'scoped';
-  req.scopedActor = resolved.user;
+  const user = resolved.user;
+  // 挂到 actor 上供 assert* 读白名单
+  user._scopedKeyRecord = resolved.record;
+  req.scopedActor = user;
   req.scopedKeyRecord = resolved.record;
   // 异步轻量落盘 lastUsedAt（失败忽略）
   try { touchScopedKeyPersist(); } catch { /* ignore */ }

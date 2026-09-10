@@ -48,7 +48,7 @@ router.get('/scoped-keys/users/:userId', requireAuth, requireIssuer, (req, res) 
   });
 });
 
-/** body: { capability?: 'read'|'read_write' } */
+/** body: { capability?: 'read'|'read_write', projectIdsRead?: string[], projectIdsWrite?: string[] } */
 router.post('/scoped-keys/users/:userId/issue', requireAuth, requireIssuer, (req, res) => {
   try {
     const capability = req.body?.capability === CAP_READ ? CAP_READ : CAP_READ_WRITE;
@@ -57,6 +57,8 @@ router.post('/scoped-keys/users/:userId/issue', requireAuth, requireIssuer, (req
       capability,
       createdBy: req.user?.name || req.user?.id || '',
       revokeOthers: true,
+      projectIdsRead: req.body?.projectIdsRead,
+      projectIdsWrite: req.body?.projectIdsWrite,
     });
     writeOk(res, {
       ...result,
@@ -76,6 +78,8 @@ router.post('/scoped-keys/users/:userId/send', requireAuth, requireIssuer, async
       boundUserId: req.params.userId,
       capability,
       createdBy: req.user?.name || req.user?.id || '',
+      projectIdsRead: req.body?.projectIdsRead,
+      projectIdsWrite: req.body?.projectIdsWrite,
     });
     writeOk(res, {
       ...result,

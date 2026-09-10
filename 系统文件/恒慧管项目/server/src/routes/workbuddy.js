@@ -62,4 +62,22 @@ router.get('/workbuddy/tasks/:id', requireWorkbuddyApiKey, (req, res) => {
   }
 });
 
+router.get('/workbuddy/issues', requireWorkbuddyApiKey, (req, res) => {
+  try {
+    const governance = require('../services/governance');
+    writeOk(res, { issues: governance.listIssues(req.query || {}, { actor: req.scopedActor || null }) });
+  } catch (e) {
+    writeErr(res, e.status || 500, e.message || '查询失败');
+  }
+});
+
+router.get('/workbuddy/history', requireWorkbuddyApiKey, (req, res) => {
+  try {
+    const external = require('../services/externalWrite');
+    writeOk(res, external.getHistory(req.query || {}, { actor: req.scopedActor || null }));
+  } catch (e) {
+    writeErr(res, e.status || 500, e.message || '查询失败');
+  }
+});
+
 module.exports = router;

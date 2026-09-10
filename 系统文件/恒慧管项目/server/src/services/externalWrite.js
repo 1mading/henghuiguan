@@ -21,6 +21,7 @@ const { emitChange } = require('./realtime');
 const { buildProjectPlanLedger } = require('../utils/projectPlanLedger');
 const {
   assertScopedCanReadProject,
+  assertScopedCanReadTask,
   assertScopedCanWriteProject,
   assertScopedCanWriteTask,
   assertScopedCanAbolishTask,
@@ -127,32 +128,33 @@ function persistOrThrow() {
   if (!persistStore()) throw httpError(500, '数据写入失败');
 }
 
-function createDefaultPhaseMilestones(project, creator) {
-  const phases = [
-    { key: '00', name: '00-立项与选型阶段' },
-    { key: '01', name: '01-启动过程组' },
-    { key: '02', name: '02-规划过程组' },
-    { key: '03', name: '03-执行过程组' },
-    { key: '04', name: '04-监控过程组' },
-    { key: '05', name: '05-收尾过程组' },
-  ];
-  const gates = {
-    '00': ['M1 厂商选型定标', 'M2 采购合同+SLA签订'],
-    '01': ['M3 项目启动会召开'],
-    '02': ['M4 需求确认签字', 'M5 实施计划审批'],
-    '05': ['M6 验收签字', 'M7 运维交接+复盘'],
-  };
+function createDefaultPhaseMilestones(project, creator, templateId) {
+  const {
+    getTemplate,
+    TPL_STD_ID,
+    TPL_WMS_ID,
+    ensureProjectTemplates,
+  } = require('./projectTemplates');
+  ensureProjectTemplates(getDb());
+  const tid = templateId === '' || templateId === false || templateId === 'none'
+    ? null
+    : String(templateId || TPL_WMS_ID).trim();
+  // 默认新建用 WMS；显式传 TPL-STD 用旧过程组；none 不生成
+  if (tid == null) return [];
+  const tpl = getTemplate(tid) || getTemplate(TPL_WMS_ID) || getTemplate(TPL_STD_ID);
+  if (!tpl || !Array.isArray(tpl.stages) || !tpl.stages.length) return [];
+
   const store = getDb();
   const created = [];
   let seq = 0;
-  for (const phase of phases) {
+  for (const stage of tpl.stages) {
     seq += 1;
     const milestone = {
       id: genId('T'),
       projectId: project.id,
       parentId: null,
       isMilestone: true,
-      title: phase.name,
+      title: String(stage.label || stage.name || stage.key || `阶段${seq}`),
       type: 'normal',
       creator,
       assignee: project.manager,
@@ -171,15 +173,18 @@ function createDefaultPhaseMilestones(project, creator) {
       comments: [],
       desc: '',
       createdAt: nowCreatedAt(),
-      phaseKey: phase.key,
-      milestoneSeq: `M${seq}`,
+      phaseKey: String(stage.key || ''),
+      milestoneSeq: String(stage.milestoneSeq || `M${seq}`),
       roleA: project.manager || '',
       roleR: project.manager || '',
       roleC: '',
       roleV: '',
-      deliverables: '',
-      acceptanceCriteria: '',
+      deliverables: String(stage.deliverables || '').trim(),
+      acceptanceCriteria: String(stage.acceptanceCriteria || '').trim(),
       completionEvidence: '',
+      verification: '',
+      feedback: '',
+      leftover: '',
       depsRisks: '',
       escalation: '',
       delayImpact: '',
@@ -187,20 +192,26 @@ function createDefaultPhaseMilestones(project, creator) {
     };
     store.tasks.push(milestone);
     created.push(milestone);
-    for (const gateTitle of (gates[phase.key] || [])) {
-      const gate = {
+
+    const pushChild = (title, { asGate }) => {
+      const raw = String(title || '').trim();
+      if (!raw) return;
+      const childTitle = asGate
+        ? (raw.startsWith('【') ? raw : `【里程碑】${raw}`)
+        : raw;
+      const child = {
         id: genId('T'),
         projectId: project.id,
         parentId: milestone.id,
         isMilestone: false,
-        title: `【里程碑】${gateTitle}`,
+        title: childTitle,
         type: 'normal',
         creator,
         assignee: project.manager,
         collaboratorEntries: [],
         collaborators: [],
         status: 'todo',
-        priority: 'normal',
+        priority: asGate ? 'important' : 'normal',
         progress: 0,
         estimatedHours: 0,
         actualHours: 0,
@@ -213,9 +224,12 @@ function createDefaultPhaseMilestones(project, creator) {
         desc: '',
         createdAt: nowCreatedAt(),
       };
-      store.tasks.push(gate);
-      created.push(gate);
-    }
+      store.tasks.push(child);
+      created.push(child);
+    };
+
+    for (const t of (stage.tasks || [])) pushChild(t, { asGate: false });
+    for (const g of (stage.gates || [])) pushChild(g, { asGate: true });
   }
   return created;
 }
@@ -257,6 +271,7 @@ function createProject(body = {}, opts = {}) {
     planVerified: body.planVerified === true,
     planVerifiedBy: String(body.planVerifiedBy || '').trim(),
     planVerifiedAt: String(body.planVerifiedAt || '').trim(),
+    stageTemplateId: String(body.stageTemplateId || body.templateId || '').trim(),
     externalMeta: body.externalMeta && typeof body.externalMeta === 'object' ? body.externalMeta : undefined,
   };
   if (!project.externalMeta) delete project.externalMeta;
@@ -265,7 +280,14 @@ function createProject(body = {}, opts = {}) {
   store.projects.push(normalizeProjectRecord(project));
   let templateTasks = [];
   if (body.withTemplate !== false && body.withTemplate !== 'false') {
-    templateTasks = createDefaultPhaseMilestones(project, creator);
+    const tplId = body.stageTemplateId != null || body.templateId != null
+      ? (body.stageTemplateId ?? body.templateId)
+      : require('./projectTemplates').TPL_WMS_ID;
+    if (tplId !== '' && tplId !== 'none' && tplId !== false) {
+      project.stageTemplateId = String(tplId);
+      store.projects[store.projects.length - 1] = normalizeProjectRecord(project);
+      templateTasks = createDefaultPhaseMilestones(project, creator, tplId);
+    }
   }
   persistOrThrow();
   emitEntityChange('project.created', 'project', project, creator);
@@ -305,7 +327,18 @@ function updateProject(id, body = {}, opts = {}) {
     if (next.archived) next.status = 'archived';
   }
   if (body.startDate != null) next.startDate = normalizeDate(body.startDate) || next.startDate;
-  if (body.endDate != null) next.endDate = normalizeDate(body.endDate);
+  {
+    const governance = require('./governance');
+    if (body.endDate != null || body.changeReason != null || body.originalEndDate != null) {
+      if (body.originalEndDate != null && !prev.originalEndDate) {
+        next.originalEndDate = normalizeDate(body.originalEndDate) || next.originalEndDate;
+      }
+      governance.applyProjectDateBaseline(prev, next, {
+        ...body,
+        changeReason: body.changeReason != null ? body.changeReason : body.reason,
+      });
+    }
+  }
   if (body.planVerified != null) next.planVerified = body.planVerified === true || body.planVerified === 'true';
   if (body.planVerifiedBy != null) next.planVerifiedBy = String(body.planVerifiedBy).trim();
   if (body.planVerifiedAt != null) next.planVerifiedAt = String(body.planVerifiedAt).trim();
@@ -428,10 +461,16 @@ function createTask(body = {}, opts = {}) {
     deliverables: String(body.deliverables || '').trim(),
     acceptanceCriteria: String(body.acceptanceCriteria || '').trim(),
     completionEvidence: String(body.completionEvidence || '').trim(),
+    verification: String(body.verification || '').trim(),
+    feedback: String(body.feedback || '').trim(),
+    leftover: String(body.leftover || '').trim(),
     depsRisks: String(body.depsRisks || '').trim(),
     escalation: String(body.escalation || '').trim(),
     delayImpact: String(body.delayImpact || '').trim(),
     reopenConditions: String(body.reopenConditions || '').trim(),
+    originalPlanStartDate: normalizeDate(body.originalPlanStartDate) || null,
+    originalDueDate: normalizeDate(body.originalDueDate) || '',
+    changeReason: String(body.changeReason || '').trim(),
   };
   if (body.externalMeta && typeof body.externalMeta === 'object') {
     task.externalMeta = body.externalMeta;
@@ -454,7 +493,9 @@ const TASK_PATCHABLE = [
   'informCollaborators', 'assistCollaborators', 'collaboratorEntries', 'collaborators',
   'milestoneSeq', 'roleA', 'roleR', 'roleC', 'roleV',
   'deliverables', 'acceptanceCriteria', 'completionEvidence',
+  'verification', 'feedback', 'leftover',
   'depsRisks', 'escalation', 'delayImpact', 'reopenConditions',
+  'originalPlanStartDate', 'originalDueDate', 'changeReason',
 ];
 
 function updateTask(id, body = {}, opts = {}) {
@@ -499,12 +540,25 @@ function updateTask(id, body = {}, opts = {}) {
         : TASK_PRIORITIES.has(priority) ? priority : next.priority;
   }
   if (body.progress != null) next.progress = Math.max(0, Math.min(100, Number(body.progress) || 0));
-  if (body.dueDate != null) next.dueDate = normalizeDate(body.dueDate);
   if (body.estimatedHours != null) next.estimatedHours = Number(body.estimatedHours) || 0;
   if (body.actualHours != null) next.actualHours = Number(body.actualHours) || 0;
-  if (body.planStartDate != null) next.planStartDate = normalizeDate(body.planStartDate) || null;
   if (body.actualStartDate != null) next.actualStartDate = normalizeDate(body.actualStartDate) || null;
   if (body.actualEndDate != null) next.actualEndDate = normalizeDate(body.actualEndDate) || null;
+  {
+    const governance = require('./governance');
+    if (body.originalPlanStartDate != null && !prev.originalPlanStartDate) {
+      next.originalPlanStartDate = normalizeDate(body.originalPlanStartDate) || null;
+    }
+    if (body.originalDueDate != null && !prev.originalDueDate) {
+      next.originalDueDate = normalizeDate(body.originalDueDate) || '';
+    }
+    if (body.planStartDate != null || body.dueDate != null || body.changeReason != null || body.reason != null) {
+      governance.applyTaskDateBaseline(prev, next, {
+        ...body,
+        changeReason: body.changeReason != null ? body.changeReason : body.reason,
+      });
+    }
+  }
   if (Array.isArray(body.attachments)) next.attachments = body.attachments;
   if (body.externalMeta && typeof body.externalMeta === 'object') {
     next.externalMeta = { ...(prev.externalMeta || {}), ...body.externalMeta };
@@ -524,6 +578,7 @@ function updateTask(id, body = {}, opts = {}) {
   const planTextFields = [
     'milestoneSeq', 'roleA', 'roleR', 'roleC', 'roleV',
     'deliverables', 'acceptanceCriteria', 'completionEvidence',
+    'verification', 'feedback', 'leftover',
     'depsRisks', 'escalation', 'delayImpact', 'reopenConditions',
   ];
   planTextFields.forEach((key) => {
@@ -535,7 +590,15 @@ function updateTask(id, body = {}, opts = {}) {
 
   store.tasks[idx] = next;
   persistOrThrow();
-  emitEntityChange('task.updated', 'task', next, resolvePersonName(body.operator) || 'external-api');
+  const operator = resolvePersonName(body.operator) || 'external-api';
+  emitEntityChange('task.updated', 'task', next, operator);
+  if (body.status != null && next.isMilestone) {
+    try {
+      require('./governance').maybeAutoSyncPhaseAfterTaskUpdate(next, operator);
+    } catch (e) {
+      console.warn('[externalWrite] phase sync:', e.message);
+    }
+  }
   return { task: next, patchedFields: TASK_PATCHABLE.filter(k => body[k] !== undefined) };
 }
 
@@ -872,12 +935,16 @@ function getCatalog() {
       scope: '范围（做什么）',
       outOfScope: '不做范围',
       endDate: '最终完成时间',
-      currentPhase: '当前阶段（手动维护的项目推进状态）',
+      originalEndDate: '原定最终完成时间',
+      changeReason: '日期变更原因',
+      currentPhase: '当前阶段（可随里程碑同步）',
       nextPlan: '下一步计划',
       blocker: '当前卡点',
       planVerified: '计划台账是否已校验',
       planVerifiedBy: '校验人',
       planVerifiedAt: '校验时间',
+      handoverRecords: '交接记录数组',
+      stageTemplateId: '绑定的模板 ID',
     },
     milestoneFields: {
       milestoneSeq: 'M序号',
@@ -888,16 +955,26 @@ function getCatalog() {
       deliverables: '交付物',
       acceptanceCriteria: '验收标准',
       completionEvidence: '完成证据',
+      verification: '验证记录',
+      feedback: '业务反馈',
+      leftover: '遗留问题',
       depsRisks: '依赖/风险',
       escalation: '升级条件',
       delayImpact: '延期影响',
       reopenConditions: '重开条件',
+      originalPlanStartDate: '原定开始',
+      originalDueDate: '原定截止',
+      changeReason: '日期变更原因',
     },
     endpoints: [
       { method: 'GET', path: '/external/health', desc: '连通性' },
       { method: 'GET', path: '/external/catalog', desc: '接口目录' },
-      { method: 'POST', path: '/external/projects', desc: '创建项目（默认带标准阶段模板）' },
+      { method: 'POST', path: '/external/projects', desc: '创建项目（默认套用 WMS 模板；可用 stageTemplateId / withTemplate）' },
+      { method: 'GET', path: '/external/project-templates', desc: '模板库列表' },
+      { method: 'POST', path: '/external/project-templates/from-project/:id', desc: '从项目另存为模板' },
       { method: 'PATCH', path: '/external/projects/:id', desc: '更新项目（含计划书字段）' },
+      { method: 'POST', path: '/external/projects/:id/sync-phase', desc: '按里程碑同步 currentPhase' },
+      { method: 'POST', path: '/external/projects/:id/handover', desc: '项目负责人交接' },
       { method: 'GET', path: '/external/projects/:id/plan-ledger', desc: '导出项目计划台账（管线格式）' },
       { method: 'POST', path: '/external/projects/:id/plan-verify', desc: '校验/取消校验项目计划台账' },
       { method: 'DELETE', path: '/external/projects/:id', desc: '删除项目（默认级联任务）' },
@@ -906,6 +983,11 @@ function getCatalog() {
       { method: 'DELETE', path: '/external/tasks/:id', desc: '删除任务（默认级联子任务）' },
       { method: 'POST', path: '/external/tasks/:id/comments', desc: '添加评论' },
       { method: 'DELETE', path: '/external/tasks/:taskId/comments/:commentId', desc: '删除评论' },
+      { method: 'GET', path: '/external/issues', desc: '问题列表' },
+      { method: 'POST', path: '/external/issues', desc: '创建问题' },
+      { method: 'PATCH', path: '/external/issues/:id', desc: '更新问题' },
+      { method: 'POST', path: '/external/projects/:id/issues/from-blocker', desc: '卡点升级为问题' },
+      { method: 'GET', path: '/external/history', desc: '变更日志查询' },
       { method: 'POST', path: '/external/dependencies', desc: '创建任务依赖' },
       { method: 'PATCH', path: '/external/dependencies/:id', desc: '更新依赖' },
       { method: 'DELETE', path: '/external/dependencies/:id', desc: '删除依赖' },
@@ -968,6 +1050,66 @@ function verifyProjectPlan(id, body = {}, opts = {}) {
   };
 }
 
+function syncProjectPhase(id, body = {}, opts = {}) {
+  const governance = require('./governance');
+  return governance.syncProjectPhase(id, {
+    ...opts,
+    operator: scopedActorName(opts.actor, resolvePersonName(body.operator) || 'external-api'),
+  });
+}
+
+function handoverProject(id, body = {}, opts = {}) {
+  const governance = require('./governance');
+  return governance.handoverProject(id, body, {
+    ...opts,
+    operator: scopedActorName(opts.actor, resolvePersonName(body.operator) || 'external-api'),
+  });
+}
+
+function listIssues(query = {}, opts = {}) {
+  return { issues: require('./governance').listIssues(query, opts) };
+}
+
+function createIssue(body = {}, opts = {}) {
+  return require('./governance').createIssue(body, {
+    ...opts,
+    operator: scopedActorName(opts.actor, resolvePersonName(body.operator) || 'external-api'),
+  });
+}
+
+function updateIssue(id, body = {}, opts = {}) {
+  return require('./governance').updateIssue(id, body, {
+    ...opts,
+    operator: scopedActorName(opts.actor, resolvePersonName(body.operator) || 'external-api'),
+  });
+}
+
+function createIssueFromBlocker(projectId, body = {}, opts = {}) {
+  return require('./governance').createIssueFromBlocker(projectId, {
+    ...opts,
+    operator: scopedActorName(opts.actor, resolvePersonName(body.operator) || 'external-api'),
+  });
+}
+
+function getHistory(query = {}, opts = {}) {
+  const { getAllChangeLogs } = require('../db/database');
+  let logs = getAllChangeLogs();
+  const type = String(query.type || '').trim();
+  const id = String(query.id || '').trim();
+  if (type === 'task' && id) {
+    const task = findTask(id);
+    if (opts.actor && task) assertScopedCanReadTask(opts.actor, task);
+    logs = logs.filter(l => String(l.taskId) === String(id));
+  } else if (type === 'project' && id) {
+    const project = findProject(id);
+    if (opts.actor && project) assertScopedCanReadProject(opts.actor, project);
+    logs = logs.filter(l => String(l.taskId) === `PROJECT-${id}`);
+  } else if (opts.actor) {
+    throw httpError(400, '作用域 Key 查询历史须带 type=task|project 与 id');
+  }
+  return { changeLogs: logs.slice(0, Number(query.limit) || 100) };
+}
+
 module.exports = {
   getCatalog,
   createProject,
@@ -987,4 +1129,11 @@ module.exports = {
   batchWrite,
   getExternalProjectPlanLedger,
   verifyProjectPlan,
+  syncProjectPhase,
+  handoverProject,
+  listIssues,
+  createIssue,
+  updateIssue,
+  createIssueFromBlocker,
+  getHistory,
 };

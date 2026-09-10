@@ -7,6 +7,8 @@ const {
   getAllTasks,
   getAllTaskDependencies,
   getAllChangeLogs,
+  getAllIssues,
+  mergeIssuesById,
   getAllTransferLogs,
   getAllPushLogs,
   mergeTasksById,
@@ -84,6 +86,7 @@ function filterByRole(user, data) {
     changeLogs: data.changeLogs,
     transferLogs: data.transferLogs,
     pushLogs: data.pushLogs,
+    issues: (data.issues || []).filter(i => projects.some(p => String(p.id) === String(i.projectId))),
     staffDeptCatalog,
     orgForest,
   };
@@ -219,6 +222,7 @@ function mergeIncomingSync(user, incoming) {
     changeLogs: getAllChangeLogs(),
     transferLogs: getAllTransferLogs(),
     pushLogs: getAllPushLogs(200),
+    issues: getAllIssues(),
   };
   const snapshot = {
     taskIds: new Set(store.tasks.map(t => t.id)),
@@ -241,6 +245,10 @@ function mergeIncomingSync(user, incoming) {
   const mergedPushLogs = pushUpdates.length
     ? mergePushLogsById(store.pushLogs, pushUpdates)
     : store.pushLogs;
+  const issueUpdates = Array.isArray(incoming.issueUpdates)
+    ? incoming.issueUpdates
+    : (Array.isArray(incoming.issues) ? incoming.issues : []);
+  const mergedIssues = mergeIssuesById(store.issues, issueUpdates);
   const depUpdates = Array.isArray(incoming.taskDependencyUpdates)
     ? incoming.taskDependencyUpdates
     : (Array.isArray(incoming.taskDependencies) ? incoming.taskDependencies : []);
@@ -325,6 +333,7 @@ function mergeIncomingSync(user, incoming) {
       changeLogs: mergedChangeLogs,
       transferLogs: mergedTransferLogs,
       pushLogs: mergedPushLogs,
+      issues: mergedIssues,
     };
     absorbConcurrentServerCreates(snapshot, next);
     replaceAllData(next);
@@ -344,6 +353,7 @@ function mergeIncomingSync(user, incoming) {
       changeLogs: mergedChangeLogs,
       transferLogs: mergedTransferLogs,
       pushLogs: mergedPushLogs,
+      issues: mergedIssues,
     };
     absorbConcurrentServerCreates(snapshot, next);
     replaceAllData(next);
@@ -362,6 +372,7 @@ function mergeIncomingSync(user, incoming) {
     changeLogs: mergedChangeLogs,
     transferLogs: mergedTransferLogs,
     pushLogs: store.pushLogs,
+    issues: mergedIssues,
   };
   absorbConcurrentServerCreates(snapshot, next);
   replaceAllData(next);
@@ -379,11 +390,16 @@ router.get('/miniapp/bootstrap', requireApiKey, requireAuth, (req, res) => {
     changeLogs: getAllChangeLogs(),
     transferLogs: getAllTransferLogs(),
     pushLogs: getAllPushLogs(100),
+    issues: getAllIssues(),
     workCalendar: getWorkCalendar(),
     rolePermissions: require('../services/permissions').getRolePermissions(),
     staffDeptCatalog: getStaffDeptCatalog(),
     serverTime: new Date().toISOString(),
   };
+  try {
+    raw.projectTemplates = require('../services/projectTemplates').listTemplates()
+      .map(require('../services/projectTemplates').publicTemplate);
+  } catch { raw.projectTemplates = []; }
   writeOk(res, {
     ...filterByRole(req.user, raw),
     storeRevision: getStoreRevision(),
@@ -402,10 +418,15 @@ router.get('/data/bootstrap', requireAuth, (req, res) => {
     changeLogs: getAllChangeLogs(),
     transferLogs: getAllTransferLogs(),
     pushLogs: getAllPushLogs(100),
+    issues: getAllIssues(),
     workCalendar: getWorkCalendar(),
     rolePermissions: require('../services/permissions').getRolePermissions(),
     staffDeptCatalog: getStaffDeptCatalog(),
   };
+  try {
+    raw.projectTemplates = require('../services/projectTemplates').listTemplates()
+      .map(require('../services/projectTemplates').publicTemplate);
+  } catch { raw.projectTemplates = []; }
   const filtered = filterByRole(req.user, raw);
   res.json({
     success: true,

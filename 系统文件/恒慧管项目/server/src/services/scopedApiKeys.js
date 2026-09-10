@@ -56,12 +56,16 @@ function genKeyId() {
 
 function publicRecord(rec) {
   if (!rec) return null;
+  const readIds = Array.isArray(rec.projectIdsRead) ? rec.projectIdsRead.map(String) : [];
+  const writeIds = Array.isArray(rec.projectIdsWrite) ? rec.projectIdsWrite.map(String) : [];
   return {
     id: rec.id,
     boundUserId: rec.boundUserId,
     boundUserName: rec.boundUserName || '',
     capability: rec.capability || CAP_READ_WRITE,
     projectScope: rec.projectScope || 'related',
+    projectIdsRead: readIds,
+    projectIdsWrite: writeIds,
     status: rec.status || 'active',
     keyPrefix: rec.keyPrefix || '',
     createdAt: rec.createdAt || '',
@@ -95,6 +99,9 @@ function getActiveKeyStatusMap() {
         keyId: k.id,
         keyPrefix: k.keyPrefix || '',
         capability: k.capability || CAP_READ_WRITE,
+        projectScope: k.projectScope || ((k.projectIdsRead || []).length || (k.projectIdsWrite || []).length ? 'whitelist' : 'related'),
+        projectIdsRead: Array.isArray(k.projectIdsRead) ? k.projectIdsRead.map(String) : [],
+        projectIdsWrite: Array.isArray(k.projectIdsWrite) ? k.projectIdsWrite.map(String) : [],
         createdAt: k.createdAt || '',
         lastSentAt: k.lastSentAt || '',
         lastUsedAt: k.lastUsedAt || '',
@@ -105,7 +112,7 @@ function getActiveKeyStatusMap() {
 }
 
 /**
- * @param {{ boundUserId: string, capability?: string, createdBy?: string, revokeOthers?: boolean }} opts
+ * @param {{ boundUserId: string, capability?: string, createdBy?: string, revokeOthers?: boolean, projectIdsRead?: string[], projectIdsWrite?: string[] }} opts
  */
 function issueKey(opts = {}) {
   const boundUserId = String(opts.boundUserId || '').trim();
@@ -117,6 +124,12 @@ function issueKey(opts = {}) {
   const secret = generateSecret();
   const now = new Date().toISOString();
   const keys = getApiKeys();
+  const projectIdsRead = Array.isArray(opts.projectIdsRead)
+    ? [...new Set(opts.projectIdsRead.map(id => String(id).trim()).filter(Boolean))]
+    : [];
+  const projectIdsWrite = Array.isArray(opts.projectIdsWrite)
+    ? [...new Set(opts.projectIdsWrite.map(id => String(id).trim()).filter(Boolean))]
+    : [];
 
   if (opts.revokeOthers !== false) {
     keys.forEach(k => {
@@ -132,7 +145,9 @@ function issueKey(opts = {}) {
     boundUserId: user.id,
     boundUserName: user.name || '',
     capability,
-    projectScope: 'related',
+    projectScope: (projectIdsRead.length || projectIdsWrite.length) ? 'whitelist' : 'related',
+    projectIdsRead,
+    projectIdsWrite,
     status: 'active',
     secretHash: hashSecret(secret),
     keyPrefix: secret.slice(0, 12),
@@ -233,6 +248,8 @@ async function issueAndSendToUser(opts = {}) {
     capability: opts.capability,
     createdBy: opts.createdBy,
     revokeOthers: true,
+    projectIdsRead: opts.projectIdsRead,
+    projectIdsWrite: opts.projectIdsWrite,
   });
 
   const title = '【恒慧管】作用域 Key 与接口接入说明';
@@ -274,7 +291,28 @@ async function issueAndSendToUser(opts = {}) {
   };
 }
 
+function assertProjectWhitelist(actor, project, mode) {
+  const rec = actor && actor._scopedKeyRecord;
+  if (!rec) return;
+  const readIds = Array.isArray(rec.projectIdsRead) ? rec.projectIdsRead.map(String) : [];
+  const writeIds = Array.isArray(rec.projectIdsWrite) ? rec.projectIdsWrite.map(String) : [];
+  if (!readIds.length && !writeIds.length) return;
+  const pid = String(project && project.id);
+  if (mode === 'write') {
+    if (writeIds.length && !writeIds.includes(pid)) {
+      throw httpError(403, '该 Key 未授权写入此项目');
+    }
+    if (!writeIds.length && readIds.length && !readIds.includes(pid)) {
+      throw httpError(403, '该 Key 未授权访问此项目');
+    }
+    return;
+  }
+  const allowed = new Set([...readIds, ...writeIds]);
+  if (!allowed.has(pid)) throw httpError(403, '该 Key 未授权查看此项目');
+}
+
 function assertScopedCanReadProject(actor, project) {
+  assertProjectWhitelist(actor, project, 'read');
   const tasks = getAllTasks();
   if (!canViewProject(actor, project, tasks, getAllProjects())) {
     throw httpError(403, '无权查看该项目');
@@ -282,18 +320,23 @@ function assertScopedCanReadProject(actor, project) {
 }
 
 function assertScopedCanReadTask(actor, task) {
+  const project = getAllProjects().find(p => String(p.id) === String(task && task.projectId));
+  if (project) assertProjectWhitelist(actor, project, 'read');
   if (!canViewTask(actor, task, getAllProjects(), getAllTasks())) {
     throw httpError(403, '无权查看该任务');
   }
 }
 
 function assertScopedCanWriteProject(actor, project) {
+  assertProjectWhitelist(actor, project, 'write');
   if (!canManageProject(actor, project)) {
     throw httpError(403, '无权修改该项目（需为项目负责人/创建人或管理员）');
   }
 }
 
 function assertScopedCanWriteTask(actor, task) {
+  const project = getAllProjects().find(p => String(p.id) === String(task && task.projectId));
+  if (project) assertProjectWhitelist(actor, project, 'write');
   if (!canEditTask(actor, task, getAllProjects())) {
     throw httpError(403, '无权修改该任务');
   }

@@ -120,6 +120,16 @@ const CREATE_STATEMENTS = [
     data JSON NOT NULL,
     updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS issues (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    data JSON NOT NULL,
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS project_templates (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    data JSON NOT NULL,
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   `CREATE TABLE IF NOT EXISTS app_meta (
     \`key\` VARCHAR(64) NOT NULL PRIMARY KEY,
     data JSON NOT NULL,
@@ -197,6 +207,9 @@ async function loadPayload() {
       workReports: [],
       kpiPlans: [],
       staffDeptCatalog: [],
+      apiKeys: [],
+      issues: [],
+      projectTemplates: [],
     };
 
     let anyRow = false;

@@ -18,6 +18,7 @@ const nccMonitorRoutes = require('./nccMonitor');
 const dataSecurityRoutes = require('./dataSecurity');
 const permissionsRoutes = require('./permissions');
 const scopedApiKeysRoutes = require('./scopedApiKeys');
+const projectTemplatesRoutes = require('./projectTemplates');
 
 const router = express.Router();
 
@@ -40,6 +41,7 @@ router.use(nccMonitorRoutes);
 router.use(dataSecurityRoutes);
 router.use(permissionsRoutes);
 router.use(scopedApiKeysRoutes);
+router.use(projectTemplatesRoutes);
 router.use(systemUpdatesRoutes);
 router.use(notificationsRoutes);
 router.use(workCalendarRoutes);

@@ -31,12 +31,50 @@ router.get('/external/catalog', requireExternalApiKey, (_req, res) => {
   writeOk(res, external.getCatalog());
 });
 
+router.get('/external/project-templates', requireExternalApiKey, (_req, res) => {
+  handle(res, () => {
+    const { listTemplates, publicTemplate } = require('../services/projectTemplates');
+    return { templates: listTemplates().map(publicTemplate) };
+  });
+});
+
+router.post('/external/project-templates/from-project/:id', requireExternalApiKey, (req, res) => {
+  handle(res, () => {
+    const { saveTemplateFromProject } = require('../services/projectTemplates');
+    if (req.scopedActor) {
+      const err = new Error('作用域 Key 不能另存模板');
+      err.status = 403;
+      throw err;
+    }
+    return {
+      template: saveTemplateFromProject(req.params.id, {
+        name: req.body?.name,
+        desc: req.body?.desc,
+        id: req.body?.id,
+        createdBy: 'external-api',
+      }),
+    };
+  });
+});
+
 router.post('/external/projects', requireExternalApiKey, (req, res) => {
   handle(res, () => external.createProject(req.body || {}, actorOpts(req)));
 });
 
 router.patch('/external/projects/:id', requireExternalApiKey, (req, res) => {
   handle(res, () => external.updateProject(req.params.id, req.body || {}, actorOpts(req)));
+});
+
+router.post('/external/projects/:id/sync-phase', requireExternalApiKey, (req, res) => {
+  handle(res, () => external.syncProjectPhase(req.params.id, req.body || {}, actorOpts(req)));
+});
+
+router.post('/external/projects/:id/handover', requireExternalApiKey, (req, res) => {
+  handle(res, () => external.handoverProject(req.params.id, req.body || {}, actorOpts(req)));
+});
+
+router.post('/external/projects/:id/issues/from-blocker', requireExternalApiKey, (req, res) => {
+  handle(res, () => external.createIssueFromBlocker(req.params.id, req.body || {}, actorOpts(req)));
 });
 
 router.get('/external/projects/:id/plan-ledger', requireExternalApiKey, (req, res) => {
@@ -96,6 +134,22 @@ router.put('/external/work-calendar', requireExternalApiKey, (req, res) => {
 router.post('/external/change-logs', requireExternalApiKey, (req, res) => {
   const entries = Array.isArray(req.body) ? req.body : (req.body?.changeLogs || []);
   handle(res, () => external.appendExternalChangeLogs(entries, actorOpts(req)));
+});
+
+router.get('/external/history', requireExternalApiKey, (req, res) => {
+  handle(res, () => external.getHistory(req.query || {}, actorOpts(req)));
+});
+
+router.get('/external/issues', requireExternalApiKey, (req, res) => {
+  handle(res, () => external.listIssues(req.query || {}, actorOpts(req)));
+});
+
+router.post('/external/issues', requireExternalApiKey, (req, res) => {
+  handle(res, () => external.createIssue(req.body || {}, actorOpts(req)));
+});
+
+router.patch('/external/issues/:id', requireExternalApiKey, (req, res) => {
+  handle(res, () => external.updateIssue(req.params.id, req.body || {}, actorOpts(req)));
 });
 
 router.post('/external/batch', requireExternalApiKey, (req, res) => {

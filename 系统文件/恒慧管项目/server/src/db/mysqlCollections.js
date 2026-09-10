@@ -21,6 +21,8 @@ const COLLECTIONS = [
   { storeKey: 'kpiPlans', table: 'kpi_plans', kind: 'entity' },
   { storeKey: 'staffDeptCatalog', table: 'staff_dept_catalog', kind: 'entity' },
   { storeKey: 'apiKeys', table: 'api_keys', kind: 'entity' },
+  { storeKey: 'issues', table: 'issues', kind: 'entity' },
+  { storeKey: 'projectTemplates', table: 'project_templates', kind: 'entity' },
   { storeKey: 'workCalendar', table: 'app_meta', kind: 'meta', metaKey: 'workCalendar' },
   { storeKey: 'rolePermissions', table: 'app_meta', kind: 'meta', metaKey: 'rolePermissions' },
 ];

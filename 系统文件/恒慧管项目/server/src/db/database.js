@@ -30,6 +30,8 @@ const DEFAULT_STORE = {
   kpiPlans: [],
   staffDeptCatalog: defaultStaffDeptCatalog(),
   apiKeys: [],
+  issues: [],
+  projectTemplates: [],
 };
 
 let store = null;
@@ -105,6 +107,11 @@ function normalizeProjectRecord(project) {
   project.planVerified = project.planVerified === true;
   project.planVerifiedBy = String(project.planVerifiedBy || '').trim();
   project.planVerifiedAt = String(project.planVerifiedAt || '').trim();
+  if (!Array.isArray(project.handoverRecords)) project.handoverRecords = [];
+  project.originalEndDate = project.originalEndDate || '';
+  project.changeReason = String(project.changeReason || '').trim();
+  project.phaseSyncedAt = String(project.phaseSyncedAt || '').trim();
+  project.phaseDriverMilestoneId = String(project.phaseDriverMilestoneId || '').trim();
   return project;
 }
 
@@ -135,6 +142,14 @@ function finalizeLoadedStore(dirtyHint = false) {
   normalizeAllProjects(store.projects);
   let dirty = ensureStaffDeptCatalog(store) || dirtyHint;
   dirty = normalizeUserProfileKinds(store.users) || dirty;
+  try {
+    const { ensureProjectTemplates } = require('../services/projectTemplates');
+    const before = JSON.stringify(store.projectTemplates || []);
+    ensureProjectTemplates(store);
+    if (JSON.stringify(store.projectTemplates || []) !== before) dirty = true;
+  } catch (e) {
+    console.warn('[db] ensureProjectTemplates', e.message);
+  }
   if (dirty) persistStore();
   return store;
 }
@@ -315,6 +330,25 @@ function getAllChangeLogs() {
   return [...getStore().changeLogs];
 }
 
+function getAllIssues() {
+  const s = getStore();
+  if (!Array.isArray(s.issues)) s.issues = [];
+  return [...s.issues];
+}
+
+function mergeIssuesById(existing, incoming) {
+  const map = new Map();
+  (existing || []).forEach(item => {
+    if (item?.id) map.set(String(item.id), item);
+  });
+  (incoming || []).forEach(item => {
+    if (item?.id) map.set(String(item.id), item);
+  });
+  return [...map.values()].sort((a, b) =>
+    String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''))
+  );
+}
+
 function getAllTransferLogs() {
   return [...getStore().transferLogs];
 }
@@ -339,6 +373,8 @@ function replaceAllData(payload) {
   if (Array.isArray(payload.changeLogs)) s.changeLogs = payload.changeLogs;
   if (Array.isArray(payload.transferLogs)) s.transferLogs = payload.transferLogs;
   if (Array.isArray(payload.pushLogs)) s.pushLogs = payload.pushLogs;
+  if (Array.isArray(payload.issues)) s.issues = payload.issues;
+  if (Array.isArray(payload.projectTemplates)) s.projectTemplates = payload.projectTemplates;
   if (payload.workCalendar && typeof payload.workCalendar === 'object') {
     s.workCalendar = payload.workCalendar;
   }
@@ -781,6 +817,8 @@ module.exports = {
   getAllTasks,
   getAllTaskDependencies,
   getAllChangeLogs,
+  getAllIssues,
+  mergeIssuesById,
   getAllTransferLogs,
   getAllPushLogs,
   getAllSystemUpdates,

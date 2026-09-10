@@ -1629,6 +1629,11 @@
     .form-group { margin-bottom: 16px; }
     .form-label { display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px; }
     .form-required { color: #DC2626; }
+    .form-input {
+      width: 100%; height: 40px; padding: 0 12px; border: 1px solid #E5E7EB; border-radius: 8px;
+      font-size: 14px; color: #1F2937; background: #fff; outline: none; box-sizing: border-box;
+    }
+    .form-input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(13,148,136,0.15); }
 
     /* ========== 统计卡片 ========== */
     .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
@@ -4823,6 +4828,12 @@
     // ========== 修改日志 ==========
     let changeLogs = [];
 
+    // ========== 问题/风险 ==========
+    let issues = [];
+
+    // ========== 项目模板库 ==========
+    let projectTemplates = [];
+
     // ========== 转办记录 ==========
     let transferLogs = [];
 
@@ -4841,7 +4852,9 @@
       todoPageSize: 20,
       todoViewMode: 'all', // all | mine | created | handled
       todoViewLayout: 'board', // board | list
-      projectPlanView: 'table', // table | gantt
+      projectPlanView: 'table', // table | gantt | delivery
+      uiScrollMain: 0,
+      uiScrollWindow: 0,
       navOpen: { todo: true, project: true, team: true, more: true },
       settingsOpen: false,
       showModal: null,
@@ -4976,6 +4989,8 @@
         if (Array.isArray(data.changeLogs)) changeLogs = data.changeLogs.slice();
         if (Array.isArray(data.transferLogs)) transferLogs = data.transferLogs.slice();
         if (Array.isArray(data.pushLogs)) pushLogs = data.pushLogs.slice();
+        if (Array.isArray(data.issues)) issues = data.issues.slice();
+        if (Array.isArray(data.projectTemplates)) projectTemplates = data.projectTemplates.slice();
         resetLogSyncState();
         if (data.workCalendar) applyWorkCalendar(data.workCalendar);
         if (data.rolePermissions && typeof data.rolePermissions === 'object') {
@@ -5114,6 +5129,7 @@
               projects: syncProjects, tasks: syncTasks, taskDependencies: syncDeps,
               changeLogUpdates: getPendingChangeLogs(),
               transferLogUpdates: getPendingTransferLogs(),
+              issueUpdates: issues,
               ...(removedProjectIds.length ? { removedProjectIds } : {}),
               ...(removedTaskIds.length ? { removedTaskIds } : {}),
               ...(includeUsers ? { users } : {}),
@@ -5172,6 +5188,12 @@
       deliverables: '交付物',
       acceptanceCriteria: '验收标准',
       completionEvidence: '完成证据',
+      verification: '验证记录',
+      feedback: '业务反馈',
+      leftover: '遗留问题',
+      originalPlanStartDate: '原定开始',
+      originalDueDate: '原定截止',
+      changeReason: '变更原因',
       depsRisks: '依赖/风险',
       escalation: '升级条件',
       delayImpact: '延期影响',
@@ -5250,6 +5272,7 @@
         'priority', 'desc', 'informCollaborators', 'assistCollaborators',
         'milestoneSeq', 'roleA', 'roleR', 'roleC', 'roleV',
         'deliverables', 'acceptanceCriteria', 'completionEvidence',
+        'verification', 'feedback', 'leftover',
         'depsRisks', 'escalation', 'delayImpact', 'reopenConditions',
       ];
       const diffs = [];
@@ -5327,6 +5350,7 @@
           taskDependencies,
           changeLogs,
           transferLogs,
+          issues,
           users,
           allStaffUsers,
           currentUserId: currentUser.id,
@@ -5511,11 +5535,18 @@
     // ========== 渲染主框架 ==========
     function captureUiScrollPositions() {
       const overlay = document.querySelector('.modal-overlay');
+      const main = document.querySelector('.main-content');
+      const liveMain = main ? main.scrollTop : 0;
+      // 弹窗打开后部分环境会把主区 scrollTop 置 0，用记忆值兜底
+      if (liveMain > 0) state.uiScrollMain = liveMain;
+      const mainContent = (liveMain > 0)
+        ? liveMain
+        : (Number(state.uiScrollMain) || 0);
       return {
-        mainContent: document.querySelector('.main-content')?.scrollTop || 0,
+        mainContent,
         modalBox: overlay?.querySelector('.modal-box')?.scrollTop || 0,
         modalBody: overlay?.querySelector('.modal-body')?.scrollTop || 0,
-        windowY: window.scrollY || 0,
+        windowY: window.scrollY || Number(state.uiScrollWindow) || 0,
       };
     }
 
@@ -5523,15 +5554,35 @@
       if (!saved) return;
       const apply = () => {
         const main = document.querySelector('.main-content');
-        if (main) main.scrollTop = saved.mainContent;
+        if (main) {
+          main.scrollTop = saved.mainContent || 0;
+          state.uiScrollMain = main.scrollTop;
+          if (!main._scrollTracked) {
+            main._scrollTracked = true;
+            main.addEventListener('scroll', () => {
+              state.uiScrollMain = main.scrollTop;
+            }, { passive: true });
+          }
+        }
         const overlay = document.querySelector('.modal-overlay');
         const box = overlay?.querySelector('.modal-box');
         if (box) box.scrollTop = saved.modalBox;
         const body = overlay?.querySelector('.modal-body');
         if (body) body.scrollTop = saved.modalBody;
-        if (saved.windowY) window.scrollTo(0, saved.windowY);
+        if (saved.windowY) {
+          window.scrollTo(0, saved.windowY);
+          state.uiScrollWindow = saved.windowY;
+        }
       };
       requestAnimationFrame(() => requestAnimationFrame(apply));
+      // 关闭弹窗后布局偶发二次变化，短延迟再补一次
+      setTimeout(apply, 50);
+    }
+
+    function rememberMainScrollBeforeModal() {
+      const main = document.querySelector('.main-content');
+      if (main && main.scrollTop > 0) state.uiScrollMain = main.scrollTop;
+      state.uiScrollWindow = window.scrollY || 0;
     }
 
     /** 钉钉登录引导页（正式/分享演示：不展示演示账号切换） */
@@ -5653,11 +5704,11 @@
     }
 
     function isLiteMorePage(page) {
-      return ['more', 'staff', 'permissions', 'dataSecurity', 'archive', 'import', 'systemUpdates', 'kpiPlans'].includes(page);
+      return ['more', 'staff', 'permissions', 'dataSecurity', 'archive', 'import', 'systemUpdates', 'kpiPlans', 'projectTemplates'].includes(page);
     }
 
     function isProjectNavPage(page) {
-      return page === 'projects' || page === 'projectDetail';
+      return page === 'projects' || page === 'projectDetail' || page === 'projectTemplates';
     }
 
     function isTodoNavPage(page) {
@@ -5780,6 +5831,7 @@
         { key: 'permissions', icon: 'fa-user-shield', label: '权限管理', desc: '角色能力矩阵', cap: 'nav.permissions' },
         { key: 'dataSecurity', icon: 'fa-shield-alt', label: '数据安全', desc: '库表与接口可视化', cap: 'nav.dataSecurity' },
         { key: 'archive', icon: 'fa-archive', label: '归档管理', desc: '已归档项目', cap: 'nav.archive' },
+        { key: 'projectTemplates', icon: 'fa-layer-group', label: '模板库', desc: '新建项目可引用模板', cap: 'nav.import' },
         { key: 'import', icon: 'fa-file-import', label: '数据导入', desc: 'Excel 导入', cap: 'nav.import' },
         { key: 'systemUpdates', icon: 'fa-bullhorn', label: '更新记录', desc: '版本说明', cap: 'nav.systemUpdates' },
       ];
@@ -5886,6 +5938,11 @@
                 <i class="fas ${item.icon}"></i><span>${item.label}</span>
               </button>
             `).join('')}
+            ${canCreateProject() ? `
+              <button type="button" class="nav-item nav-item--flat ${state.page === 'projectTemplates' ? 'active' : ''}" onclick="goTo('projectTemplates')">
+                <i class="fas fa-layer-group"></i><span>模板库</span>
+              </button>
+            ` : ''}
             ${(showNcc || showSqlTools || isFullAccess(currentUser.role)) ? `
               <div class="nav-divider" role="separator"></div>
               ${showNcc ? `
@@ -6141,6 +6198,7 @@
         tasks: getTodoViewTitle(),
         more: '更多',
         projects: '项目列表',
+        projectTemplates: '模板库',
         staff: '人员档案',
         permissions: '权限管理',
         archive: '归档管理',
@@ -6179,6 +6237,11 @@
                 <button class="btn btn-ghost hide-mobile" onclick="copyProjectPlanLedger('${state.form.projectId}')"><i class="fas fa-copy"></i><span class="btn-text">复制计划台账</span></button>
               ` : ''}
               ${canCreateProject() ? `<button class="btn btn-primary" onclick="showProjectModal()"><i class="fas fa-plus"></i><span class="btn-text">新建项目</span></button>` : ''}
+              ${canCreateProject() ? `<button class="btn btn-ghost hide-mobile" onclick="goTo('projectTemplates')"><i class="fas fa-layer-group"></i><span class="btn-text">模板库</span></button>` : ''}
+            ` : ''}
+            ${state.page === 'projectTemplates' ? `
+              <button class="btn btn-ghost" onclick="goTo('projects')"><i class="fas fa-folder"></i><span class="btn-text">返回项目</span></button>
+              ${canManageProjectTemplates() ? `<button class="btn btn-primary" onclick="showProjectTemplateCreateModal()"><i class="fas fa-plus"></i><span class="btn-text">新建模板</span></button>` : ''}
             ` : ''}
             ${isTodoPage ? `
               <button class="btn btn-ghost hide-mobile" onclick="exportTasks()"><i class="fas fa-file-export"></i><span class="btn-text">导出</span></button>
@@ -6204,6 +6267,7 @@
       const titles = {
         more: '更多',
         projects: '项目列表',
+        projectTemplates: '模板库',
         tasks: getTodoViewTitle(),
         staff: '人员档案',
         permissions: '权限管理',
@@ -6227,6 +6291,7 @@
         case 'more': body = renderMorePage(); break;
         case 'projects': body = renderProjects(); break;
         case 'projectDetail': body = renderProjectDetail(); break;
+        case 'projectTemplates': body = renderProjectTemplatesPage(); break;
         case 'staff': body = renderStaff(); break;
         case 'permissions': body = renderPermissions(); break;
         case 'archive': body = renderArchive(); break;
@@ -10359,12 +10424,16 @@
     }
 
     function setProjectPlanView(view) {
-      state.projectPlanView = view === 'gantt' ? 'gantt' : 'table';
+      if (view === 'gantt') state.projectPlanView = 'gantt';
+      else if (view === 'delivery') state.projectPlanView = 'delivery';
+      else state.projectPlanView = 'table';
       render();
     }
 
     function renderProjectPlanViewToggle() {
-      const view = state.projectPlanView === 'gantt' ? 'gantt' : 'table';
+      const view = state.projectPlanView === 'gantt'
+        ? 'gantt'
+        : (state.projectPlanView === 'delivery' ? 'delivery' : 'table');
       return `
         <div class="project-plan-view-toggle" role="tablist" aria-label="计划视图">
           <button type="button" class="${view === 'table' ? 'active' : ''}" onclick="setProjectPlanView('table')">
@@ -10373,7 +10442,111 @@
           <button type="button" class="${view === 'gantt' ? 'active' : ''}" onclick="setProjectPlanView('gantt')">
             <i class="fas fa-chart-gantt"></i>甘特
           </button>
+          <button type="button" class="${view === 'delivery' ? 'active' : ''}" onclick="setProjectPlanView('delivery')">
+            <i class="fas fa-clipboard-check"></i>交付齐备
+          </button>
         </div>
+      `;
+    }
+
+    function renderDeliveryFieldCell(value) {
+      const text = String(value || '').trim();
+      if (!text) {
+        return `<span style="color:#D1D5DB;font-size:12px;">—</span>`;
+      }
+      const short = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+      return `<div style="font-size:12px;color:#374151;line-height:1.45;white-space:pre-wrap;word-break:break-word;" title="${escapeHtml(text)}">${escapeHtml(short)}</div>`;
+    }
+
+    function renderProjectDeliveryBoard(project) {
+      const canManage = canManageProject(project) && !isProjectArchived(project);
+      const milestones = getProjectMilestones(project);
+      const workTasks = getProjectWorkTasksFlat(project);
+      const allRows = [
+        ...milestones.map(m => ({ task: m, kind: '里程碑' })),
+        ...workTasks.map(t => ({ task: t, kind: '任务' })),
+      ];
+      let completeCount = 0;
+      let partialCount = 0;
+      let emptyCount = 0;
+      allRows.forEach(({ task }) => {
+        const c = getDeliveryCompleteness(task);
+        if (c.complete) completeCount += 1;
+        else if (c.filled === 0) emptyCount += 1;
+        else partialCount += 1;
+      });
+
+      const rows = allRows.map(({ task, kind }) => {
+        const c = getDeliveryCompleteness(task);
+        const isMs = kind === '里程碑';
+        const milestone = isMs ? task : getOwningMilestone(task);
+        return `
+          <tr onclick="viewTask('${task.id}')" style="cursor:pointer;">
+            <td style="white-space:nowrap;">
+              <span style="font-size:11px;padding:2px 8px;border-radius:4px;${isMs
+                ? 'background:#EEF2FF;color:#4338CA;'
+                : 'background:#ECFDF5;color:#047857;'}">${kind}</span>
+            </td>
+            <td>
+              <div style="font-weight:600;color:#1F2937;">${escapeHtml(task.title || task.id)}</div>
+              ${!isMs ? `<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">归属：${escapeHtml((milestone && milestone.title) || '—')}</div>` : ''}
+            </td>
+            <td style="text-align:center;">${renderDeliveryCompletenessBadge(task)}</td>
+            ${isMs ? `
+              <td>${renderDeliveryFieldCell(getMilestoneDeliverablesText(task))}</td>
+              <td>${renderDeliveryFieldCell(getMilestoneAcceptanceText(task))}</td>
+            ` : `
+              <td style="color:#D1D5DB;font-size:12px;">—</td>
+              <td style="color:#D1D5DB;font-size:12px;">—</td>
+            `}
+            <td>${renderDeliveryFieldCell(task.verification)}</td>
+            <td>${renderDeliveryFieldCell(task.feedback)}</td>
+            <td>${renderDeliveryFieldCell(task.leftover)}</td>
+            <td class="col-actions" onclick="event.stopPropagation();">
+              ${canEditTask(task) ? `
+                <button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${task.id}')" title="填写">
+                  <i class="fas fa-edit"></i>
+                </button>
+              ` : '<span style="color:#D1D5DB;">—</span>'}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <section style="margin-top:8px;">
+          <div class="project-detail-section-title">
+            <span>交付齐备看板</span>
+            <span style="font-size:12px;font-weight:500;color:#6B7280;">
+              已齐备 ${completeCount} · 部分 ${partialCount} · 未填 ${emptyCount} · 共 ${allRows.length}
+            </span>
+          </div>
+          <p style="font-size:12px;color:#6B7280;margin:0 0 12px;">本页集中展示各里程碑/任务的交付物、验收、验证、反馈、遗留；点击行查看详情，点编辑可填写。</p>
+          <div class="todo-table-card">
+            <div class="todo-table-wrap">
+              <table class="todo-table todo-table--slim">
+                <thead>
+                  <tr>
+                    <th style="width:72px;">类型</th>
+                    <th>名称</th>
+                    <th style="width:90px;text-align:center;">齐备</th>
+                    <th>交付物</th>
+                    <th>验收标准</th>
+                    <th>验证记录</th>
+                    <th>业务反馈</th>
+                    <th>遗留问题</th>
+                    <th style="width:64px;">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${allRows.length
+                    ? rows
+                    : `<tr><td colspan="9">${renderEmptyState({ icon: 'fa-clipboard-check', title: '暂无里程碑/任务', hint: canManage ? '请先添加里程碑与任务' : '暂无内容' })}</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
       `;
     }
 
@@ -10461,6 +10634,193 @@
       }
     }
 
+    function getDeliveryCompleteness(task) {
+      const isMs = isMilestoneTask(task);
+      const fields = isMs
+        ? [
+            { key: 'deliverables', label: '交付物', value: getMilestoneDeliverablesText(task) },
+            { key: 'acceptance', label: '验收标准', value: getMilestoneAcceptanceText(task) },
+            { key: 'verification', label: '验证', value: task.verification },
+            { key: 'feedback', label: '反馈', value: task.feedback },
+            { key: 'leftover', label: '遗留', value: task.leftover },
+          ]
+        : [
+            { key: 'verification', label: '验证', value: task.verification },
+            { key: 'feedback', label: '反馈', value: task.feedback },
+            { key: 'leftover', label: '遗留', value: task.leftover },
+          ];
+      const filled = fields.filter(f => String(f.value || '').trim()).length;
+      return {
+        filled,
+        total: fields.length,
+        complete: filled === fields.length && filled > 0,
+        missing: fields.filter(f => !String(f.value || '').trim()).map(f => f.label),
+      };
+    }
+
+    function renderDeliveryCompletenessBadge(task) {
+      const c = getDeliveryCompleteness(task);
+      if (!c.total) return '';
+      const tip = c.complete ? '交付信息已齐备' : `缺：${c.missing.join('、') || '待填'}（点开详情可填写）`;
+      const color = c.complete ? '#047857' : (c.filled === 0 ? '#9CA3AF' : '#B45309');
+      const bg = c.complete ? '#ECFDF5' : (c.filled === 0 ? '#F3F4F6' : '#FFFBEB');
+      return `<span title="${escapeHtml(tip)}" style="font-size:10px;padding:1px 6px;border-radius:4px;background:${bg};color:${color};white-space:nowrap;font-weight:600;">齐备 ${c.filled}/${c.total}</span>`;
+    }
+
+    function renderTaskDeliveryCompletenessSection(task, canEdit) {
+      if (!task) return '';
+      const isMs = isMilestoneTask(task);
+      const c = getDeliveryCompleteness(task);
+      const editing = state.editingDeliveryTaskId === task.id;
+      const titleRight = canEdit
+        ? (editing
+          ? `<div style="display:flex;gap:6px;">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="cancelEditTaskDelivery()">取消</button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="saveTaskDeliveryFields('${task.id}')"><i class="fas fa-save"></i> 保存</button>
+            </div>`
+          : `<button type="button" class="btn btn-primary btn-sm" onclick="startEditTaskDelivery('${task.id}')"><i class="fas fa-edit"></i> 填写交付信息</button>`)
+        : '';
+      if (editing) {
+        const f = state.deliveryForm || {};
+        return `
+          <div class="detail-section">
+            <div class="detail-section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span><i class="fas fa-clipboard-check"></i> 交付齐备 ${c.filled}/${c.total}</span>
+              ${titleRight}
+            </div>
+            <div style="display:grid;gap:10px;">
+              ${isMs ? `
+              <div>
+                <label class="form-label">交付物</label>
+                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.deliveryForm.deliverables=this.value">${escapeHtml(f.deliverables || '')}</textarea>
+              </div>
+              <div>
+                <label class="form-label">验收标准</label>
+                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.deliveryForm.acceptanceCriteria=this.value">${escapeHtml(f.acceptanceCriteria || '')}</textarea>
+              </div>
+              ` : ''}
+              <div>
+                <label class="form-label">验证记录</label>
+                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.deliveryForm.verification=this.value" placeholder="如何验证、验证结果">${escapeHtml(f.verification || '')}</textarea>
+              </div>
+              <div>
+                <label class="form-label">业务反馈</label>
+                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.deliveryForm.feedback=this.value" placeholder="业务方反馈">${escapeHtml(f.feedback || '')}</textarea>
+              </div>
+              <div>
+                <label class="form-label">遗留问题</label>
+                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.deliveryForm.leftover=this.value" placeholder="遗留与跟进">${escapeHtml(f.leftover || '')}</textarea>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      const row = (label, value) => `
+        <div style="padding:10px 12px;background:#F9FAFB;border-radius:8px;">
+          <div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">${label}</div>
+          <div style="font-size:13px;white-space:pre-wrap;color:${String(value || '').trim() ? '#1F2937' : '#9CA3AF'};">${escapeHtml(String(value || '').trim() || '待填写')}</div>
+        </div>
+      `;
+      return `
+        <div class="detail-section">
+          <div class="detail-section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span><i class="fas fa-clipboard-check"></i> 交付齐备 ${renderDeliveryCompletenessBadge(task)}</span>
+            ${titleRight}
+          </div>
+          <div style="display:grid;gap:8px;">
+            ${isMs ? row('交付物', getMilestoneDeliverablesText(task)) : ''}
+            ${isMs ? row('验收标准', getMilestoneAcceptanceText(task)) : ''}
+            ${row('验证记录', task.verification)}
+            ${row('业务反馈', task.feedback)}
+            ${row('遗留问题', task.leftover)}
+          </div>
+        </div>
+      `;
+    }
+
+    function startEditTaskDelivery(taskId) {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task || !canEditTask(task)) {
+        alert('无权编辑');
+        return;
+      }
+      state.editingDeliveryTaskId = taskId;
+      state.deliveryForm = {
+        deliverables: getMilestoneDeliverablesText(task) || '',
+        acceptanceCriteria: getMilestoneAcceptanceText(task) || '',
+        verification: task.verification || '',
+        feedback: task.feedback || '',
+        leftover: task.leftover || '',
+      };
+      state.taskDetailTab = 'info';
+      render();
+    }
+
+    function openTaskDeliveryEdit(taskId) {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task || !canViewTask(task)) return;
+      rememberMainScrollBeforeModal();
+      state.returnToMemberId = null;
+      state.form = { taskId };
+      state.showModal = 'taskDetail';
+      state.taskDetailTab = 'info';
+      startEditTaskDelivery(taskId);
+    }
+
+    function cancelEditTaskDelivery() {
+      state.editingDeliveryTaskId = null;
+      state.deliveryForm = null;
+      render();
+    }
+
+    function saveTaskDeliveryFields(taskId) {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task || !canEditTask(task)) {
+        alert('无权编辑');
+        return;
+      }
+      const f = state.deliveryForm || {};
+      const before = {
+        deliverables: task.deliverables || '',
+        acceptanceCriteria: task.acceptanceCriteria || '',
+        verification: task.verification || '',
+        feedback: task.feedback || '',
+        leftover: task.leftover || '',
+      };
+      if (isMilestoneTask(task)) {
+        task.deliverables = String(f.deliverables || '').trim();
+        task.acceptanceCriteria = String(f.acceptanceCriteria || '').trim();
+      }
+      task.verification = String(f.verification || '').trim();
+      task.feedback = String(f.feedback || '').trim();
+      task.leftover = String(f.leftover || '').trim();
+      appendChangeLogEntry({
+        taskId: task.id,
+        operator: currentUser.name,
+        operateTime: new Date().toLocaleString(),
+        before: [
+          before.deliverables && `交付物:${before.deliverables}`,
+          before.acceptanceCriteria && `验收:${before.acceptanceCriteria}`,
+          before.verification && `验证:${before.verification}`,
+          before.feedback && `反馈:${before.feedback}`,
+          before.leftover && `遗留:${before.leftover}`,
+        ].filter(Boolean).join('；') || '（空）',
+        after: [
+          task.deliverables && `交付物:${task.deliverables}`,
+          task.acceptanceCriteria && `验收:${task.acceptanceCriteria}`,
+          task.verification && `验证:${task.verification}`,
+          task.feedback && `反馈:${task.feedback}`,
+          task.leftover && `遗留:${task.leftover}`,
+        ].filter(Boolean).join('；') || '（空）',
+        reason: '更新交付齐备信息',
+        project: projects.find(p => p.id === task.projectId)?.name || '',
+      });
+      state.editingDeliveryTaskId = null;
+      state.deliveryForm = null;
+      save({ immediateSync: true });
+      render();
+    }
+
     function renderProjectMilestonesTableSection(project) {
       const list = getProjectMilestones(project);
       const canManage = canManageProject(project) && !isProjectArchived(project);
@@ -10479,9 +10839,10 @@
           <tr class="${overdueCls.trim()}" onclick="viewTask('${m.id}')">
             <td style="font-variant-numeric:tabular-nums;font-weight:600;color:#4B5563;">${escapeHtml(seq)}</td>
             <td>
-              <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;">
                 <i class="fas fa-flag" style="color:var(--brand);flex-shrink:0;"></i>
                 <span style="font-weight:600;color:#1F2937;">${escapeHtml(m.title || m.id)}</span>
+                ${renderDeliveryCompletenessBadge(m)}
               </div>
             </td>
             <td style="max-width:280px;min-width:140px;">
@@ -10575,7 +10936,7 @@
           <tr class="${overdueCls.trim()}" onclick="viewTask('${t.id}')">
             <td>
               <div style="min-width:0;">
-                <div style="font-weight:500;color:#1F2937;">${prefix}${escapeHtml(t.title || t.id)}</div>
+                <div style="font-weight:500;color:#1F2937;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${prefix}${escapeHtml(t.title || t.id)} ${renderDeliveryCompletenessBadge(t)}</div>
                 ${t.type === 'temp' ? '<span class="tag tag-temp" style="font-size:10px;margin-top:2px;display:inline-block;"><i class="fas fa-bolt"></i>临时</span>' : ''}
               </div>
             </td>
@@ -11439,6 +11800,13 @@
     function renderProjectFocusPanel(project, canManage) {
       const { currentPhase, nextPlan, blocker } = getProjectFocusFields(project);
       const editing = !!(canManage && state.editingProjectFocus);
+      const driver = project.phaseDriverMilestoneId
+        ? tasks.find(t => t.id === project.phaseDriverMilestoneId)
+        : null;
+      const phaseMeta = [
+        driver ? `由里程碑「${driver.title || driver.id}」驱动` : '',
+        project.phaseSyncedAt ? `同步于 ${String(project.phaseSyncedAt).replace('T', ' ').slice(0, 19)}` : '',
+      ].filter(Boolean).join(' · ');
       const readRow = (label, icon, value, emptyText, mod) => `
         <div class="project-focus-row${mod ? ' ' + mod : ''}">
           <div class="project-focus-label"><i class="fas ${icon}"></i>${label}</div>
@@ -11465,13 +11833,18 @@
       `;
       const readFields = `
         ${readRow('当前阶段', 'fa-flag', currentPhase, '暂无当前阶段', 'is-phase')}
+        ${phaseMeta ? `<div style="font-size:12px;color:#9CA3AF;margin:-4px 0 10px 0;">${escapeHtml(phaseMeta)}</div>` : ''}
         ${readRow('下一步计划', 'fa-arrow-right', nextPlan, '暂无下一步计划')}
         ${readRow('当前卡点', 'fa-exclamation-triangle', blocker, '暂无卡点', blocker ? 'is-blocker' : 'is-blocker')}
       `;
       const headerAction = canManage
         ? (editing
           ? ''
-          : `<button type="button" class="btn btn-ghost btn-sm" onclick="startEditProjectFocus()"><i class="fas fa-edit"></i> 编辑</button>`)
+          : `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="syncProjectPhaseFromMilestones('${project.id}')" title="按未完成里程碑同步当前阶段"><i class="fas fa-sync"></i> 同步阶段</button>
+              ${blocker ? `<button type="button" class="btn btn-ghost btn-sm" onclick="upgradeBlockerToIssue('${project.id}')"><i class="fas fa-level-up-alt"></i> 卡点升级</button>` : ''}
+              <button type="button" class="btn btn-ghost btn-sm" onclick="startEditProjectFocus()"><i class="fas fa-edit"></i> 编辑</button>
+            </div>`)
         : '';
       return `
         <section>
@@ -11518,6 +11891,11 @@
         <div class="form-group" style="margin:0;">
           <label class="form-label">最终完成时间</label>
           <input class="input" type="date" id="projectPlanEndDate" style="width:100%;" value="${escapeHtml(project.endDate || '')}">
+          ${project.originalEndDate ? `<div style="font-size:12px;color:#9CA3AF;margin-top:4px;">原定：${escapeHtml(project.originalEndDate)}</div>` : ''}
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">变更原因（改最终完成日时建议填写）</label>
+          <input class="input" id="projectPlanChangeReason" style="width:100%;" value="${escapeHtml(project.changeReason || '')}" placeholder="如：调研后确认 / 资源调整">
         </div>
         <div class="project-focus-actions">
           <button type="button" class="btn btn-ghost btn-sm" onclick="cancelEditProjectPlan()"><i class="fas fa-times"></i> 取消</button>
@@ -11532,6 +11910,8 @@
           ${item('不做范围', project.outOfScope)}
           ${item('当前状态', `${pst.label}${project.currentPhase ? ' · ' + project.currentPhase : ''}`)}
           ${item('最终完成时间', project.endDate || '')}
+          ${project.originalEndDate ? item('原定最终完成', project.originalEndDate) : ''}
+          ${project.changeReason ? item('变更原因', project.changeReason, true) : ''}
         </div>
       `;
       const badge = completeness.ready
@@ -11551,7 +11931,7 @@
               <button type="button" class="btn btn-ghost btn-sm" onclick="exportProjectPlanLedger('${project.id}')"><i class="fas fa-file-excel"></i>导出</button>
               ${canVerifyProjectPlan(project) ? `
                 <button type="button" class="btn btn-ghost btn-sm" onclick="toggleProjectPlanVerified('${project.id}')">
-                  <i class="fas fa-stamp"></i>${project.planVerified ? '取消校验' : '陈璇校验'}
+                  <i class="fas fa-stamp"></i>${project.planVerified ? '取消校验' : '校验'}
                 </button>
               ` : ''}
               ${canManage && !editing ? `
@@ -11561,7 +11941,7 @@
           </h3>
           <div class="project-plan-panel">
             <div style="font-size:12px;color:#6B7280;line-height:1.5;">
-              按领导要求填写目标/范围/最终时间；里程碑需补齐 A/R/C/V、交付物、验收标准与依赖风险。C 协作人须本人确认后，由陈璇校验并记入台账。
+              按领导要求填写目标/范围/最终时间；里程碑需补齐 A/R/C/V、交付物、验收标准与依赖风险。C 协作人须本人确认后，由有权限人员校验并记入台账。
             </div>
             ${editing ? editFields : readFields}
           </div>
@@ -11590,9 +11970,397 @@
       project.scope = (document.getElementById('projectPlanScope')?.value || '').trim();
       project.outOfScope = (document.getElementById('projectPlanOutOfScope')?.value || '').trim();
       const endDate = (document.getElementById('projectPlanEndDate')?.value || '').trim();
-      if (endDate) project.endDate = endDate;
+      const changeReason = (document.getElementById('projectPlanChangeReason')?.value || '').trim();
+      const oldEnd = project.endDate || '';
+      if (endDate && endDate !== oldEnd) {
+        if (!project.originalEndDate && oldEnd) project.originalEndDate = oldEnd;
+        if (project.originalEndDate && !changeReason) {
+          alert('修改最终完成时间请填写变更原因');
+          return;
+        }
+        project.endDate = endDate;
+        if (changeReason) project.changeReason = changeReason;
+      } else if (changeReason) {
+        project.changeReason = changeReason;
+      }
       normalizeProjectRecord(project);
       state.editingProjectPlan = false;
+      save({ immediateSync: true });
+      render();
+    }
+
+    function syncProjectPhaseFromMilestones(projectId, opts = {}) {
+      const project = projects.find(p => p.id === projectId);
+      if (!project || !canManageProject(project)) {
+        if (!opts.silent) alert('仅项目负责人或创建人可同步');
+        return;
+      }
+      const milestones = tasks
+        .filter(t => t.projectId === projectId && isMilestoneTask(t))
+        .slice()
+        .sort((a, b) => String(a.milestoneSeq || a.planStartDate || a.title || '')
+          .localeCompare(String(b.milestoneSeq || b.planStartDate || b.title || ''), 'zh'));
+      if (!milestones.length) {
+        if (!opts.silent) alert('尚无里程碑，无法同步阶段');
+        return;
+      }
+      const open = milestones.find(m => m.status !== 'done' && m.status !== 'archived');
+      const driver = open || milestones[milestones.length - 1];
+      const before = project.currentPhase || '';
+      project.currentPhase = String(driver.title || driver.milestoneSeq || '').trim();
+      project.phaseDriverMilestoneId = driver.id;
+      project.phaseSyncedAt = new Date().toISOString();
+      if (before !== project.currentPhase) {
+        appendChangeLogEntry({
+          taskId: `PROJECT-${projectId}`,
+          operator: currentUser.name,
+          operateTime: new Date().toLocaleString(),
+          before: before || '（空）',
+          after: project.currentPhase || '（空）',
+          reason: '同步当前阶段（随里程碑）',
+          project: project.name,
+        });
+      }
+      if (!opts.silent) {
+        save({ immediateSync: true });
+        render();
+      }
+    }
+
+    function showProjectHandoverModal(projectId) {
+      const project = projects.find(p => p.id === projectId);
+      if (!project || !canManageProject(project)) {
+        alert('仅项目负责人或创建人可交接');
+        return;
+      }
+      const to = prompt('请输入交接给谁的姓名（须与人员档案一致）', '');
+      if (to == null) return;
+      const toName = String(to).trim();
+      if (!toName) return;
+      const note = prompt('交接备注（可选）', '') || '';
+      const fromName = project.manager || '';
+      if (toName === fromName) {
+        alert('交接人与当前负责人相同');
+        return;
+      }
+      if (!Array.isArray(project.handoverRecords)) project.handoverRecords = [];
+      project.handoverRecords.push({
+        from: fromName,
+        to: toName,
+        at: new Date().toISOString(),
+        note: String(note).trim(),
+        by: currentUser.name,
+      });
+      if (fromName && !isSamePersonName(fromName, toName)) {
+        project.teamMembers = sanitizeProjectTeamMembers(toName, [...(project.teamMembers || []), fromName]);
+      }
+      project.manager = toName;
+      appendChangeLogEntry({
+        taskId: `PROJECT-${projectId}`,
+        operator: currentUser.name,
+        operateTime: new Date().toLocaleString(),
+        before: fromName || '（空）',
+        after: toName,
+        reason: note ? `项目交接：${note}` : '项目交接',
+        project: project.name,
+      });
+      normalizeProjectRecord(project);
+      save({ immediateSync: true });
+      render();
+    }
+
+    function renderProjectIssuesPanel(project, canManage) {
+      const list = issues.filter(i => String(i.projectId) === String(project.id));
+      const statusLabel = {
+        open: '待处理', in_progress: '处理中', resolved: '已解决', verified: '已验收', closed: '已关闭',
+      };
+      const statusColor = {
+        open: '#B45309', in_progress: '#1D4ED8', resolved: '#7C3AED', verified: '#047857', closed: '#6B7280',
+      };
+      const rows = list.map(iss => `
+        <div style="padding:10px 12px;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:8px;background:#fff;">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+            <div style="font-weight:600;font-size:13px;">${escapeHtml(iss.title || '')}</div>
+            <span style="font-size:11px;color:${statusColor[iss.status] || '#6B7280'};white-space:nowrap;font-weight:600;">${escapeHtml(statusLabel[iss.status] || iss.status || '')}</span>
+          </div>
+          <div style="font-size:12px;color:#6B7280;margin-top:4px;line-height:1.45;">
+            ${iss.fact ? `<div>事实：${escapeHtml(iss.fact)}</div>` : ''}
+            ${iss.cause ? `<div>原因：${escapeHtml(iss.cause)}</div>` : ''}
+            ${iss.impact ? `<div>影响：${escapeHtml(iss.impact)}</div>` : ''}
+            ${iss.solution ? `<div>方案：${escapeHtml(iss.solution)}</div>` : ''}
+            ${iss.assignee ? `<div>跟进：${escapeHtml(iss.assignee)}</div>` : ''}
+            ${iss.supporter ? `<div>支持：${escapeHtml(iss.supporter)}</div>` : ''}
+            ${iss.expectedCloseDate ? `<div>预计：${escapeHtml(iss.expectedCloseDate)}</div>` : ''}
+            ${iss.verifyNote ? `<div>验收：${escapeHtml(iss.verifyNote)}</div>` : ''}
+          </div>
+          ${canManage ? `
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="showIssueEditModal('${iss.id}')">编辑</button>
+            ${iss.status === 'open' ? `<button type="button" class="btn btn-ghost btn-sm" onclick="setIssueStatus('${iss.id}','in_progress')">处理中</button>` : ''}
+            ${iss.status === 'in_progress' || iss.status === 'open' ? `<button type="button" class="btn btn-ghost btn-sm" onclick="setIssueStatus('${iss.id}','resolved')">已解决</button>` : ''}
+            ${iss.status === 'resolved' ? `<button type="button" class="btn btn-ghost btn-sm" onclick="setIssueStatus('${iss.id}','verified')">验收</button>` : ''}
+            ${iss.status !== 'closed' ? `<button type="button" class="btn btn-ghost btn-sm" onclick="setIssueStatus('${iss.id}','closed')">关闭</button>` : ''}
+          </div>` : ''}
+        </div>
+      `).join('');
+      return `
+        <section>
+          <h3 class="project-detail-section-title">
+            <span>问题 / 风险</span>
+            ${canManage ? `<button type="button" class="btn btn-primary btn-sm" onclick="showIssueCreateModal('${project.id}')"><i class="fas fa-plus"></i> 新建</button>` : ''}
+          </h3>
+          <div class="project-focus-panel">
+            ${rows || '<div style="font-size:13px;color:#9CA3AF;">暂无问题记录</div>'}
+            ${(project.handoverRecords || []).length ? `
+              <div style="margin-top:12px;padding-top:12px;border-top:1px dashed #E5E7EB;">
+                <div style="font-size:12px;font-weight:600;margin-bottom:6px;">交接记录</div>
+                ${(project.handoverRecords || []).slice().reverse().map(h => `
+                  <div style="font-size:12px;color:#6B7280;margin-bottom:4px;">
+                    ${escapeHtml((h.at || '').replace('T', ' ').slice(0, 19))}：${escapeHtml(h.from || '空')} → ${escapeHtml(h.to || '')}
+                    ${h.note ? `（${escapeHtml(h.note)}）` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>
+        </section>
+      `;
+    }
+
+    function showIssueCreateModal(projectId) {
+      const project = projects.find(p => p.id === projectId);
+      if (!project || !canManageProject(project)) return;
+      state.form = {
+        issueId: '',
+        projectId,
+        title: '',
+        status: 'open',
+        fact: '',
+        cause: '',
+        impact: '',
+        solution: '',
+        supporter: '',
+        assignee: currentUser.name,
+        expectedCloseDate: '',
+        verifyNote: '',
+      };
+      state.showModal = 'issueEdit';
+      render();
+    }
+
+    function showIssueEditModal(issueId) {
+      const iss = issues.find(i => i.id === issueId);
+      if (!iss) return;
+      const project = projects.find(p => p.id === iss.projectId);
+      if (!project || !canManageProject(project)) return;
+      state.form = {
+        issueId: iss.id,
+        projectId: iss.projectId,
+        title: iss.title || '',
+        status: iss.status || 'open',
+        fact: iss.fact || '',
+        cause: iss.cause || '',
+        impact: iss.impact || '',
+        solution: iss.solution || '',
+        supporter: iss.supporter || '',
+        assignee: iss.assignee || '',
+        expectedCloseDate: iss.expectedCloseDate || '',
+        verifyNote: iss.verifyNote || '',
+      };
+      state.showModal = 'issueEdit';
+      render();
+    }
+
+    function renderIssueEditModal() {
+      const form = state.form || {};
+      const isEdit = !!form.issueId;
+      return `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal-box" style="max-width:640px;max-height:90vh;overflow:auto;" onclick="event.stopPropagation()">
+            <div class="modal-header">
+              <h3 class="modal-title"><i class="fas fa-exclamation-circle" style="color:#D97706;margin-right:8px;"></i>${isEdit ? '编辑问题' : '新建问题'}</h3>
+              <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:18px;"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" style="display:grid;gap:12px;">
+              <div>
+                <label class="form-label">标题 *</label>
+                <input class="form-input" value="${escapeHtml(form.title || '')}" oninput="state.form.title=this.value" placeholder="简要描述问题">
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <label class="form-label">状态</label>
+                  <select class="select" style="width:100%;" onchange="state.form.status=this.value">
+                    <option value="open" ${form.status === 'open' ? 'selected' : ''}>待处理</option>
+                    <option value="in_progress" ${form.status === 'in_progress' ? 'selected' : ''}>处理中</option>
+                    <option value="resolved" ${form.status === 'resolved' ? 'selected' : ''}>已解决</option>
+                    <option value="verified" ${form.status === 'verified' ? 'selected' : ''}>已验收</option>
+                    <option value="closed" ${form.status === 'closed' ? 'selected' : ''}>已关闭</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label">预计关闭日</label>
+                  <input class="form-input" type="date" value="${escapeHtml(form.expectedCloseDate || '')}" oninput="state.form.expectedCloseDate=this.value">
+                </div>
+              </div>
+              <div>
+                <label class="form-label">事实</label>
+                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.fact=this.value">${escapeHtml(form.fact || '')}</textarea>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <label class="form-label">原因</label>
+                  <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.cause=this.value">${escapeHtml(form.cause || '')}</textarea>
+                </div>
+                <div>
+                  <label class="form-label">影响</label>
+                  <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.impact=this.value">${escapeHtml(form.impact || '')}</textarea>
+                </div>
+              </div>
+              <div>
+                <label class="form-label">方案</label>
+                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.solution=this.value">${escapeHtml(form.solution || '')}</textarea>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <label class="form-label">跟进人</label>
+                  <input class="form-input" value="${escapeHtml(form.assignee || '')}" oninput="state.form.assignee=this.value">
+                </div>
+                <div>
+                  <label class="form-label">需要谁支持</label>
+                  <input class="form-input" value="${escapeHtml(form.supporter || '')}" oninput="state.form.supporter=this.value">
+                </div>
+              </div>
+              <div>
+                <label class="form-label">验收说明 ${(form.status === 'closed' || form.status === 'verified') ? '<span class="form-required">*</span>' : ''}</label>
+                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.verifyNote=this.value" placeholder="关闭/验收时必填">${escapeHtml(form.verifyNote || '')}</textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+              <button class="btn btn-primary" onclick="saveIssueForm()"><i class="fas fa-save"></i> 保存</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function saveIssueForm() {
+      const form = state.form || {};
+      const project = projects.find(p => p.id === form.projectId);
+      if (!project || !canManageProject(project)) {
+        alert('无权操作');
+        return;
+      }
+      const title = String(form.title || '').trim();
+      if (!title) {
+        alert('请填写问题标题');
+        return;
+      }
+      const status = form.status || 'open';
+      const verifyNote = String(form.verifyNote || '').trim();
+      if ((status === 'closed' || status === 'verified') && !verifyNote) {
+        alert('关闭或验收须填写验收说明');
+        return;
+      }
+      const now = new Date().toISOString();
+      const payload = {
+        title,
+        status,
+        fact: String(form.fact || '').trim(),
+        cause: String(form.cause || '').trim(),
+        impact: String(form.impact || '').trim(),
+        solution: String(form.solution || '').trim(),
+        supporter: String(form.supporter || '').trim(),
+        assignee: String(form.assignee || '').trim(),
+        expectedCloseDate: String(form.expectedCloseDate || '').trim(),
+        verifyNote,
+        updatedAt: now,
+      };
+      if (status === 'verified' || status === 'closed') {
+        payload.verifiedAt = new Date().toLocaleString();
+        payload.verifiedBy = currentUser.name;
+        if (status === 'closed') payload.closedAt = now;
+      }
+      if (form.issueId) {
+        const iss = issues.find(i => i.id === form.issueId);
+        if (!iss) return;
+        Object.assign(iss, payload);
+      } else {
+        issues.unshift({
+          id: genId('ISS'),
+          projectId: form.projectId,
+          createdAt: now,
+          createdBy: currentUser.name,
+          verifiedAt: payload.verifiedAt || '',
+          verifiedBy: payload.verifiedBy || '',
+          closedAt: payload.closedAt || '',
+          ...payload,
+        });
+      }
+      closeModal();
+      save({ immediateSync: true });
+      render();
+    }
+
+    function createProjectIssue(projectId) {
+      showIssueCreateModal(projectId);
+    }
+
+    function editProjectIssue(issueId) {
+      showIssueEditModal(issueId);
+    }
+
+    function setIssueStatus(issueId, status) {
+      const iss = issues.find(i => i.id === issueId);
+      if (!iss) return;
+      const project = projects.find(p => p.id === iss.projectId);
+      if (!project || !canManageProject(project)) return;
+      if (status === 'closed' || status === 'verified') {
+        const note = prompt('请填写验收说明（必填）', iss.verifyNote || '');
+        if (note == null) return;
+        if (!String(note).trim()) {
+          alert('关闭或验收须填写验收说明');
+          return;
+        }
+        iss.verifyNote = String(note).trim();
+        iss.verifiedAt = new Date().toLocaleString();
+        iss.verifiedBy = currentUser.name;
+        if (status === 'closed') iss.closedAt = new Date().toISOString();
+      }
+      iss.status = status;
+      iss.updatedAt = new Date().toISOString();
+      save({ immediateSync: true });
+      render();
+    }
+
+    function upgradeBlockerToIssue(projectId) {
+      const project = projects.find(p => p.id === projectId);
+      if (!project || !canManageProject(project)) return;
+      const blocker = String(project.blocker || '').trim();
+      if (!blocker) {
+        alert('当前无卡点');
+        return;
+      }
+      if (!confirm('将当前卡点升级为问题记录？')) return;
+      issues.unshift({
+        id: genId('ISS'),
+        projectId,
+        title: blocker.slice(0, 80),
+        status: 'open',
+        fact: blocker,
+        cause: '',
+        impact: '',
+        solution: '',
+        supporter: '',
+        assignee: currentUser.name,
+        expectedCloseDate: '',
+        verifiedAt: '',
+        verifiedBy: '',
+        closedAt: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: currentUser.name,
+      });
       save({ immediateSync: true });
       render();
     }
@@ -11713,6 +12481,8 @@
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
               ${canManage ? `
                 <button class="btn btn-ghost btn-sm" onclick="editProject('${project.id}')" title="编辑项目"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-ghost btn-sm" onclick="showProjectHandoverModal('${project.id}')" title="交接负责人"><i class="fas fa-handshake"></i> 交接</button>
+                ${canManageProjectTemplates() ? `<button class="btn btn-ghost btn-sm" onclick="saveProjectAsTemplate('${project.id}')" title="另存为模板"><i class="fas fa-copy"></i> 存为模板</button>` : ''}
               ` : ''}
               ${canDeleteProject() ? `
                 <button class="btn btn-ghost btn-sm" style="color:#DC2626;" onclick="deleteProject('${project.id}')" title="永久删除项目及全部关联任务"><i class="fas fa-trash-alt"></i></button>
@@ -11781,6 +12551,7 @@
             <div class="project-detail-side">
               ${renderProjectPlanPanel(project, canManage)}
               ${renderProjectFocusPanel(project, canManage)}
+              ${renderProjectIssuesPanel(project, canManage)}
               <section>
                 <h3 class="project-detail-section-title">项目成员</h3>
                 <div class="project-member-panel">
@@ -11792,7 +12563,9 @@
               ${renderProjectPlanViewToggle()}
               ${state.projectPlanView === 'gantt'
                 ? renderProjectGanttSection(project)
-                : `${renderProjectMilestonesTableSection(project)}${renderProjectTasksTableSection(project)}`}
+                : state.projectPlanView === 'delivery'
+                  ? renderProjectDeliveryBoard(project)
+                  : `${renderProjectMilestonesTableSection(project)}${renderProjectTasksTableSection(project)}`}
               ${renderProjectChangeLogsSection(project)}
             </div>
           </div>
@@ -14450,6 +15223,9 @@
       if (st && st.hasActive) {
         const tip = [
           st.capability === 'read' ? '只读' : '读写',
+          st.projectScope === 'whitelist' || (st.projectIdsRead || []).length || (st.projectIdsWrite || []).length
+            ? `项目白名单${new Set([...(st.projectIdsRead || []), ...(st.projectIdsWrite || [])]).size}项`
+            : '相关项目',
           st.keyPrefix ? st.keyPrefix + '…' : '',
           st.lastSentAt ? '已发送' : '未发送',
         ].filter(Boolean).join(' · ');
@@ -16130,11 +16906,16 @@
           return renderQuickCreateModal();
         case 'staffEdit': return renderStaffEditModal();
         case 'scopedKeyResult': return renderScopedKeyResultModal();
+        case 'scopedKeyIssue': return renderScopedKeyIssueModal();
+        case 'issueEdit': return renderIssueEditModal();
+        case 'dateBaselineConfirm': return renderDateBaselineConfirmModal();
         case 'projectDetail': return renderProjectDetailModal();
         case 'projectCreate': return renderProjectCreateModal();
         case 'projectEdit': return renderProjectEditModal();
         case 'kpiPlanEdit': return renderKpiPlanEditModal();
         case 'kpiPlanCreate': return renderKpiPlanCreateModal();
+        case 'templateEdit':
+        case 'templateCreate': return renderProjectTemplateEditModal();
         case 'reject': return renderRejectModal();
         case 'transfer': return renderTransferModal();
         case 'archive': return renderArchiveModal();
@@ -16407,6 +17188,8 @@
               </div>
               ` : ''}
 
+              ${renderTaskDeliveryCompletenessSection(task, canEdit)}
+
               <div class="detail-section">
                 <div class="detail-section-title"><i class="fas fa-chart-line"></i>进度</div>
                 <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
@@ -16652,10 +17435,12 @@
                   <div class="form-group">
                     <label class="form-label">开始日期</label>
                     <input class="input" type="date" style="width:100%;" value="${task.planStartDate || ''}" onchange="state.form.planStartDate=this.value" ${!canEdit ? 'disabled' : ''}>
+                    ${(task.originalPlanStartDate) ? `<div style="font-size:12px;color:#9CA3AF;margin-top:4px;">原定：${escapeHtml(task.originalPlanStartDate)}</div>` : ''}
                   </div>
                   <div class="form-group">
                     <label class="form-label">完成日期</label>
                     <input class="input" type="date" style="width:100%;" value="${task.dueDate || ''}" onchange="state.form.dueDate=this.value" ${!canEdit ? 'disabled' : ''}>
+                    ${(task.originalDueDate) ? `<div style="font-size:12px;color:#9CA3AF;margin-top:4px;">原定：${escapeHtml(task.originalDueDate)}</div>` : ''}
                   </div>
                 </div>
                 <div class="form-section-title" style="margin-top:8px;"><i class="fas fa-user-check"></i>责任矩阵 A/R/C/V</div>
@@ -16689,6 +17474,18 @@
                 <div class="form-group">
                   <label class="form-label">完成证据</label>
                   <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.completionEvidence=this.value" placeholder="签字/链接/截图等" ${!canEdit ? 'disabled' : ''}>${escapeHtml(task.completionEvidence || state.form.completionEvidence || '')}</textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">验证记录</label>
+                  <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.verification=this.value" placeholder="如何验证、验证结果" ${!canEdit ? 'disabled' : ''}>${escapeHtml(task.verification || state.form.verification || '')}</textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">业务反馈</label>
+                  <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.feedback=this.value" placeholder="业务方反馈" ${!canEdit ? 'disabled' : ''}>${escapeHtml(task.feedback || state.form.feedback || '')}</textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">遗留问题</label>
+                  <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.leftover=this.value" placeholder="遗留与跟进" ${!canEdit ? 'disabled' : ''}>${escapeHtml(task.leftover || state.form.leftover || '')}</textarea>
                 </div>
                 <div class="form-section-title" style="margin-top:8px;"><i class="fas fa-exclamation-triangle"></i>依赖与风险</div>
                 <div class="form-group">
@@ -16725,6 +17522,19 @@
                       <option value="urgent" ${task.priority === 'urgent' ? 'selected' : ''}>紧急</option>
                     </select>
                   </div>
+                </div>
+                <div class="form-section-title" style="margin-top:8px;"><i class="fas fa-clipboard-check"></i>交付齐备</div>
+                <div class="form-group">
+                  <label class="form-label">验证记录</label>
+                  <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.verification=this.value" placeholder="如何验证、验证结果" ${!canEdit ? 'disabled' : ''}>${escapeHtml(task.verification || state.form.verification || '')}</textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">业务反馈</label>
+                  <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.feedback=this.value" placeholder="业务方反馈" ${!canEdit ? 'disabled' : ''}>${escapeHtml(task.feedback || state.form.feedback || '')}</textarea>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">遗留问题</label>
+                  <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.leftover=this.value" placeholder="遗留与跟进" ${!canEdit ? 'disabled' : ''}>${escapeHtml(task.leftover || state.form.leftover || '')}</textarea>
                 </div>
                 `}
               </div>
@@ -17158,6 +17968,22 @@
             </div>
             <div class="modal-body">
               <div class="form-group">
+                <label class="form-label">模板</label>
+                <select class="select" style="width:100%;" onchange="state.form.stageTemplateId=this.value">
+                  ${(() => {
+                    const opts = (projectTemplates.length ? projectTemplates : getBuiltinProjectTemplatesFallback())
+                      .map(t => ({ id: t.id, name: t.name, stageCount: t.stageCount != null ? t.stageCount : (t.stages || []).length }));
+                    opts.push({ id: 'none', name: '不套用模板', stageCount: 0 });
+                    const cur = project.stageTemplateId || 'TPL-WMS';
+                    return opts.map(t => {
+                      const tip = t.id === 'none' ? '' : `（${t.stageCount} 个里程碑）`;
+                      return `<option value="${escapeHtml(t.id)}" ${cur === t.id ? 'selected' : ''}>${escapeHtml(t.name || t.id)}${tip}</option>`;
+                    }).join('');
+                  })()}
+                </select>
+                <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">默认「WMS 实施模板」；可改为标准过程组或不生成</div>
+              </div>
+              <div class="form-group">
                 <label class="form-label">项目名称 <span style="color:#DC2626;">*</span></label>
                 <input class="input" style="width:100%;" value="${project.name || ''}" onchange="state.form.name=this.value" placeholder="输入项目名称">
               </div>
@@ -17385,76 +18211,145 @@
     }
 
     async function issueScopedApiKey(userId) {
-      if (!isFullAccess(currentUser.role)) {
-        alert('仅总经理/管理员可签发作用域 Key');
-        return;
-      }
-      const user = users.find(u => u.id === userId);
-      if (!user) return;
-      if (!confirm(`为「${user.name}」生成作用域 Key（读写）？\n将吊销该人员已有有效 Key。明文仅显示一次。`)) return;
-      try {
-        const res = await fetch(ApiConfig.baseUrl + '/scoped-keys/users/' + encodeURIComponent(userId) + '/issue', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
-          body: JSON.stringify({ capability: 'read_write' }),
-          signal: AbortSignal.timeout(ApiConfig.timeout),
-        });
-        const raw = await parseApiJsonResponse(res, '签发失败');
-        if (!res.ok || (raw.code && raw.code !== 200)) throw new Error(raw.message || '签发失败');
-        const payload = raw.data || raw;
-        state.form = {
-          scopedKeySecret: payload.secret || '',
-          scopedKeyRecord: payload.record || null,
-          scopedKeyGuide: payload.guide || {},
-          scopedKeyUserName: user.name,
-          scopedKeyUserId: userId,
-          scopedKeySent: false,
-        };
-        state.showModal = 'scopedKeyResult';
-        state.scopedKeyStatusLoaded = false;
-        await loadScopedKeyStatus(true);
-        render();
-      } catch (e) {
-        alert(e.message || '签发失败');
-      }
+      showScopedKeyIssueModal(userId, 'issue');
     }
 
     async function sendScopedApiKeyPackage(userId) {
+      showScopedKeyIssueModal(userId, 'send');
+    }
+
+    function showScopedKeyIssueModal(userId, mode) {
       if (!isFullAccess(currentUser.role)) {
-        alert('仅总经理/管理员可发送接入包');
+        alert(mode === 'send' ? '仅总经理/管理员可发送接入包' : '仅总经理/管理员可签发作用域 Key');
         return;
       }
       const user = users.find(u => u.id === userId);
       if (!user) return;
-      if (!user.dingTalkUserId) {
+      if (mode === 'send' && !user.dingTalkUserId) {
         alert('该人员未绑定钉钉 userid，请先同步钉钉后再发送');
         return;
       }
-      if (!confirm(`向「${user.name}」钉钉发送：接入说明 + 作用域 Key + 接口地址？\n将重新签发一把读写 Key（旧 Key 作废）。`)) return;
+      const st = getScopedKeyStatus(userId);
+      const activeProjects = projects.filter(p => p && p.status !== 'archived' && p.status !== 'abolished');
+      state.form = {
+        scopedKeyUserId: userId,
+        scopedKeyUserName: user.name,
+        scopedKeyMode: mode === 'send' ? 'send' : 'issue',
+        scopedKeyCapability: (st && st.capability === 'read') ? 'read' : 'read_write',
+        scopedKeyUseWhitelist: !!(st && ((st.projectIdsRead || []).length || (st.projectIdsWrite || []).length)),
+        scopedKeyProjectIds: [...new Set([
+          ...((st && st.projectIdsRead) || []),
+          ...((st && st.projectIdsWrite) || []),
+        ])],
+        scopedKeyProjectOptions: activeProjects.map(p => ({ id: p.id, name: p.name })),
+      };
+      state.showModal = 'scopedKeyIssue';
+      render();
+    }
+
+    function toggleScopedKeyProject(projectId, checked) {
+      if (!state.form) return;
+      if (!Array.isArray(state.form.scopedKeyProjectIds)) state.form.scopedKeyProjectIds = [];
+      const id = String(projectId);
+      const set = new Set(state.form.scopedKeyProjectIds.map(String));
+      if (checked) set.add(id);
+      else set.delete(id);
+      state.form.scopedKeyProjectIds = [...set];
+    }
+
+    function renderScopedKeyIssueModal() {
+      const form = state.form || {};
+      const isSend = form.scopedKeyMode === 'send';
+      const options = form.scopedKeyProjectOptions || [];
+      const selected = new Set((form.scopedKeyProjectIds || []).map(String));
+      return `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal-box" style="max-width:560px;max-height:90vh;overflow:auto;" onclick="event.stopPropagation()">
+            <div class="modal-header">
+              <h3 class="modal-title"><i class="fas fa-key" style="color:var(--brand);margin-right:8px;"></i>${isSend ? '发送接入包' : '签发作用域 Key'}</h3>
+              <button type="button" class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" style="display:grid;gap:14px;">
+              <p style="font-size:13px;color:#6B7280;margin:0;">绑定人员：<strong>${escapeHtml(form.scopedKeyUserName || '')}</strong>。将吊销该人员已有有效 Key。</p>
+              <div>
+                <label class="form-label">能力</label>
+                <div style="display:flex;gap:16px;font-size:13px;">
+                  <label><input type="radio" name="scopedCap" ${form.scopedKeyCapability !== 'read' ? 'checked' : ''} onchange="state.form.scopedKeyCapability='read_write'"> 读写</label>
+                  <label><input type="radio" name="scopedCap" ${form.scopedKeyCapability === 'read' ? 'checked' : ''} onchange="state.form.scopedKeyCapability='read'"> 只读</label>
+                </div>
+              </div>
+              <div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+                  <input type="checkbox" ${form.scopedKeyUseWhitelist ? 'checked' : ''} onchange="state.form.scopedKeyUseWhitelist=this.checked;render()">
+                  <span>限制可访问项目（不勾选则按该人员「相关项目」权限）</span>
+                </label>
+              </div>
+              ${form.scopedKeyUseWhitelist ? `
+                <div style="border:1px solid #E5E7EB;border-radius:8px;max-height:240px;overflow:auto;padding:8px 10px;background:#F9FAFB;">
+                  ${options.length ? options.map(p => `
+                    <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:13px;cursor:pointer;">
+                      <input type="checkbox" ${selected.has(String(p.id)) ? 'checked' : ''} onchange="toggleScopedKeyProject('${escapeHtml(p.id)}', this.checked)">
+                      <span>${escapeHtml(p.name || p.id)}</span>
+                      <span style="color:#9CA3AF;font-size:11px;">${escapeHtml(p.id)}</span>
+                    </label>
+                  `).join('') : '<div style="font-size:12px;color:#9CA3AF;padding:8px;">暂无可用项目</div>'}
+                </div>
+                <p style="font-size:12px;color:#6B7280;margin:0;">已选 ${(form.scopedKeyProjectIds || []).length} 个项目；读写能力相同时，读/写白名单使用同一列表。</p>
+              ` : ''}
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-ghost" onclick="closeModal()">取消</button>
+              <button type="button" class="btn btn-primary" onclick="confirmScopedKeyIssue()"><i class="fas ${isSend ? 'fa-paper-plane' : 'fa-key'}"></i> ${isSend ? '签发并发送' : '生成 Key'}</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function confirmScopedKeyIssue() {
+      const form = state.form || {};
+      const userId = form.scopedKeyUserId;
+      if (!userId) return;
+      const capability = form.scopedKeyCapability === 'read' ? 'read' : 'read_write';
+      const useWhitelist = !!form.scopedKeyUseWhitelist;
+      const ids = useWhitelist ? (form.scopedKeyProjectIds || []).map(String).filter(Boolean) : [];
+      if (useWhitelist && !ids.length) {
+        alert('已开启项目限制，请至少勾选一个项目');
+        return;
+      }
+      const body = {
+        capability,
+        projectIdsRead: useWhitelist ? ids : [],
+        projectIdsWrite: useWhitelist && capability === 'read_write' ? ids : [],
+      };
+      const isSend = form.scopedKeyMode === 'send';
       try {
-        const res = await fetch(ApiConfig.baseUrl + '/scoped-keys/users/' + encodeURIComponent(userId) + '/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
-          body: JSON.stringify({ capability: 'read_write' }),
-          signal: AbortSignal.timeout(ApiConfig.timeout),
-        });
-        const raw = await parseApiJsonResponse(res, '发送失败');
-        if (!res.ok || (raw.code && raw.code !== 200)) throw new Error(raw.message || '发送失败');
+        const res = await fetch(
+          ApiConfig.baseUrl + '/scoped-keys/users/' + encodeURIComponent(userId) + (isSend ? '/send' : '/issue'),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(ApiConfig.timeout),
+          }
+        );
+        const raw = await parseApiJsonResponse(res, isSend ? '发送失败' : '签发失败');
+        if (!res.ok || (raw.code && raw.code !== 200)) throw new Error(raw.message || (isSend ? '发送失败' : '签发失败'));
         const payload = raw.data || raw;
         state.form = {
           scopedKeySecret: payload.secret || '',
           scopedKeyRecord: payload.record || null,
           scopedKeyGuide: payload.guide || {},
-          scopedKeyUserName: user.name,
+          scopedKeyUserName: form.scopedKeyUserName,
           scopedKeyUserId: userId,
-          scopedKeySent: true,
+          scopedKeySent: isSend,
         };
         state.showModal = 'scopedKeyResult';
         state.scopedKeyStatusLoaded = false;
         await loadScopedKeyStatus(true);
         render();
       } catch (e) {
-        alert(e.message || '发送失败');
+        alert(e.message || (isSend ? '发送失败' : '签发失败'));
       }
     }
 
@@ -17468,6 +18363,51 @@
       } else {
         prompt('请手动复制：', secret);
       }
+    }
+
+    function renderDateBaselineConfirmModal() {
+      const info = state._pendingDateBaseline || {};
+      const reason = (state.form && (state.form.changeReason || state.form.reason)) || '';
+      return `
+        <div class="modal-overlay" onclick="if(event.target===this){state.showModal='taskEdit';render();}">
+          <div class="modal-box" style="max-width:520px;" onclick="event.stopPropagation()">
+            <div class="modal-header">
+              <h3 class="modal-title"><i class="fas fa-calendar-alt" style="color:#D97706;margin-right:8px;"></i>确认日期变更</h3>
+              <button type="button" class="modal-close" onclick="state.showModal='taskEdit';render()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" style="display:grid;gap:12px;">
+              <p style="font-size:13px;color:#6B7280;margin:0;">将保留「原定」日期，当前日期更新为新值（符合对齐会「原定 vs 调研后确认」要求）。</p>
+              <div style="background:#F8FAFC;border:1px solid #E5E7EB;border-radius:8px;padding:12px;font-size:13px;line-height:1.7;">
+                <div><strong>原定开始</strong>：${escapeHtml(info.keepOriginalStart || '—')} → <strong>当前</strong>：${escapeHtml(info.newPlanStart || '—')}</div>
+                <div><strong>原定截止</strong>：${escapeHtml(info.keepOriginalDue || '—')} → <strong>当前</strong>：${escapeHtml(info.newDue || '—')}</div>
+              </div>
+              <div>
+                <label class="form-label">变更原因 <span class="form-required">*</span></label>
+                <textarea class="textarea" style="width:100%;height:72px;" oninput="state.form.changeReason=this.value;state.form.reason=this.value" placeholder="如：调研后确认 / 资源调整">${escapeHtml(reason)}</textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-ghost" onclick="state.showModal='taskEdit';render()">返回修改</button>
+              <button type="button" class="btn btn-primary" onclick="confirmDateBaselineAndSave()"><i class="fas fa-check"></i> 确认并保存</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function confirmDateBaselineAndSave() {
+      if (!state.form) return;
+      const reason = String(state.form.changeReason || state.form.reason || '').trim();
+      if (!reason) {
+        alert('请填写变更原因');
+        return;
+      }
+      state.form.reason = reason;
+      state.form.changeReason = reason;
+      state.form._dateBaselineConfirmed = true;
+      state._pendingDateBaseline = null;
+      state.showModal = 'taskEdit';
+      saveTask();
     }
 
     function renderScopedKeyResultModal() {
@@ -17691,6 +18631,8 @@
       }
       state.page = page;
       state.settingsOpen = false;
+      state.uiScrollMain = 0;
+      state.uiScrollWindow = 0;
       if (page === 'permissions') {
         loadPermissionsPage();
       }
@@ -17731,6 +18673,9 @@
       hideTaskCommentMentionDropdown();
       closeImageLightbox();
       state.collabDropdownOpen = null;
+      state.editingDeliveryTaskId = null;
+      state.deliveryForm = null;
+      rememberMainScrollBeforeModal();
       if (state.showModal === 'wikiDocPicker' && state._wikiPickerReturn) {
         restoreWikiPickerReturnForm();
         render();
@@ -18030,6 +18975,7 @@
         alert('无权查看该任务');
         return;
       }
+      rememberMainScrollBeforeModal();
       const skipStack = !!(opts && opts.skipStack);
       if (!Array.isArray(state.taskViewStack)) state.taskViewStack = [];
       if (!skipStack) {
@@ -18115,6 +19061,7 @@
         alert('您没有编辑该任务的权限');
         return;
       }
+      rememberMainScrollBeforeModal();
       if (isMilestoneTask(task)) hydrateMilestonePlanFromDesc(task);
       state.collabDropdownOpen = null;
       state.form = initTaskFormCollaborators(task);
@@ -18548,6 +19495,7 @@
         dept: currentUser.dept,
         manager: currentUser.name,
         teamMembers: [],
+        stageTemplateId: 'TPL-WMS',
       };
       state.showModal = 'projectCreate';
       render();
@@ -18583,34 +19531,67 @@
         planVerified: false,
         planVerifiedBy: '',
         planVerifiedAt: '',
+        stageTemplateId: state.form.stageTemplateId || 'TPL-WMS',
       };
 
       projects.push(newProject);
-      createDefaultPhaseMilestones(newProject);
+      createMilestonesFromTemplate(newProject, newProject.stageTemplateId);
       notifyProjectManagerAssigned(newProject);
       save();
       closeModal();
     }
 
-    // 标准项目模板（依据《恒慧管-标准项目模板规范》v1.1）：新建项目时自动生成
-    // 6 个阶段里程碑（根任务）及必选门禁任务（M1~M7）。恒慧管机制：根任务即里程碑，
-    // 普通任务须挂靠里程碑下，故阶段=里程碑、门禁=其下关键任务。
-    function createDefaultPhaseMilestones(project) {
-      const phases = [
-        { key: '00', name: '00-立项与选型阶段' },
-        { key: '01', name: '01-启动过程组' },
-        { key: '02', name: '02-规划过程组' },
-        { key: '03', name: '03-执行过程组' },
-        { key: '04', name: '04-监控过程组' },
-        { key: '05', name: '05-收尾过程组' },
+    function getBuiltinProjectTemplatesFallback() {
+      return [
+        {
+          id: 'TPL-WMS',
+          name: 'WMS 实施模板',
+          desc: '选型确认（下挂定型/商务/合同任务）→启动→蓝图→配置→测试→上线准备→上线→验收',
+          stageCount: 8,
+          stages: [
+            {
+              key: 'M0',
+              label: 'M0 选型确认',
+              milestoneSeq: 'M0',
+              tasks: ['M0a 选型定型', 'M0b 商务谈判', 'M0c 合同签订'],
+              gates: [],
+            },
+            { key: 'M1', label: 'M1 项目启动', milestoneSeq: 'M1', tasks: [], gates: [] },
+            { key: 'M2', label: 'M2 蓝图确认', milestoneSeq: 'M2', tasks: [], gates: [] },
+            { key: 'M3', label: 'M3 配置开发完成', milestoneSeq: 'M3', tasks: [], gates: [] },
+            { key: 'M4', label: 'M4 测试通过', milestoneSeq: 'M4', tasks: [], gates: [] },
+            { key: 'M5', label: 'M5 上线准备', milestoneSeq: 'M5', tasks: [], gates: [] },
+            { key: 'M6', label: 'M6 系统上线', milestoneSeq: 'M6', tasks: [], gates: [] },
+            { key: 'M7', label: 'M7 项目验收', milestoneSeq: 'M7', tasks: [], gates: [] },
+          ],
+        },
+        {
+          id: 'TPL-STD',
+          name: '标准过程组模板',
+          stageCount: 6,
+          stages: [
+            { key: '00', label: '00-立项与选型阶段', milestoneSeq: 'M1', tasks: ['M1 厂商选型定标', 'M2 采购合同+SLA签订'], gates: [] },
+            { key: '01', label: '01-启动过程组', milestoneSeq: 'M2', tasks: ['M3 项目启动会召开'], gates: [] },
+            { key: '02', label: '02-规划过程组', milestoneSeq: 'M3', tasks: ['M4 需求确认签字', 'M5 实施计划审批'], gates: [] },
+            { key: '03', label: '03-执行过程组', milestoneSeq: 'M4', tasks: [], gates: [] },
+            { key: '04', label: '04-监控过程组', milestoneSeq: 'M5', tasks: [], gates: [] },
+            { key: '05', label: '05-收尾过程组', milestoneSeq: 'M6', tasks: ['M6 验收签字', 'M7 运维交接+复盘'], gates: [] },
+          ],
+        },
       ];
-      // 必选里程碑 M1~M7 归属对应阶段（A 规范 v1.1 第三节）
-      const gates = {
-        '00': ['M1 厂商选型定标', 'M2 采购合同+SLA签订'],
-        '01': ['M3 项目启动会召开'],
-        '02': ['M4 需求确认签字', 'M5 实施计划审批'],
-        '05': ['M6 验收签字', 'M7 运维交接+复盘'],
-      };
+    }
+
+    function resolveProjectTemplate(templateId) {
+      const id = String(templateId || 'TPL-WMS').trim();
+      if (!id || id === 'none') return null;
+      const list = projectTemplates.length ? projectTemplates : getBuiltinProjectTemplatesFallback();
+      return list.find(t => String(t.id) === id) || getBuiltinProjectTemplatesFallback().find(t => t.id === 'TPL-WMS');
+    }
+
+    // 按模板库生成里程碑（默认 WMS）
+    function createMilestonesFromTemplate(project, templateId) {
+      const tpl = resolveProjectTemplate(templateId);
+      if (!tpl || !Array.isArray(tpl.stages) || !tpl.stages.length) return;
       const makeTask = (over) => {
         const t = {
           id: genId('T'),
@@ -18641,6 +19622,9 @@
           deliverables: '',
           acceptanceCriteria: '',
           completionEvidence: '',
+          verification: '',
+          feedback: '',
+          leftover: '',
           depsRisks: '',
           escalation: '',
           delayImpact: '',
@@ -18652,25 +19636,508 @@
         return t;
       };
       let seq = 0;
-      phases.forEach((ph) => {
+      tpl.stages.forEach((stage) => {
         seq += 1;
         const milestone = makeTask({
           isMilestone: true,
-          title: ph.name,
+          title: stage.label || stage.name || `阶段${seq}`,
           planStartDate: project.startDate || null,
-          milestoneSeq: `M${seq}`,
+          milestoneSeq: stage.milestoneSeq || `M${seq}`,
+          phaseKey: stage.key || '',
           roleA: project.manager || '',
           roleR: project.manager || '',
+          deliverables: stage.deliverables || '',
+          acceptanceCriteria: stage.acceptanceCriteria || '',
         });
         tasks.push(milestone);
-        (gates[ph.key] || []).forEach((g) => {
+        for (const tName of (stage.tasks || [])) {
+          const title = String(tName || '').trim();
+          if (!title) continue;
           tasks.push(makeTask({
             parentId: milestone.id,
-            title: '【里程碑】' + g,
+            isMilestone: false,
+            title,
+            priority: 'normal',
+          }));
+        }
+        for (const g of (stage.gates || [])) {
+          const raw = String(g || '').trim();
+          if (!raw) continue;
+          tasks.push(makeTask({
+            parentId: milestone.id,
+            isMilestone: false,
+            title: raw.startsWith('【') ? raw : `【里程碑】${raw}`,
             priority: 'important',
           }));
-        });
+        }
       });
+    }
+
+    function canManageProjectTemplates() {
+      return canCreateProject() || isFullAccess(currentUser.role);
+    }
+
+    function upsertProjectTemplateLocal(tpl) {
+      if (!tpl || !tpl.id) return;
+      const idx = projectTemplates.findIndex(t => t.id === tpl.id);
+      if (idx >= 0) projectTemplates[idx] = tpl;
+      else projectTemplates.push(tpl);
+    }
+
+    function blankTemplateStage(seq = 1) {
+      return {
+        key: `M${seq}`,
+        label: `M${seq} 新里程碑`,
+        milestoneSeq: `M${seq}`,
+        tasks: [],
+        deliverables: '',
+        acceptanceCriteria: '',
+      };
+    }
+
+    function stagesToEditForm(stages) {
+      return (Array.isArray(stages) ? stages : []).map((s, i) => ({
+        key: String(s.key || s.milestoneSeq || `M${i + 1}`),
+        label: String(s.label || s.name || `里程碑${i + 1}`),
+        milestoneSeq: String(s.milestoneSeq || s.key || `M${i + 1}`),
+        tasks: Array.isArray(s.tasks)
+          ? s.tasks.map(t => String(t || '').trim()).filter(Boolean)
+          : String(s.tasksText || '').split(/\n/).map(t => t.trim()).filter(Boolean),
+        deliverables: String(s.deliverables || ''),
+        acceptanceCriteria: String(s.acceptanceCriteria || ''),
+      }));
+    }
+
+    function collectTemplateFormStages() {
+      const form = state.form || {};
+      return (form.stages || []).map((s, i) => ({
+        key: String(s.key || s.milestoneSeq || `M${i + 1}`).trim(),
+        label: String(s.label || '').trim(),
+        milestoneSeq: String(s.milestoneSeq || s.key || `M${i + 1}`).trim(),
+        tasks: (Array.isArray(s.tasks) ? s.tasks : [])
+          .map(t => String(t || '').trim())
+          .filter(Boolean),
+        gates: [],
+        deliverables: String(s.deliverables || '').trim(),
+        acceptanceCriteria: String(s.acceptanceCriteria || '').trim(),
+      })).filter(s => s.label);
+    }
+
+    function showProjectTemplateCreateModal() {
+      if (!canManageProjectTemplates()) {
+        alert('无权管理模板库');
+        return;
+      }
+      state.form = {
+        id: '',
+        name: '',
+        desc: '',
+        stages: [blankTemplateStage(1)],
+      };
+      state.showModal = 'templateCreate';
+      render();
+    }
+
+    function showProjectTemplateEditModal(templateId) {
+      if (!canManageProjectTemplates()) {
+        alert('无权管理模板库');
+        return;
+      }
+      const list = projectTemplates.length ? projectTemplates : getBuiltinProjectTemplatesFallback();
+      const tpl = list.find(t => String(t.id) === String(templateId));
+      if (!tpl) {
+        alert('模板不存在');
+        return;
+      }
+      state.form = {
+        id: tpl.id,
+        name: tpl.name || '',
+        desc: tpl.desc || '',
+        builtin: !!tpl.builtin,
+        stages: (() => {
+          const rows = stagesToEditForm(tpl.stages);
+          return rows.length ? rows : [blankTemplateStage(1)];
+        })(),
+      };
+      state.showModal = 'templateEdit';
+      render();
+    }
+
+    function addTemplateStageRow() {
+      if (!state.form) return;
+      if (!Array.isArray(state.form.stages)) state.form.stages = [];
+      state.form.stages.push(blankTemplateStage(state.form.stages.length + 1));
+      render();
+    }
+
+    function removeTemplateStageRow(idx) {
+      if (!state.form || !Array.isArray(state.form.stages)) return;
+      if (state.form.stages.length <= 1) {
+        alert('至少保留一个里程碑');
+        return;
+      }
+      state.form.stages.splice(idx, 1);
+      render();
+    }
+
+    function moveTemplateStageRow(idx, delta) {
+      if (!state.form || !Array.isArray(state.form.stages)) return;
+      const j = idx + delta;
+      if (j < 0 || j >= state.form.stages.length) return;
+      const arr = state.form.stages;
+      const tmp = arr[idx];
+      arr[idx] = arr[j];
+      arr[j] = tmp;
+      render();
+    }
+
+    function addTemplateTaskRow(stageIdx) {
+      if (!state.form || !state.form.stages[stageIdx]) return;
+      if (!Array.isArray(state.form.stages[stageIdx].tasks)) state.form.stages[stageIdx].tasks = [];
+      state.form.stages[stageIdx].tasks.push('');
+      render();
+    }
+
+    function removeTemplateTaskRow(stageIdx, taskIdx) {
+      if (!state.form || !state.form.stages[stageIdx]) return;
+      const tasks = state.form.stages[stageIdx].tasks || [];
+      tasks.splice(taskIdx, 1);
+      render();
+    }
+
+    function moveTemplateTaskRow(stageIdx, taskIdx, delta) {
+      if (!state.form || !state.form.stages[stageIdx]) return;
+      const tasks = state.form.stages[stageIdx].tasks || [];
+      const j = taskIdx + delta;
+      if (j < 0 || j >= tasks.length) return;
+      const tmp = tasks[taskIdx];
+      tasks[taskIdx] = tasks[j];
+      tasks[j] = tmp;
+      render();
+    }
+
+    function renderProjectTemplateEditModal() {
+      const form = state.form || {};
+      const isEdit = state.showModal === 'templateEdit';
+      const stages = Array.isArray(form.stages) ? form.stages : [];
+      const listBody = stages.map((s, idx) => {
+        const tasks = Array.isArray(s.tasks) ? s.tasks : [];
+        const milestoneRow = `
+          <tr style="background:#F8FAFC;cursor:default;">
+            <td style="white-space:nowrap;">
+              <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#EEF2FF;color:#4338CA;">里程碑</span>
+            </td>
+            <td>
+              <input class="form-input" style="margin:0;" value="${escapeHtml(s.label || '')}" oninput="state.form.stages[${idx}].label=this.value" placeholder="如：M0 选型确认">
+            </td>
+            <td style="color:#9CA3AF;font-size:12px;">—</td>
+            <td>
+              <input class="form-input" style="margin:0;width:72px;" value="${escapeHtml(s.milestoneSeq || '')}" oninput="state.form.stages[${idx}].milestoneSeq=this.value;state.form.stages[${idx}].key=this.value" placeholder="M0">
+            </td>
+            <td style="white-space:nowrap;text-align:right;">
+              <button type="button" class="btn btn-ghost btn-sm" title="添加任务" onclick="addTemplateTaskRow(${idx})"><i class="fas fa-plus"></i></button>
+              <button type="button" class="btn btn-ghost btn-sm" title="上移" onclick="moveTemplateStageRow(${idx},-1)" ${idx === 0 ? 'disabled' : ''}><i class="fas fa-arrow-up"></i></button>
+              <button type="button" class="btn btn-ghost btn-sm" title="下移" onclick="moveTemplateStageRow(${idx},1)" ${idx >= stages.length - 1 ? 'disabled' : ''}><i class="fas fa-arrow-down"></i></button>
+              <button type="button" class="btn btn-ghost btn-sm" style="color:#DC2626;" title="删除里程碑" onclick="removeTemplateStageRow(${idx})"><i class="fas fa-trash-alt"></i></button>
+            </td>
+          </tr>
+        `;
+        const taskRows = tasks.map((t, ti) => `
+          <tr style="cursor:default;">
+            <td style="white-space:nowrap;">
+              <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#ECFDF5;color:#047857;">任务</span>
+            </td>
+            <td style="padding-left:18px;">
+              <input class="form-input" style="margin:0;" value="${escapeHtml(t || '')}" oninput="state.form.stages[${idx}].tasks[${ti}]=this.value" placeholder="如：M0a 选型定型">
+            </td>
+            <td style="color:#6B7280;font-size:12px;">${escapeHtml(s.label || s.milestoneSeq || '—')}</td>
+            <td style="color:#9CA3AF;font-size:12px;">—</td>
+            <td style="white-space:nowrap;text-align:right;">
+              <button type="button" class="btn btn-ghost btn-sm" title="上移" onclick="moveTemplateTaskRow(${idx},${ti},-1)" ${ti === 0 ? 'disabled' : ''}><i class="fas fa-arrow-up"></i></button>
+              <button type="button" class="btn btn-ghost btn-sm" title="下移" onclick="moveTemplateTaskRow(${idx},${ti},1)" ${ti >= tasks.length - 1 ? 'disabled' : ''}><i class="fas fa-arrow-down"></i></button>
+              <button type="button" class="btn btn-ghost btn-sm" style="color:#DC2626;" title="删除任务" onclick="removeTemplateTaskRow(${idx},${ti})"><i class="fas fa-trash-alt"></i></button>
+            </td>
+          </tr>
+        `).join('');
+        return milestoneRow + taskRows;
+      }).join('');
+
+      return `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal-box" style="max-width:860px;max-height:90vh;overflow:auto;" onclick="event.stopPropagation()">
+            <div class="modal-header">
+              <h3 class="modal-title"><i class="fas fa-layer-group" style="color:var(--brand);margin-right:8px;"></i>${isEdit ? '编辑模板' : '新建模板'}</h3>
+              <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:18px;"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" style="display:grid;gap:14px;">
+              ${form.builtin ? `<p style="font-size:12px;color:#047857;background:#ECFDF5;padding:8px 12px;border-radius:8px;margin:0;">内置模板可编辑；需要时可「恢复默认」。</p>` : ''}
+              <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:12px;">
+                <div>
+                  <label class="form-label">模板名称 *</label>
+                  <input class="form-input" value="${escapeHtml(form.name || '')}" oninput="state.form.name=this.value" placeholder="如：WMS 实施模板">
+                </div>
+                <div>
+                  <label class="form-label">说明</label>
+                  <input class="form-input" value="${escapeHtml(form.desc || '')}" oninput="state.form.desc=this.value" placeholder="用途简述（可选）">
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                <div>
+                  <div style="font-weight:600;font-size:13px;color:#374151;">标准里程碑与标准任务</div>
+                  <div style="font-size:12px;color:#6B7280;margin-top:2px;">列表中「里程碑」与「任务」分行；点里程碑行的 + 可添加任务。</div>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="addTemplateStageRow()"><i class="fas fa-plus"></i> 添加里程碑</button>
+              </div>
+              <div class="todo-table-wrap" style="border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;background:#fff;">
+                <table class="todo-table" style="margin:0;">
+                  <thead>
+                    <tr>
+                      <th style="width:88px;">类型</th>
+                      <th>名称</th>
+                      <th style="width:160px;">归属里程碑</th>
+                      <th style="width:80px;">序号</th>
+                      <th style="width:150px;text-align:right;">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${listBody || `<tr style="cursor:default;"><td colspan="5" style="text-align:center;color:#9CA3AF;">暂无内容，请添加里程碑</td></tr>`}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+              <button class="btn btn-primary" onclick="saveProjectTemplateForm()"><i class="fas fa-save"></i> ${isEdit ? '保存' : '创建'}</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function saveProjectTemplateForm() {
+      if (!canManageProjectTemplates()) {
+        alert('无权管理模板库');
+        return;
+      }
+      const form = state.form || {};
+      const name = String(form.name || '').trim();
+      if (!name) {
+        alert('请填写模板名称');
+        return;
+      }
+      const stages = collectTemplateFormStages();
+      if (!stages.length) {
+        alert('至少添加一个里程碑');
+        return;
+      }
+      const isEdit = state.showModal === 'templateEdit' && form.id;
+      const body = { name, desc: String(form.desc || '').trim(), stages };
+      try {
+        const url = isEdit
+          ? ApiConfig.baseUrl + '/project-templates/' + encodeURIComponent(form.id)
+          : ApiConfig.baseUrl + '/project-templates';
+        const res = await fetch(url, {
+          method: isEdit ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+          body: JSON.stringify(body),
+        });
+        const raw = await parseApiJsonResponse(res, isEdit ? '保存失败' : '创建失败');
+        if (!res.ok || (raw.code && raw.code !== 200)) throw new Error(raw.message || (isEdit ? '保存失败' : '创建失败'));
+        const tpl = raw.data?.template || raw.template;
+        if (tpl) {
+          upsertProjectTemplateLocal(tpl);
+          state.templateExpandedId = tpl.id;
+        }
+        closeModal();
+        render();
+      } catch (e) {
+        alert(e.message || (isEdit ? '保存失败' : '创建失败'));
+      }
+    }
+
+    function renderProjectTemplatesPage() {
+      const list = (projectTemplates.length ? projectTemplates : getBuiltinProjectTemplatesFallback())
+        .slice()
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh'));
+      const expanded = state.templateExpandedId || null;
+      const canManage = canManageProjectTemplates();
+      if (!list.length) {
+        return `
+          <p class="content-intro" style="margin-bottom:16px;">模板只展示标准里程碑与标准任务；新建项目时按模板生成对应结构。</p>
+          <div style="padding:24px;text-align:center;color:#9CA3AF;border:1px dashed #E5E7EB;border-radius:10px;background:#fff;">暂无模板${canManage ? '，请点击右上角「新建模板」' : ''}</div>
+        `;
+      }
+      const rows = list.map(tpl => {
+        const stages = tpl.stages || [];
+        const open = expanded === tpl.id;
+        const taskCount = stages.reduce((n, s) => n + ((s.tasks || []).length), 0);
+        const detailRows = [];
+        stages.forEach((s, si) => {
+          detailRows.push({
+            kind: '里程碑',
+            name: s.label || s.name || s.key || `里程碑${si + 1}`,
+            parent: '—',
+            seq: s.milestoneSeq || s.key || '',
+          });
+          (s.tasks || []).forEach(t => {
+            detailRows.push({
+              kind: '任务',
+              name: t,
+              parent: s.label || s.name || s.key || '',
+              seq: '',
+            });
+          });
+        });
+        return `
+          <tr onclick="state.templateExpandedId=state.templateExpandedId==='${escapeHtml(tpl.id)}'?null:'${escapeHtml(tpl.id)}';render()" style="${open ? 'background:#F8FAFC;' : ''}">
+            <td style="white-space:nowrap;">
+              <i class="fas fa-chevron-${open ? 'down' : 'right'}" style="color:#9CA3AF;width:14px;"></i>
+              <strong>${escapeHtml(tpl.name || tpl.id)}</strong>
+              ${tpl.builtin ? '<span style="font-size:11px;color:#047857;background:#ECFDF5;padding:1px 6px;border-radius:4px;margin-left:6px;">内置</span>' : ''}
+            </td>
+            <td style="color:#6B7280;font-size:12px;">${escapeHtml(tpl.desc || '—')}</td>
+            <td style="text-align:center;white-space:nowrap;">${stages.length}</td>
+            <td style="text-align:center;white-space:nowrap;">${taskCount}</td>
+            <td style="color:#9CA3AF;font-size:12px;white-space:nowrap;">${escapeHtml(tpl.source || '—')}</td>
+            <td onclick="event.stopPropagation()" style="white-space:nowrap;">
+              <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
+                ${canCreateProject() ? `<button type="button" class="btn btn-primary btn-sm" onclick="showProjectModalWithTemplate('${escapeHtml(tpl.id)}')">新建</button>` : ''}
+                ${canManage ? `<button type="button" class="btn btn-ghost btn-sm" onclick="showProjectTemplateEditModal('${escapeHtml(tpl.id)}')">编辑</button>` : ''}
+                ${canManage && tpl.builtin ? `<button type="button" class="btn btn-ghost btn-sm" onclick="resetBuiltinProjectTemplate('${escapeHtml(tpl.id)}')">恢复</button>` : ''}
+                ${canManage && !tpl.builtin ? `<button type="button" class="btn btn-ghost btn-sm" style="color:#DC2626;" onclick="deleteProjectTemplate('${escapeHtml(tpl.id)}')">删除</button>` : ''}
+              </div>
+            </td>
+          </tr>
+          ${open ? `
+            <tr class="tpl-detail-row" style="cursor:default;" onclick="event.stopPropagation()">
+              <td colspan="6" style="padding:0 12px 14px;background:#F8FAFC;border-bottom:1px solid #E5E7EB;">
+                <div class="todo-table-wrap" style="margin-top:8px;border:1px solid #E5E7EB;border-radius:8px;background:#fff;overflow:hidden;">
+                  <table class="todo-table" style="margin:0;">
+                    <thead>
+                      <tr>
+                        <th style="width:88px;">类型</th>
+                        <th>名称</th>
+                        <th style="width:160px;">归属里程碑</th>
+                        <th style="width:80px;">序号</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${detailRows.length ? detailRows.map(r => `
+                        <tr style="cursor:default;">
+                          <td>
+                            <span style="font-size:11px;padding:2px 8px;border-radius:4px;${r.kind === '里程碑'
+                              ? 'background:#EEF2FF;color:#4338CA;'
+                              : 'background:#ECFDF5;color:#047857;'}">${r.kind}</span>
+                          </td>
+                          <td style="${r.kind === '任务' ? 'padding-left:20px;color:#374151;' : 'font-weight:600;'}">${escapeHtml(r.name)}</td>
+                          <td style="color:#6B7280;font-size:12px;">${escapeHtml(r.parent)}</td>
+                          <td style="color:#9CA3AF;font-size:12px;">${escapeHtml(r.seq || '—')}</td>
+                        </tr>
+                      `).join('') : `<tr style="cursor:default;"><td colspan="4" style="text-align:center;color:#9CA3AF;">暂无里程碑与任务</td></tr>`}
+                    </tbody>
+                  </table>
+                </div>
+              </td>
+            </tr>
+          ` : ''}
+        `;
+      }).join('');
+      return `
+        <p class="content-intro" style="margin-bottom:16px;">模板只展示标准里程碑与标准任务；点击行可展开明细。</p>
+        <div class="todo-table-wrap" style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;">
+          <table class="todo-table">
+            <thead>
+              <tr>
+                <th>模板名称</th>
+                <th>说明</th>
+                <th style="width:90px;text-align:center;">里程碑</th>
+                <th style="width:80px;text-align:center;">任务</th>
+                <th style="width:140px;">来源</th>
+                <th style="width:220px;text-align:right;">操作</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function showProjectModalWithTemplate(templateId) {
+      showProjectModal();
+      state.form.stageTemplateId = templateId || 'TPL-WMS';
+      render();
+    }
+
+    async function deleteProjectTemplate(id) {
+      if (!canManageProjectTemplates()) {
+        alert('无权管理模板库');
+        return;
+      }
+      if (!confirm('确定删除该模板？删除后不可恢复。')) return;
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/project-templates/' + encodeURIComponent(id), {
+          method: 'DELETE',
+          headers: { ...AuthService.getAuthHeaders() },
+        });
+        const raw = await parseApiJsonResponse(res, '删除失败');
+        if (!res.ok || (raw.code && raw.code !== 200)) throw new Error(raw.message || '删除失败');
+        projectTemplates = projectTemplates.filter(t => t.id !== id);
+        if (state.templateExpandedId === id) state.templateExpandedId = null;
+        render();
+      } catch (e) {
+        alert(e.message || '删除失败');
+      }
+    }
+
+    async function resetBuiltinProjectTemplate(id) {
+      if (!canManageProjectTemplates()) {
+        alert('无权管理模板库');
+        return;
+      }
+      if (!confirm('确定将该内置模板恢复为系统默认内容？当前编辑会被覆盖。')) return;
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/project-templates/' + encodeURIComponent(id) + '/reset', {
+          method: 'POST',
+          headers: { ...AuthService.getAuthHeaders() },
+        });
+        const raw = await parseApiJsonResponse(res, '恢复失败');
+        if (!res.ok || (raw.code && raw.code !== 200)) throw new Error(raw.message || '恢复失败');
+        const tpl = raw.data?.template || raw.template;
+        if (tpl) upsertProjectTemplateLocal(tpl);
+        render();
+      } catch (e) {
+        alert(e.message || '恢复失败');
+      }
+    }
+
+    /** @deprecated 兼容旧名 */
+    function createDefaultPhaseMilestones(project) {
+      createMilestonesFromTemplate(project, project.stageTemplateId || 'TPL-WMS');
+    }
+
+    async function saveProjectAsTemplate(projectId) {
+      if (!canManageProjectTemplates()) {
+        alert('无权另存模板');
+        return;
+      }
+      const project = projects.find(p => p.id === projectId);
+      if (!project) return;
+      const name = prompt('模板名称', `${project.name} 模板`);
+      if (name == null || !String(name).trim()) return;
+      try {
+        const res = await fetch(ApiConfig.baseUrl + '/project-templates/from-project/' + encodeURIComponent(projectId), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...AuthService.getAuthHeaders() },
+          body: JSON.stringify({ name: String(name).trim() }),
+        });
+        const raw = await parseApiJsonResponse(res, '另存失败');
+        if (!res.ok || (raw.code && raw.code !== 200)) throw new Error(raw.message || '另存失败');
+        const tpl = raw.data?.template || raw.template;
+        if (tpl) upsertProjectTemplateLocal(tpl);
+        alert('已保存到模板库');
+      } catch (e) {
+        alert(e.message || '另存失败');
+      }
     }
 
     function showRejectModal(taskId) {
@@ -18743,6 +20210,31 @@
         if (!state.form.reason) { alert('请填写修改原因'); return; }
         const oldAssignee = task.assignee;
         const oldStatus = task.status;
+        const oldPlanStart = task.planStartDate || null;
+        const oldDue = task.dueDate || '';
+        const newPlanStart = state.form.planStartDate || null;
+        const newDue = state.form.dueDate || '';
+        const dateChanged = newPlanStart !== oldPlanStart || newDue !== oldDue;
+        if (dateChanged && !state.form._dateBaselineConfirmed) {
+          if ((task.originalPlanStartDate || task.originalDueDate) && !String(state.form.reason || state.form.changeReason || '').trim()) {
+            alert('已有原定日期，再次变更须填写变更原因');
+            return;
+          }
+          state._pendingDateBaseline = {
+            taskId: task.id,
+            oldPlanStart,
+            oldDue,
+            newPlanStart,
+            newDue,
+            hadOriginalStart: !!task.originalPlanStartDate,
+            hadOriginalDue: !!task.originalDueDate,
+            keepOriginalStart: task.originalPlanStartDate || oldPlanStart || '',
+            keepOriginalDue: task.originalDueDate || oldDue || '',
+          };
+          state.showModal = 'dateBaselineConfirm';
+          render();
+          return;
+        }
         if (isTaskProjectPaused(task) && state.form.status !== 'paused' && state.form.status !== oldStatus) {
           alert('所属项目已暂停，请先恢复项目后再变更任务状态');
           return;
@@ -18796,8 +20288,20 @@
         const preservedCreatedAt = task.createdAt;
         const preservedStatus = isTerminalTaskStatus(task.status) ? task.status : null;
         Object.assign(task, state.form);
+        delete task._dateBaselineConfirmed;
         if (preservedCreatedAt) task.createdAt = preservedCreatedAt;
         if (preservedStatus) task.status = preservedStatus;
+        if (dateChanged) {
+          if (!task.originalPlanStartDate && oldPlanStart && newPlanStart !== oldPlanStart) {
+            task.originalPlanStartDate = oldPlanStart;
+          }
+          if (!task.originalDueDate && oldDue && newDue !== oldDue) {
+            task.originalDueDate = oldDue;
+          }
+          task.changeReason = String(state.form.changeReason || state.form.reason || '').trim();
+        } else if (state.form.reason) {
+          task.changeReason = state.form.reason;
+        }
         if (isAitableIntakeTask(task) && (task.status === 'doing' || task.status === 'done') && !task.actualStartDate) {
           task.actualStartDate = todayStr();
         }
@@ -18827,6 +20331,9 @@
           applyTaskDoneFields(task);
           onTaskMarkedDone(task);
           onPredecessorTaskCompleted(task);
+          if (isMilestoneTask(task) && task.projectId) {
+            try { syncProjectPhaseFromMilestones(task.projectId, { silent: true }); } catch (e) { /* ignore */ }
+          }
         } else if (task.status === 'done') {
           task.progress = 100;
         }
