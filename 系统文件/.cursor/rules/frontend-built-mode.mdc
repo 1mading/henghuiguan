@@ -1,0 +1,24 @@
+---
+description: HHG_FRONTEND=built 时前端改完必须构建并核对 dist，避免页面仍是旧包
+globs: 系统文件/恒慧管项目/frontend/**/*
+alwaysApply: false
+---
+
+# 前端 built 模式必构建
+
+当前 `.env` 常见为 `HHG_FRONTEND=built`：浏览器读的是 `frontend/dist`，**只改 `src/` 不会自动出现在页面上**。
+
+## 每次改完 frontend 源码后必须
+
+1. 在 `系统文件/恒慧管项目/frontend` 执行：`npm run build`（或在 `server` 下 `npm run build:web`）
+2. 确认 `dist/index.html` 里的 `assets/index-*.js` 哈希已变，且含本次改动特征
+3. 告知用户：**Ctrl+F5**；钉钉内须关掉应用再进
+4. 若改了 `server/src` 静态缓存相关逻辑，提醒重启后端
+
+## 后端已有兜底
+
+- 启动时 `ensureFrontendBuild`：若 `src` 新于 `dist` 会自动 `npm run build`（可用 `HHG_AUTO_BUILD=false` 关闭）
+- 本地/`localAsServer` 下 dist 静态资源不再 7 天长缓存
+- 构建产物 HTML 含 `<meta name="hhg-build">` 便于核对
+
+**不要**假设用户在跑 Vite `5173`；默认验收入口是 `http://localhost:3000/app`。

@@ -17,7 +17,8 @@
     "record-change": "node scripts/record-change.js",
     "publish-release": "node scripts/publish-release.js",
     "ops-reminder": "node scripts/ops-reminder.js",
-    "rotate-secrets": "node scripts/rotate-secrets.js"
+    "rotate-secrets": "node scripts/rotate-secrets.js",
+    "build:web": "npm --prefix ../frontend run build"
   },
   "engines": {
     "node": ">=18"

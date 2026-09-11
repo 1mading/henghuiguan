@@ -1,0 +1,538 @@
+/* 暗色主题：柔和靛蓝夜色 + 覆盖硬编码浅色面 */
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* 面：略暖的深灰蓝，避免死黑 */
+  --bg-page: #14161E;
+  --bg-panel: #1E222D;
+  --bg-elevated: #262B38;
+  --bg-muted: #1A1E28;
+  --sidebar-bg: #1A1D27;
+
+  --text: #ECEEF4;
+  --text-muted: #A8AEBC;
+  --text-light: #7E8698;
+
+  /* 品牌：略降饱和，夜间不刺眼 */
+  --brand: #9AA6E8;
+  --brand-dark: #B4BDF0;
+  --brand-soft: rgba(154, 166, 232, 0.16);
+  --accent-urgent: #E2B56A;
+
+  --border: #303644;
+  --border-light: #262B38;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+
+  --success: #3DCF9A;
+  --success-soft: rgba(61, 207, 154, 0.14);
+  --warning: #E4B84A;
+  --warning-soft: rgba(228, 184, 74, 0.14);
+  --danger: #F07A7A;
+  --danger-soft: rgba(240, 122, 122, 0.14);
+  --info: #7EB6F5;
+  --info-soft: rgba(126, 182, 245, 0.14);
+
+  --status-pending: #8B93A7;
+  --status-active: #7EB6F5;
+  --status-done: #3DCF9A;
+  --status-paused: #E4B84A;
+  --priority-high: #F07A7A;
+  --priority-medium: #E4B84A;
+  --priority-low: #8B93A7;
+
+  --toast-bg: #0F1218;
+  --toast-fg: #F2F4F8;
+  --overlay: rgba(8, 10, 16, 0.72);
+}
+
+html[data-theme="dark"] body {
+  background: var(--bg-page);
+  color: var(--text);
+}
+
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* —— 壳层 —— */
+html[data-theme="dark"] .sidebar,
+html[data-theme="dark"] .main-header,
+html[data-theme="dark"] .settings-dropdown,
+html[data-theme="dark"] .modal-box,
+html[data-theme="dark"] .drawer-panel {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .main-area,
+html[data-theme="dark"] .main-content {
+  background: var(--bg-page);
+}
+
+html[data-theme="dark"] .nav-item:hover,
+html[data-theme="dark"] .nav-group-head:hover {
+  background: var(--bg-elevated);
+}
+
+html[data-theme="dark"] .nav-item.nav-item--flat.active {
+  background: var(--brand-soft);
+  color: var(--brand);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+html[data-theme="dark"] .nav-item.active:not(.nav-item--flat) {
+  background: linear-gradient(135deg, #4A5699, #3D4A8C);
+  color: #fff;
+}
+
+html[data-theme="dark"] .settings-gear-btn,
+html[data-theme="dark"] .settings-dropdown-item:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .settings-dropdown-hint {
+  color: var(--text-light);
+}
+
+html[data-theme="dark"] .mobile-nav {
+  background: rgba(26, 29, 39, 0.94) !important;
+  border-top-color: var(--border) !important;
+  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme="dark"] .mobile-nav-item {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] #boot-splash {
+  background: var(--bg-page) !important;
+  color: var(--text-muted) !important;
+}
+
+/* —— 卡片 / 面板 / 表格（覆盖硬编码 #fff / #FAFA） —— */
+html[data-theme="dark"] .wb-stat-card,
+html[data-theme="dark"] .wb-todo-card,
+html[data-theme="dark"] .wb-panel,
+html[data-theme="dark"] .wb-project-focus-item,
+html[data-theme="dark"] .wb-empty,
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .hhg-card,
+html[data-theme="dark"] .kanban-card,
+html[data-theme="dark"] .task-card,
+html[data-theme="dark"] .todo-kanban-card,
+html[data-theme="dark"] .todo-board-card,
+html[data-theme="dark"] .project-card,
+html[data-theme="dark"] .empty-state,
+html[data-theme="dark"] .empty-state--panel,
+html[data-theme="dark"] .ds-card,
+html[data-theme="dark"] .ds-panel,
+html[data-theme="dark"] .kpi-plan-wrap,
+html[data-theme="dark"] .filter-bar,
+html[data-theme="dark"] .tab-bar,
+html[data-theme="dark"] .segmented,
+html[data-theme="dark"] .staff-drawer,
+html[data-theme="dark"] .inbox-panel,
+html[data-theme="dark"] .dropdown-menu,
+html[data-theme="dark"] .collab-ms-panel,
+html[data-theme="dark"] .task-project-section,
+html[data-theme="dark"] .task-list-row,
+html[data-theme="dark"] .log-table-wrap {
+  background: var(--bg-panel) !important;
+  border-color: var(--border) !important;
+  color: var(--text);
+}
+
+html[data-theme="dark"] .wb-project-focus-item:hover,
+html[data-theme="dark"] .staff-row:hover,
+html[data-theme="dark"] .kpi-plan-table tr:hover td,
+html[data-theme="dark"] .ds-table tr:hover td {
+  background: var(--bg-elevated) !important;
+}
+
+html[data-theme="dark"] .log-table th,
+html[data-theme="dark"] .kpi-plan-table th,
+html[data-theme="dark"] .ds-table th,
+html[data-theme="dark"] .task-project-section-head,
+html[data-theme="dark"] .modal-footer,
+html[data-theme="dark"] .drawer-footer,
+html[data-theme="dark"] .filter-chip,
+html[data-theme="dark"] .wb-chip,
+html[data-theme="dark"] .tag-normal-priority,
+html[data-theme="dark"] .status-todo,
+html[data-theme="dark"] .status-abolished,
+html[data-theme="dark"] .status-archived,
+html[data-theme="dark"] .segmented,
+html[data-theme="dark"] .tab-bar {
+  background: var(--bg-muted) !important;
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .tab-item.active,
+html[data-theme="dark"] .ds-tab.active,
+html[data-theme="dark"] .segmented-item.active,
+html[data-theme="dark"] .view-toggle-btn.active {
+  background: var(--bg-elevated) !important;
+  color: var(--brand-dark);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* 表单控件 */
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] .form-input,
+html[data-theme="dark"] .search-input,
+html[data-theme="dark"] .global-search input,
+html[data-theme="dark"] .collab-ms-trigger,
+html[data-theme="dark"] .btn-ghost,
+html[data-theme="dark"] .hhg-btn {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: var(--text-light);
+}
+
+html[data-theme="dark"] .hhg-btn-primary,
+html[data-theme="dark"] .btn-primary {
+  background: var(--brand) !important;
+  border-color: transparent !important;
+  color: #14161E !important;
+}
+
+html[data-theme="dark"] .btn-ghost:hover,
+html[data-theme="dark"] .hhg-btn:hover {
+  background: var(--border) !important;
+}
+
+/* 状态弱底 */
+html[data-theme="dark"] .task-card--overdue,
+html[data-theme="dark"] .task-list-row--overdue,
+html[data-theme="dark"] .todo-kanban-card--overdue,
+html[data-theme="dark"] .todo-board-card.is-overdue,
+html[data-theme="dark"] .wb-todo-card.is-overdue {
+  background: rgba(240, 122, 122, 0.08) !important;
+  border-color: rgba(240, 122, 122, 0.35) !important;
+}
+
+html[data-theme="dark"] .task-card--duesoon,
+html[data-theme="dark"] .todo-board-card.is-duesoon,
+html[data-theme="dark"] .wb-chip--soon,
+html[data-theme="dark"] .task-dep-blocked-row,
+html[data-theme="dark"] .task-project-section--temp .task-project-section-head,
+html[data-theme="dark"] .project-plan-badge.is-warn {
+  background: rgba(228, 184, 74, 0.1) !important;
+  border-color: rgba(228, 184, 74, 0.35) !important;
+  color: var(--warning);
+}
+
+html[data-theme="dark"] .wb-todo-actions .btn-icon.is-warning {
+  background: rgba(228, 184, 74, 0.12) !important;
+  border-color: rgba(228, 184, 74, 0.35) !important;
+  color: var(--warning) !important;
+}
+
+html[data-theme="dark"] .modal-overlay {
+  background: var(--overlay);
+}
+
+html[data-theme="dark"] .modal-header,
+html[data-theme="dark"] .modal-body {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .kanban-column,
+html[data-theme="dark"] .todo-board-column {
+  background: var(--bg-muted) !important;
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .breadcrumb,
+html[data-theme="dark"] .text-muted,
+html[data-theme="dark"] .meta,
+html[data-theme="dark"] .empty-state p {
+  color: var(--text-muted);
+}
+
+/* 表格线 */
+html[data-theme="dark"] table td,
+html[data-theme="dark"] table th,
+html[data-theme="dark"] .log-table td,
+html[data-theme="dark"] .staff-row,
+html[data-theme="dark"] .task-card-footer,
+html[data-theme="dark"] .kanban-card-footer {
+  border-color: var(--border) !important;
+}
+
+/* 分割线 / 弱面板 */
+html[data-theme="dark"] .settings-dropdown-divider,
+html[data-theme="dark"] hr {
+  background: var(--border);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .avatar,
+html[data-theme="dark"] .user-avatar {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* —— 项目任务 / 里程碑表（截图中白表头与白悬停行） —— */
+html[data-theme="dark"] .todo-table-card,
+html[data-theme="dark"] .todo-list-card {
+  background: var(--bg-panel) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .todo-table thead th,
+html[data-theme="dark"] .kpi-plan-table thead th,
+html[data-theme="dark"] .kpi-plan-table th,
+html[data-theme="dark"] .perm-table th {
+  background: var(--bg-muted) !important;
+  color: var(--text-muted) !important;
+  border-bottom-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .todo-table tbody td {
+  background: transparent !important;
+  color: var(--text) !important;
+  border-bottom-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .todo-table tbody tr:hover,
+html[data-theme="dark"] .todo-table tbody tr:hover td {
+  background: var(--bg-elevated) !important;
+  color: var(--text) !important;
+}
+
+html[data-theme="dark"] .todo-table tbody tr.todo-row--overdue,
+html[data-theme="dark"] .todo-table tbody tr.todo-row--overdue td {
+  background: var(--danger-soft) !important;
+}
+
+html[data-theme="dark"] .todo-table tbody tr.todo-row--duesoon,
+html[data-theme="dark"] .todo-table tbody tr.todo-row--duesoon td {
+  background: var(--warning-soft) !important;
+}
+
+html[data-theme="dark"] .progress-bar,
+html[data-theme="dark"] .todo-board-subtasks .progress-bar {
+  background: var(--border) !important;
+}
+
+html[data-theme="dark"] .progress-fill {
+  background: var(--brand) !important;
+}
+
+html[data-theme="dark"] .todo-pager {
+  border-top-color: var(--border) !important;
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .btn-ghost {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+html[data-theme="dark"] .btn-primary {
+  background: var(--brand) !important;
+  border-color: transparent !important;
+  color: #14161E !important;
+}
+
+html[data-theme="dark"] .global-search,
+html[data-theme="dark"] .global-search input {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+html[data-theme="dark"] .wb-activity-panel,
+html[data-theme="dark"] .wb-project-focus-block .wb-activity-panel,
+html[data-theme="dark"] .wb-stat-card,
+html[data-theme="dark"] .wb-todo-card,
+html[data-theme="dark"] .wb-empty {
+  background: var(--bg-panel) !important;
+  border-color: var(--border) !important;
+  color: var(--text);
+}
+
+html[data-theme="dark"] .wb-project-focus-item {
+  background: transparent !important;
+  border-bottom-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .wb-project-focus-item:hover {
+  background: var(--bg-elevated) !important;
+}
+
+html[data-theme="dark"] .wb-project-focus-name,
+html[data-theme="dark"] .wb-project-focus-row .v,
+html[data-theme="dark"] .wb-section-title {
+  color: var(--text) !important;
+}
+
+html[data-theme="dark"] .wb-project-focus-row .k,
+html[data-theme="dark"] .wb-stat-label,
+html[data-theme="dark"] .wb-activity-meta {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .wb-project-focus-row.is-blocker .v {
+  color: #F07A7A !important;
+}
+
+html[data-theme="dark"] .wb-chip--overdue {
+  color: #F07A7A !important;
+  background: var(--danger-soft) !important;
+}
+
+html[data-theme="dark"] .wb-chip--soon {
+  color: #E4B84A !important;
+  background: var(--warning-soft) !important;
+}
+
+html[data-theme="dark"] .wb-more-link {
+  color: var(--brand) !important;
+}
+
+html[data-theme="dark"] .project-focus-panel,
+html[data-theme="dark"] .project-plan-panel {
+  background: var(--bg-panel) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .project-focus-textarea {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+/* —— 兜底：覆盖业务模板里大量内联浅色（模板库/弹窗/人员档案等） —— */
+html[data-theme="dark"] [style*="background:#fff"],
+html[data-theme="dark"] [style*="background: #fff"],
+html[data-theme="dark"] [style*="background:#FFF"],
+html[data-theme="dark"] [style*="background:#ffffff"],
+html[data-theme="dark"] [style*="background:#FFFFFF"],
+html[data-theme="dark"] [style*="background:#FAFAFA"],
+html[data-theme="dark"] [style*="background:#F9FAFB"],
+html[data-theme="dark"] [style*="background:#FAFAF9"],
+html[data-theme="dark"] [style*="background:#F8FAFC"],
+html[data-theme="dark"] [style*="background:#F3F4F6"],
+html[data-theme="dark"] [style*="background:#F3F3F0"] {
+  background: var(--bg-panel) !important;
+}
+
+html[data-theme="dark"] [style*="color:#1F2937"],
+html[data-theme="dark"] [style*="color:#374151"],
+html[data-theme="dark"] [style*="color:#111827"],
+html[data-theme="dark"] [style*="color:#4B5563"] {
+  color: var(--text) !important;
+}
+
+html[data-theme="dark"] [style*="color:#6B7280"],
+html[data-theme="dark"] [style*="color:#9CA3AF"] {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] [style*="border:1px solid #E5E7EB"],
+html[data-theme="dark"] [style*="border: 1px solid #E5E7EB"],
+html[data-theme="dark"] [style*="border-bottom:1px solid #E5E7EB"],
+html[data-theme="dark"] [style*="border:1px solid #F3F4F6"] {
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] [style*="background:#FFFBEB"],
+html[data-theme="dark"] [style*="background:#FFFBFB"],
+html[data-theme="dark"] [style*="background:#FFFCF5"],
+html[data-theme="dark"] [style*="background:#FEF2F2"],
+html[data-theme="dark"] [style*="background:#FEF3C7"] {
+  background: var(--warning-soft) !important;
+}
+
+html[data-theme="dark"] table,
+html[data-theme="dark"] .todo-table,
+html[data-theme="dark"] .kpi-plan-table,
+html[data-theme="dark"] .perm-table,
+html[data-theme="dark"] .ds-table,
+html[data-theme="dark"] .log-table {
+  background: transparent;
+  color: var(--text);
+}
+
+html[data-theme="dark"] table tbody tr,
+html[data-theme="dark"] table tbody td {
+  background: transparent !important;
+  color: var(--text) !important;
+}
+
+html[data-theme="dark"] table thead th {
+  background: var(--bg-muted) !important;
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] table tbody tr:hover,
+html[data-theme="dark"] table tbody tr:hover td {
+  background: var(--bg-elevated) !important;
+}
+
+html[data-theme="dark"] .modal-box,
+html[data-theme="dark"] .modal-header,
+html[data-theme="dark"] .modal-body,
+html[data-theme="dark"] .modal-footer {
+  background: var(--bg-panel) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .content-card,
+html[data-theme="dark"] .project-card,
+html[data-theme="dark"] .kanban-card,
+html[data-theme="dark"] .task-card,
+html[data-theme="dark"] .lite-more-item {
+  background: var(--bg-panel) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  background: var(--bg-elevated) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .project-card--dash,
+html[data-theme="dark"] .project-card {
+  background: var(--bg-panel) !important;
+  border-color: var(--border) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+html[data-theme="dark"] .project-card-progress-bar {
+  background: var(--border) !important;
+}
+
+html[data-theme="dark"] .project-card-progress-bar .progress-fill {
+  background: #60A5FA !important;
+}
+
+html[data-theme="dark"] .project-card-detail-link {
+  color: #93C5FD !important;
+}
+
+html[data-theme="dark"] .avatar-stack .person-avatar,
+html[data-theme="dark"] .avatar-stack-more {
+  box-shadow: 0 0 0 2px var(--bg-panel);
+}

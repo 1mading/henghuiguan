@@ -104,15 +104,24 @@ X-Api-Key: <与 .env 中 API_KEY 相同>
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/external/health` | 健康检查 |
-| GET | `/external/catalog` | 可写资源目录 |
+| GET | `/external/catalog` | 可写资源目录（机器可读，最准） |
+| GET | `/external/project-templates` | 模板库 |
 | POST/PATCH/DELETE | `/external/projects` | 项目 |
-| POST/PATCH/DELETE | `/external/tasks` | 任务 |
+| POST | `/external/projects/:id/sync-phase` | 同步阶段 |
+| POST | `/external/projects/:id/handover` | 负责人交接 |
+| GET | `/external/projects/:id/plan-ledger` | 计划台账导出 |
+| POST | `/external/projects/:id/plan-verify` | 计划台账校验 |
+| POST/PATCH/DELETE | `/external/tasks` | 任务 / 里程碑 |
+| GET/POST/PATCH | `/external/issues` | 问题闭环 |
+| GET | `/external/history` | 变更日志查询 |
 | POST | `/external/tasks/:id/comments` | 评论 |
 | POST/PATCH/DELETE | `/external/dependencies` | 依赖 |
 | POST | `/external/users` | 用户 upsert |
 | PUT | `/external/work-calendar` | 工作日历 |
-| POST | `/external/change-logs` | 变更日志 |
+| POST | `/external/change-logs` | 追加变更日志 |
 | POST | `/external/batch` | 批量写入 |
+
+完整字段与示例见：[第三方写入接口.md](./第三方写入接口.md)。
 
 ### 调用示例
 
@@ -121,7 +130,8 @@ curl -s -H "X-Api-Key: 你的API_KEY" http://127.0.0.1:3000/api/external/health
 curl -s -H "X-Api-Key: 你的API_KEY" http://127.0.0.1:3000/api/external/catalog
 ```
 
-只读查询另见 WorkBuddy：`GET /api/workbuddy/query`（`WORKBUDDY_API_KEY` 或共用 `API_KEY`）。
+只读查询另见 WorkBuddy：`GET /api/workbuddy/query`（`WORKBUDDY_API_KEY` 或共用 `API_KEY`），文档 [workbuddy.md](./workbuddy.md)。  
+人员级权限可用作用域 Key：[作用域Key接入说明.md](../../作用域Key接入说明.md)。
 
 ---
 

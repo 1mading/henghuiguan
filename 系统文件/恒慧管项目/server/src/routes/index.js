@@ -19,6 +19,7 @@ const dataSecurityRoutes = require('./dataSecurity');
 const permissionsRoutes = require('./permissions');
 const scopedApiKeysRoutes = require('./scopedApiKeys');
 const projectTemplatesRoutes = require('./projectTemplates');
+const textPolishRoutes = require('./textPolish');
 
 const router = express.Router();
 
@@ -42,6 +43,7 @@ router.use(dataSecurityRoutes);
 router.use(permissionsRoutes);
 router.use(scopedApiKeysRoutes);
 router.use(projectTemplatesRoutes);
+router.use(textPolishRoutes);
 router.use(systemUpdatesRoutes);
 router.use(notificationsRoutes);
 router.use(workCalendarRoutes);

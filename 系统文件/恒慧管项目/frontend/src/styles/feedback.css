@@ -1,0 +1,32 @@
+/* 统一反馈：toast / 空状态 / loading */
+.hhg-toast-host {
+  position: fixed; z-index: 9999; right: 16px; bottom: 16px;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+.hhg-toast {
+  pointer-events: auto; min-width: 200px; max-width: 360px;
+  padding: 10px 14px; border-radius: 10px;
+  background: var(--toast-bg); color: var(--toast-fg);
+  box-shadow: var(--shadow); font-size: 13px; line-height: 1.4;
+  animation: hhg-toast-in .2s ease;
+}
+.hhg-toast.is-success { border-left: 3px solid var(--success); }
+.hhg-toast.is-error { border-left: 3px solid var(--danger); }
+.hhg-toast.is-info { border-left: 3px solid var(--info); }
+@keyframes hhg-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.hhg-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 48px 20px; color: var(--text-muted); text-align: center;
+}
+.hhg-empty i { font-size: 28px; color: var(--text-light); }
+.hhg-empty-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.hhg-empty-desc { font-size: 13px; max-width: 320px; }
+
+.hhg-btn-loading { position: relative; pointer-events: none; opacity: .75; }
+.hhg-btn-loading::after {
+  content: ''; width: 14px; height: 14px; margin-left: 8px;
+  border: 2px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; display: inline-block; vertical-align: -2px;
+  animation: hhg-spin .7s linear infinite;
+}

@@ -1,0 +1,6 @@
+# 恒慧管 frontend 构建产物（Vite dist）
+node_modules/
+dist/
+src/app/_archive/
+.DS_Store
+*.log

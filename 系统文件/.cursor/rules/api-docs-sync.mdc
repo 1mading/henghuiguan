@@ -1,0 +1,32 @@
+---
+description: 功能实现后必须把第三方/查询接口文档更新到与代码一致
+alwaysApply: true
+---
+
+# 接口文档必须同步最新
+
+凡新增、变更、下线 **HTTP 接口**（含字段语义变更），完成实现后**同一次交付内**更新文档，不得只改代码留旧文档。
+
+## 必对文档（按变更面选）
+
+| 变更面 | 文档 |
+|--------|------|
+| `/api/external/*` 写入 | `恒慧管项目/server/docs/第三方写入接口.md` |
+| `/api/workbuddy/*` 只读 | `恒慧管项目/server/docs/workbuddy.md` |
+| MySQL / 第三方接入摘要 | `恒慧管项目/server/docs/MySQL连接与第三方接入.md` |
+| 作用域 Key | `恒慧管项目/作用域Key接入说明.md`（若影响接入） |
+| 进件 / 钉钉等专题 | 对应 `server/docs/` 专题文档 |
+
+同时更新运行时目录：`getCatalog()`（`server/src/services/externalWrite.js`），保证 `GET /api/external/catalog` 与 md 一致。
+
+## 核对清单
+
+1. 一览表：方法 + 路径 + 一句说明
+2. 请求/响应字段表（新增或改语义的字段）
+3. 鉴权方式（全局 `API_KEY` / 作用域 Key / JWT）
+4. 相关接口交叉引用（写入 ↔ workbuddy）
+5. 纯文档改动不记发版 pending；接口行为变更若用户可见，仍按 Agent 发版流程
+
+## 验收
+
+以代码路由（`server/src/routes/*.js`）与 `getCatalog()` 为准；静态 md 不得落后于二者。

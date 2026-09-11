@@ -12,6 +12,7 @@ const { mergeReleasesFromDisk } = require('./services/systemUpdates');
 const { validateProductionConfig } = require('./utils/startupCheck');
 const { getLanIPv4List, getPrimaryLanIPv4 } = require('./utils/localNetwork');
 const { startOpsReminderScheduler } = require('./services/opsReminder');
+const { ensureFrontendBuild } = require('./utils/ensureFrontendBuild');
 
 function pruneAutoCreatedUsersOnBoot() {
   const users = getAllUsers();
@@ -46,17 +47,25 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/api', apiRoutes);
 
 if (config.staticDir) {
-  const htmlPath = path.join(config.staticDir, '恒慧管.html');
+  const legacyHtmlPath = path.join(config.staticDir, '恒慧管.html');
+  const builtIndexPath = path.join(config.frontendDist, 'index.html');
+  const useBuilt = config.frontendMode === 'built' && fs.existsSync(builtIndexPath);
+  if (config.frontendMode === 'built' && !fs.existsSync(builtIndexPath)) {
+    console.warn('[static] HHG_FRONTEND=built 但未找到', builtIndexPath, '→ 回退 legacy');
+  }
+
+  const appHtmlPath = useBuilt ? builtIndexPath : legacyHtmlPath;
+
   const serveApp = (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     try {
-      const stat = fs.statSync(htmlPath);
+      const stat = fs.statSync(appHtmlPath);
       res.setHeader('ETag', `"hhg-${stat.mtimeMs}"`);
       res.setHeader('Last-Modified', stat.mtime.toUTCString());
     } catch (_) { /* ignore */ }
-    res.sendFile(htmlPath);
+    res.sendFile(appHtmlPath);
   };
 
   // 无 .html 后缀的访问入口（钉钉首页推荐 /app）
@@ -81,6 +90,22 @@ if (config.staticDir) {
   });
   app.get('/桌宠演示.html', (_req, res) => res.redirect(301, '/pet'));
 
+  // built：先挂前端 dist；本地/非生产缩短静态缓存，避免钉钉/浏览器卡住旧哈希包
+  if (useBuilt) {
+    const assetMaxAge = config.isProduction && !config.localAsServer ? '7d' : 0;
+    app.use(express.static(config.frontendDist, {
+      index: false,
+      maxAge: assetMaxAge,
+      setHeaders(res, filePath) {
+        const p = String(filePath);
+        if (p.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        } else if (!config.isProduction || config.localAsServer) {
+          res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+        }
+      },
+    }));
+  }
   app.use(express.static(config.staticDir));
 }
 
@@ -91,6 +116,10 @@ app.use((err, _req, res, _next) => {
 
 seedIfEmpty();
 ensureWorkCalendarInStore();
+const frontendBuild = ensureFrontendBuild(config);
+if (frontendBuild.built) {
+  console.log('[static] 已用最新 frontend/dist');
+}
 const mergedReleases = mergeReleasesFromDisk();
 if (mergedReleases > 0) {
   console.log('[systemUpdates] 已合并发布记录', mergedReleases, '条');
@@ -107,6 +136,7 @@ app.listen(config.port, config.host, () => {
   console.log(`  健康检查: http://localhost:${config.port}/api/health`);
   if (config.staticDir) {
     console.log(`  本机访问: http://localhost:${config.port}/app`);
+    console.log(`  前端模式: ${config.frontendMode}${config.frontendMode === 'built' ? ' → ' + config.frontendDist : ' → 恒慧管.html'}`);
     console.log(`  滚动大屏: http://localhost:${config.port}/wall?key=<API_KEY>`);
     console.log(`  桌宠演示: http://localhost:${config.port}/pet`);
   }

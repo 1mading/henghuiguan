@@ -21,6 +21,15 @@ module.exports = {
   staticDir: process.env.STATIC_DIR
     ? path.resolve(__dirname, '..', process.env.STATIC_DIR)
     : path.resolve(__dirname, '../..'),
+  /**
+   * H5 前端模式：
+   * - legacy：发放根目录 恒慧管.html（默认可回滚）
+   * - built：发放 frontend/dist（小 B 工程化产物）
+   */
+  frontendMode: String(process.env.HHG_FRONTEND || 'legacy').trim().toLowerCase() === 'built' ? 'built' : 'legacy',
+  frontendDist: process.env.FRONTEND_DIST
+    ? path.resolve(__dirname, '..', process.env.FRONTEND_DIST)
+    : path.resolve(__dirname, '../../frontend/dist'),
   dingtalk: {
     corpId: process.env.DINGTALK_CORP_ID || '',
     appKey: process.env.DINGTALK_APP_KEY || '',
@@ -91,5 +100,16 @@ module.exports = {
     reportPath: (process.env.NCC_MONITOR_REPORT_PATH || '/api/loop/reports/ncc-monitor/html').trim(),
     loopUsername: (process.env.NCC_MONITOR_LOOP_USERNAME || '').trim(),
     loopPassword: (process.env.NCC_MONITOR_LOOP_PASSWORD || '').trim(),
+  },
+  /** 文案润色：OpenAI 兼容 Chat Completions（密钥仅服务端） */
+  llm: {
+    baseUrl: (process.env.LLM_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/+$/, ''),
+    apiKey: (process.env.LLM_API_KEY || '').trim(),
+    defaultModel: (process.env.LLM_DEFAULT_MODEL || 'deepseek-chat').trim(),
+    models: (process.env.LLM_MODELS || process.env.LLM_DEFAULT_MODEL || 'deepseek-chat')
+      .split(/[,，]/)
+      .map(s => s.trim())
+      .filter(Boolean),
+    timeoutMs: Math.min(180000, Math.max(5000, parseInt(process.env.LLM_TIMEOUT_MS || '60000', 10) || 60000)),
   },
 };

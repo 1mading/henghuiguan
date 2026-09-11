@@ -21,13 +21,24 @@ function userToJsLine(u) {
 }
 
 /**
- * 将 users 写回 恒慧管.html 内嵌种子数据，刷新页面时与后端保持一致
+ * 将 users 写回 恒慧管.html 内嵌种子数据，刷新页面时与后端保持一致。
+ * built 模式下禁止写入（避免污染 Vite dist / 构建源）。
  */
 function persistUsersToHtml(users) {
   try {
+    if (config.frontendMode === 'built') {
+      return false;
+    }
     const htmlPath = path.join(config.staticDir, '恒慧管.html');
     if (!fs.existsSync(htmlPath)) {
       console.warn('[persistHtmlUsers] HTML 不存在:', htmlPath);
+      return false;
+    }
+    // 防御：禁止写入 frontend/dist
+    const resolved = path.resolve(htmlPath);
+    const distRoot = path.resolve(config.frontendDist || '');
+    if (distRoot && resolved.startsWith(distRoot + path.sep)) {
+      console.warn('[persistHtmlUsers] 已跳过 dist 路径:', resolved);
       return false;
     }
     let html = fs.readFileSync(htmlPath, 'utf8');

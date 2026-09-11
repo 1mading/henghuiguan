@@ -1,0 +1,40 @@
+/* DESIGN tokens + 语义色（暗色细则见 dark.css） */
+:root {
+  /* DESIGN：暖白底 + 深靛蓝主色 + 琥珀强调 */
+  --bg-page: #FAFAF8;
+  --bg-panel: #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --bg-muted: #F3F3F0;
+  --sidebar-bg: #FFFFFF;
+  --text: #1A1A1A;
+  --text-muted: #6B6B6B;
+  --text-light: #9A9A9A;
+  --brand: #3D4A8C;
+  --brand-dark: #2F3A6E;
+  --brand-soft: #E8EAF5;
+  --accent-urgent: #E8A84A;
+  --border: #E8E8E4;
+  --border-light: #F3F3F0;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --radius: 12px;
+
+  --success: #059669;
+  --success-soft: #ECFDF5;
+  --warning: #D97706;
+  --warning-soft: #FEF3C7;
+  --danger: #DC2626;
+  --danger-soft: #FEF2F2;
+  --info: #2563EB;
+  --info-soft: #EFF6FF;
+  --status-pending: #9CA3AF;
+  --status-active: #2563EB;
+  --status-done: #059669;
+  --status-paused: #D97706;
+  --priority-high: #DC2626;
+  --priority-medium: #D97706;
+  --priority-low: #6B7280;
+  --toast-bg: #1F2937;
+  --toast-fg: #FFFFFF;
+  --overlay: rgba(0, 0, 0, 0.45);
+  --hhg-transition: background-color .2s ease, color .2s ease, border-color .2s ease;
+}

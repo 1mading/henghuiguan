@@ -418,6 +418,16 @@ function setRolePermissions(matrix) {
   return matrix;
 }
 
+function getLlmSettings() {
+  return getStore().llmSettings || null;
+}
+
+function setLlmSettings(settings) {
+  getStore().llmSettings = settings;
+  persistStore();
+  return settings;
+}
+
 function isEmpty() {
   const s = getStore();
   return s.users.length === 0 && s.projects.length === 0;
@@ -839,6 +849,8 @@ module.exports = {
   setWorkCalendar,
   getRolePermissions,
   setRolePermissions,
+  getLlmSettings,
+  setLlmSettings,
   getStaffDeptCatalog,
   setStaffDeptCatalog,
   isEmpty,

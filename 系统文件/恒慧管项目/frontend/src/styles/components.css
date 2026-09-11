@@ -1,0 +1,28 @@
+/* 统一组件类（R1）：在业务模板中逐步替换散落样式 */
+.hhg-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 14px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg-panel); color: var(--text); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: var(--hhg-transition);
+}
+.hhg-btn:hover { background: var(--border-light); }
+.hhg-btn-primary {
+  background: var(--brand); border-color: var(--brand); color: #fff;
+}
+.hhg-btn-primary:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
+.hhg-btn-ghost { background: transparent; }
+.hhg-btn-danger { background: var(--danger-soft); border-color: transparent; color: var(--danger); }
+
+.hhg-tag {
+  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; background: var(--brand-soft); color: var(--brand-dark);
+}
+.hhg-tag-success { background: var(--success-soft); color: var(--success); }
+.hhg-tag-warning { background: var(--warning-soft); color: var(--warning); }
+.hhg-tag-danger { background: var(--danger-soft); color: var(--danger); }
+.hhg-tag-muted { background: var(--border-light); color: var(--text-muted); }
+
+.hhg-card {
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 16px;
+}

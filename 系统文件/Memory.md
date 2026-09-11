@@ -37,13 +37,15 @@
 
 | 决策 | 说明 |
 |------|------|
-| UI 升级路径 A | 在 `恒慧管.html` 渐进迁入扣子 DESIGN/高频交互；**模型与后端以现网为准**；不部署扣子 Next；主导航工作台/项目/任务/团队，多出入口在设置下拉；项目计划/里程碑/变更统一在项目详情 |
+| UI 升级小 B | Vite + 原生多模块；`frontend/` 构建；`HHG_FRONTEND=legacy` 或 `built` 可回滚；不引入 Vue/React；不部署扣子 Next；视觉沿用 DESIGN token；夜间模式仅 localStorage `hhg_theme` |
+| built 前端发放 | `HHG_FRONTEND=built` 时页面读 `frontend/dist`；改 src 后须 `npm run build`；后端启动会在 src 新于 dist 时自动构建（`HHG_AUTO_BUILD`，默认本地开启） |
 | 根目录文件体系 | 仅 AI 文档 + `.ai` + `恒慧管项目/`；工具目录保留 |
 | JSON 文件存储 | 开发默认；大并发再迁库（R-004） |
-| H5 单文件前端 | 业务集中在 `恒慧管项目/恒慧管.html` |
+| H5 前端 | 业务源在 `frontend/src`；`恒慧管.html` 保留为 legacy 回滚；入口 `/app` 不变 |
 | 多人实时同步 | SSE 变更推送 + soft-pull；`LiveRefresh` 作断线兜底 |
 | 小程序定位 | 免登 + 首页；复杂编辑走 H5 |
 | 发版 | 先记 `_pending.json`，用户确认后再 `publish-release` |
+| 接口文档同步 | 功能落地后立刻更新第三方写入 / workbuddy 等 docs 与 `getCatalog()`，不得只改代码 |
 | 敏感数据 | `.env` / 业务库 / 真实 seed 不进 Git |
 | 运维提醒 | 后端常驻时每天 16:00 检查待发版/Git 待推送，有待办才发钉钉；需 `OPS_REMINDER_ENABLED=true` |
 | 定时消息去重 | 临期/逾期/人员缺失等系统定时通知：同一事项一周内不重复推送 |

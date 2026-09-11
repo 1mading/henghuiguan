@@ -10,12 +10,17 @@
 
 ```
 D:\apps\henghuiguan\
-├── 恒慧管.html          ← H5 前端
+├── 恒慧管.html          ← H5 前端（legacy / 回滚）
+├── frontend\            ← 小 B 工程化源码与 dist
+│   ├── dist\            ← HHG_FRONTEND=built 时发放
+│   └── src\
 ├── server\              ← Node 后端
 │   ├── .env
 │   ├── data\
 │   └── src\
 ```
+
+发版若启用 built 前端，部署后执行 `npm run build:web`（在 `server` 目录），并设置 `HHG_FRONTEND=built`。详见 [前端构建与回滚.md](./前端构建与回滚.md)。
 
 ---
 
