@@ -98,202 +98,460 @@ function buildProjectGanttTasks(project) {
   return { rows, unscheduled };
 }
 
+function isProjectWorkTab(tab) {
+  return tab === 'work' || tab === 'milestones' || tab === 'tasks' || tab === 'delivery';
+}
+
+function normalizeProjectWorkView(view) {
+  if (view === 'gantt' || view === 'table' || view === 'list') return view;
+  if (view === 'delivery') return 'list';
+  return 'table';
+}
+
 function setProjectPlanView(view) {
-  if (view === 'delivery') {
-    setProjectDetailTab('delivery');
-    return;
+  if (view === 'delivery') view = 'list';
+  const next = normalizeProjectWorkView(view);
+  if (next !== 'list') {
+    state.inlineDeliveryEditId = null;
+    state.editingDeliveryTaskId = null;
+    state.deliveryForm = null;
   }
-  state.projectPlanView = view === 'gantt' ? 'gantt' : 'table';
-  if (state.projectDetailTab !== 'milestones') state.projectDetailTab = 'milestones';
+  state.projectPlanView = next;
+  state.projectDetailTab = 'work';
   render();
 }
 
 function renderProjectPlanViewToggle() {
-  const view = state.projectPlanView === 'gantt' ? 'gantt' : 'table';
+  const view = normalizeProjectWorkView(state.projectPlanView);
+  const items = [
+    { id: 'table', icon: 'fa-table', label: '表格' },
+    { id: 'gantt', icon: 'fa-chart-gantt', label: '甘特图' },
+    { id: 'list', icon: 'fa-clipboard-check', label: '清单' },
+  ];
   return `
-    <div class="project-plan-view-toggle" role="tablist" aria-label="里程碑视图">
-      <button type="button" class="${view === 'table' ? 'active' : ''}" onclick="setProjectPlanView('table')">
-        <i class="fas fa-table"></i>表格
-      </button>
-      <button type="button" class="${view === 'gantt' ? 'active' : ''}" onclick="setProjectPlanView('gantt')">
-        <i class="fas fa-chart-gantt"></i>甘特图
-      </button>
+    <div class="project-plan-view-toggle" role="tablist" aria-label="项目执行视图">
+      ${items.map(item => `
+        <button type="button" class="${view === item.id ? 'active' : ''}" onclick="setProjectPlanView('${item.id}')">
+          <i class="fas ${item.icon}"></i>${item.label}
+        </button>
+      `).join('')}
     </div>
   `;
 }
 
-function setProjectDeliveryTab(tab) {
-  state.projectDeliveryTab = tab === 'tasks' ? 'tasks' : 'milestones';
+function normalizeDeliveryFilter(filter) {
+  if (filter === 'empty' || filter === 'partial' || filter === 'complete') return filter;
+  return 'all';
+}
+
+function setDeliveryFilter(filter) {
+  const next = normalizeDeliveryFilter(filter);
+  state.deliveryFilter = state.deliveryFilter === next && next !== 'all' ? 'all' : next;
   render();
 }
 
-function renderProjectDeliveryTabToggle() {
-  const tab = state.projectDeliveryTab === 'tasks' ? 'tasks' : 'milestones';
+function ensureDeliveryOpenMap() {
+  if (!state.deliveryOpenTaskIds || typeof state.deliveryOpenTaskIds !== 'object') {
+    state.deliveryOpenTaskIds = {};
+  }
+  return state.deliveryOpenTaskIds;
+}
+
+function deliveryBucket(task) {
+  const c = getDeliveryCompleteness(task);
+  if (c.complete) return 'complete';
+  if (!c.filled) return 'empty';
+  return 'partial';
+}
+
+function matchesDeliveryFilter(task, filter) {
+  const f = normalizeDeliveryFilter(filter);
+  if (f === 'all') return true;
+  return deliveryBucket(task) === f;
+}
+
+function groupMatchesDeliveryFilter(milestone, children, filter) {
+  const f = normalizeDeliveryFilter(filter);
+  if (f === 'all') return true;
+  if (milestone && matchesDeliveryFilter(milestone, f)) return true;
+  return (children || []).some(t => matchesDeliveryFilter(t, f));
+}
+
+function getDeliveryEvidenceFiles(task) {
+  return (task && Array.isArray(task.attachments) ? task.attachments : []).filter(a =>
+    a && (a.purpose === 'evidence' || isWikiAttachment(a))
+  );
+}
+
+function hasDeliveryRecord(task) {
+  return !!(getDeliveryEvidenceFiles(task).length || String((task && task.verification) || '').trim());
+}
+
+function getDeliveryDirectChildren(parentId, workTasks) {
+  return (workTasks || [])
+    .filter(t => (t.parentId || null) === parentId)
+    .sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'zh'));
+}
+
+function getDeliveryDescendants(parentId, workTasks) {
+  const out = [];
+  const walk = (pid) => {
+    getDeliveryDirectChildren(pid, workTasks).forEach(t => {
+      out.push(t);
+      walk(t.id);
+    });
+  };
+  walk(parentId);
+  return out;
+}
+
+function getUnassignedDeliveryRoots(unassigned) {
+  const ids = new Set((unassigned || []).map(t => t.id));
+  return (unassigned || []).filter(t => !t.parentId || !ids.has(t.parentId));
+}
+
+function splitDeliveryLines(value) {
+  return String(value || '')
+    .split(/\r?\n/)
+    .map(s => s.replace(/^\s*[-*•、]\s*/, '').trim())
+    .filter(Boolean);
+}
+
+function renderDeliveryOlRows(label, depth, cells) {
+  const list = (cells && cells.length) ? cells : [{ html: '未填写', empty: true }];
+  return list.map((cell, i) => `
+    <div class="delivery-ol-row" style="--d:${depth}">
+      <div class="delivery-ol-k">${i === 0 ? escapeHtml(label) : ''}</div>
+      <div class="delivery-ol-v${cell.empty ? ' is-empty' : ''}">${cell.html}</div>
+    </div>
+  `).join('');
+}
+
+function renderDeliveryFileChip(item) {
+  const safeName = (item.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const wiki = isWikiAttachment(item);
+  const isImg = !wiki && (isImageMime(item.mimeType) || isImageFileName(item.name));
+  const openBtn = wiki
+    ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openDingTalkDoc('${(item.url || item.sourceUrl || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')" title="打开钉钉文档"><i class="fas fa-external-link-alt"></i></button>`
+    : `<button type="button" class="btn btn-ghost btn-sm" onclick="downloadEntityFile('${item.fileId}','${safeName}')"><i class="fas fa-download"></i></button>`;
   return `
-    <div class="project-plan-view-toggle" role="tablist" aria-label="交付检查视图">
-      <button type="button" class="${tab === 'milestones' ? 'active' : ''}" onclick="setProjectDeliveryTab('milestones')">
-        <i class="fas fa-flag"></i>里程碑
-      </button>
-      <button type="button" class="${tab === 'tasks' ? 'active' : ''}" onclick="setProjectDeliveryTab('tasks')">
-        <i class="fas fa-tasks"></i>任务
-      </button>
+    <span class="delivery-ol-file">
+      ${isImg
+        ? `<img data-authed-file="${item.fileId}" alt="" class="delivery-ol-thumb" onclick="previewAuthedImage('${item.fileId}')">`
+        : `<i class="fas ${wiki ? 'fa-file-alt delivery-ol-ding-icon' : 'fa-file'}"></i>`}
+      <span title="${escapeHtml(item.name || '')}">${escapeHtml(item.name || '未命名')}</span>
+      ${wiki ? '<span class="delivery-ol-ding">钉钉</span>' : ''}
+      ${openBtn}
+    </span>
+  `;
+}
+
+function renderDeliveryNodeFields(task, depth) {
+  const isMs = isMilestoneTask(task);
+  let html = '';
+  if (isMs) {
+    html += renderDeliveryOlRows(
+      '交付物',
+      depth,
+      splitDeliveryLines(getMilestoneDeliverablesText(task)).map(t => ({ html: escapeHtml(t) }))
+    );
+    const acc = String(getMilestoneAcceptanceText(task) || '').trim();
+    html += renderDeliveryOlRows('验收标准', depth, acc ? [{ html: escapeHtml(acc) }] : []);
+  }
+  const files = getDeliveryEvidenceFiles(task);
+  const note = String((task && task.verification) || '').trim();
+  const rec = files.length
+    ? files.map(item => ({ html: renderDeliveryFileChip(item) }))
+    : (note ? [{ html: escapeHtml(note) }] : []);
+  html += renderDeliveryOlRows('验收记录', depth, rec);
+  const fb = String((task && task.feedback) || '').trim();
+  html += renderDeliveryOlRows('业务反馈', depth, fb ? [{ html: escapeHtml(fb) }] : []);
+  html += renderDeliveryOlRows(
+    '遗留问题',
+    depth,
+    splitDeliveryLines(task && task.leftover).map(t => ({ html: escapeHtml(t) }))
+  );
+  return html;
+}
+
+function buildDeliveryGroups(project) {
+  const milestones = getProjectMilestones(project);
+  const workTasks = getProjectWorkTasksFlat(project);
+  const byMs = new Map(milestones.map(m => [m.id, []]));
+  const unassigned = [];
+  workTasks.forEach(t => {
+    const owner = getOwningMilestone(t);
+    if (owner && byMs.has(owner.id)) byMs.get(owner.id).push(t);
+    else unassigned.push(t);
+  });
+  return { milestones, byMs, unassigned, workTasks };
+}
+
+function countDeliveryBuckets(list) {
+  let complete = 0;
+  let partial = 0;
+  let empty = 0;
+  (list || []).forEach(task => {
+    const b = deliveryBucket(task);
+    if (b === 'complete') complete += 1;
+    else if (b === 'empty') empty += 1;
+    else partial += 1;
+  });
+  return { complete, partial, empty, total: (list || []).length };
+}
+
+function renderDeliveryFillActions(task, editing) {
+  if (!canEditTask(task)) return '';
+  if (editing) {
+    return `
+      <div class="delivery-form-actions">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="cancelEditTaskDelivery()">取消</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="saveTaskDeliveryFields('${task.id}')"><i class="fas fa-save"></i> 保存</button>
+      </div>
+    `;
+  }
+  return `<button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${task.id}')">填写</button>`;
+}
+
+function renderDeliveryEvidenceList(task, { canUpload } = {}) {
+  const files = getDeliveryEvidenceFiles(task);
+  const canUp = !!(canUpload && canEditTask(task) && ApiConfig.enabled);
+  const rows = files.map(item => {
+    const safeName = (item.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const refKey = attachmentRefKey(item);
+    const wiki = isWikiAttachment(item);
+    const isImg = !wiki && (isImageMime(item.mimeType) || isImageFileName(item.name));
+    return `
+      <div class="delivery-evidence-item">
+        ${isImg
+          ? `<img data-authed-file="${item.fileId}" alt="" class="delivery-evidence-thumb" onclick="previewAuthedImage('${item.fileId}')">`
+          : `<i class="fas ${wiki ? 'fa-file-alt delivery-ol-ding-icon' : 'fa-file'} delivery-evidence-icon"></i>`}
+        <span class="delivery-evidence-name" title="${escapeHtml(item.name || '')}">${escapeHtml(item.name || '未命名')}</span>
+        ${wiki ? '<span class="delivery-ol-ding">钉钉</span>' : ''}
+        ${wiki
+          ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openDingTalkDoc('${(item.url || item.sourceUrl || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')"><i class="fas fa-external-link-alt"></i></button>`
+          : `<button type="button" class="btn btn-ghost btn-sm" onclick="downloadEntityFile('${item.fileId}','${safeName}')"><i class="fas fa-download"></i></button>`}
+        ${canUp && canDeleteEntityFile(item, true) ? `
+          <button type="button" class="btn btn-ghost btn-sm" style="color:#DC2626;" onclick="deleteEntityFile('task','${task.id}','${refKey}')"><i class="fas fa-trash-alt"></i></button>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+  return `
+    <div class="delivery-evidence-box" ${canUp ? `tabindex="0" onpaste="handleDeliveryEvidencePaste(event,'${task.id}')"` : ''}>
+      <div class="delivery-evidence-toolbar">
+        <span>最终文件 ${files.length}</span>
+        ${canUp ? `
+        <div class="delivery-form-actions">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="showDeliveryWikiDocPicker('${task.id}')">
+            <i class="fas fa-link"></i> 钉钉文档
+          </button>
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0;">
+            <i class="fas fa-upload"></i> 上传
+            <input type="file" multiple style="display:none;" onchange="uploadDeliveryEvidenceFiles('${task.id}',event)">
+          </label>
+        </div>
+        ` : ''}
+      </div>
+      ${canUp ? `<div class="delivery-evidence-hint">签字单、验收纪要、PDF 或钉钉文档；点此区域后 Ctrl+V 粘贴图片</div>` : ''}
+      ${files.length ? `<div class="delivery-evidence-list">${rows}</div>` : (canUp ? `<div class="delivery-evidence-empty">还没有文件</div>` : '')}
+      ${canUpload && !ApiConfig.enabled ? `<div class="delivery-evidence-hint">附件上传需连接服务端</div>` : ''}
     </div>
   `;
 }
 
-function renderDeliveryFieldCell(value) {
-  const text = String(value || '').trim();
-  if (!text) {
-    return `<span style="color:#D1D5DB;font-size:12px;">—</span>`;
+function showDeliveryWikiDocPicker(taskId) {
+  showWikiDocPicker('task', taskId, { linkPurpose: 'evidence', returnToDelivery: true });
+}
+
+async function uploadDeliveryEvidenceFiles(taskId, event) {
+  const files = Array.from((event.target && event.target.files) || []);
+  if (event.target) event.target.value = '';
+  if (!files.length) return;
+  try {
+    for (const file of files) {
+      await uploadFileToEntity('task', taskId, file, file.name, 'evidence');
+    }
+    render();
+  } catch (e) {
+    alert(e.message || '上传失败');
+    render();
   }
-  const short = text.length > 80 ? `${text.slice(0, 80)}…` : text;
-  return `<div style="font-size:12px;color:var(--text);line-height:1.45;white-space:pre-wrap;word-break:break-word;" title="${escapeHtml(text)}">${escapeHtml(short)}</div>`;
+}
+
+async function handleDeliveryEvidencePaste(event, taskId) {
+  const task = tasks.find(t => t.id === taskId);
+  if (!task || !canUploadTaskAttachment(task)) return;
+  const files = extractClipboardImageFiles(event);
+  if (!files.length) return;
+  event.preventDefault();
+  if (!ApiConfig.enabled || !authSession.token) {
+    alert('请登录并连接服务端后粘贴图片');
+    return;
+  }
+  try {
+    for (const file of files) {
+      await uploadFileToEntity('task', taskId, file, clipboardFileName(file, 'evidence'), 'evidence');
+    }
+  } catch (e) {
+    alert(e.message || '图片上传失败');
+  }
+  render();
+}
+
+function renderDeliveryEditField(label, body, extraClass) {
+  return `
+    <div class="delivery-edit-field${extraClass ? ` ${extraClass}` : ''}">
+      <div class="delivery-edit-k">${escapeHtml(label)}</div>
+      ${body}
+    </div>
+  `;
+}
+
+function renderDeliveryInlineForm(task) {
+  const isMs = isMilestoneTask(task);
+  const f = state.deliveryForm || {};
+  return `
+    <div class="project-inline-delivery-editor" id="delivery-edit-anchor" onclick="event.stopPropagation();">
+      <div class="delivery-edit-grid">
+        ${isMs ? renderDeliveryEditField(
+          '交付物',
+          `<textarea class="textarea delivery-edit-input is-lg" rows="5" oninput="state.deliveryForm.deliverables=this.value" placeholder="每行一项，保存后分行展示">${escapeHtml(f.deliverables || '')}</textarea>`
+        ) : ''}
+        ${isMs ? renderDeliveryEditField(
+          '验收标准',
+          `<textarea class="textarea delivery-edit-input" rows="3" oninput="state.deliveryForm.acceptanceCriteria=this.value" placeholder="文字描述">${escapeHtml(f.acceptanceCriteria || '')}</textarea>`
+        ) : ''}
+        ${renderDeliveryEditField('验收记录', renderDeliveryEvidenceList(task, { canUpload: true }))}
+        ${renderDeliveryEditField(
+          '业务反馈',
+          `<textarea class="textarea delivery-edit-input" rows="3" oninput="state.deliveryForm.feedback=this.value" placeholder="业务侧意见或确认情况">${escapeHtml(f.feedback || '')}</textarea>`
+        )}
+        ${renderDeliveryEditField(
+          '遗留问题',
+          `<textarea class="textarea delivery-edit-input is-lg" rows="4" oninput="state.deliveryForm.leftover=this.value" placeholder="每行一项，保存后分行展示">${escapeHtml(f.leftover || '')}</textarea>`,
+          'is-wide'
+        )}
+      </div>
+    </div>
+  `;
+}
+
+function renderDeliveryTaskBlock(task, workTasks, depth) {
+  const editing = state.inlineDeliveryEditId === task.id;
+  const kids = getDeliveryDirectChildren(task.id, workTasks);
+  const displayStatus = getTaskDisplayStatus(task);
+  const st = statusMap[displayStatus] || statusMap[task.status] || statusMap.todo;
+  const nest = Math.max(0, Number(depth) || 0);
+  return `
+    <div class="delivery-ol-row is-node is-task" style="--d:${nest}">
+      <div class="delivery-ol-title"><i class="fas fa-check-square"></i>${escapeHtml(task.title || task.id)}</div>
+      <div class="delivery-ol-meta">
+        ${task.assignee ? `<span class="delivery-task-assignee">${escapeHtml(task.assignee)}</span>` : ''}
+        <span class="status-tag status-${displayStatus}" style="font-size:10px;">${escapeHtml(st.label)}</span>
+        ${renderDeliveryCompletenessBadge(task)}
+        ${renderDeliveryFillActions(task, editing)}
+      </div>
+    </div>
+    ${editing ? `<div class="delivery-ol-edit" style="--d:${nest + 1}">${renderDeliveryInlineForm(task)}</div>` : renderDeliveryNodeFields(task, nest + 1)}
+    ${kids.map(child => renderDeliveryTaskBlock(child, workTasks, nest + 1)).join('')}
+  `;
+}
+
+function renderDeliveryMilestoneCard(milestone, workTasks) {
+  const editing = milestone && state.inlineDeliveryEditId === milestone.id;
+  const project = milestone && projects.find(p => p.id === milestone.projectId);
+  const canManage = !!(project && canManageProject(project) && !isProjectArchived(project));
+  const kids = milestone
+    ? getDeliveryDirectChildren(milestone.id, workTasks)
+    : getUnassignedDeliveryRoots(workTasks);
+  const displayStatus = milestone ? getTaskDisplayStatus(milestone) : null;
+  const st = displayStatus ? (statusMap[displayStatus] || statusMap[milestone.status] || statusMap.todo) : null;
+  return `
+    <div class="delivery-ol-row is-node is-ms" style="--d:0">
+      <div class="delivery-ol-title"><i class="fas fa-flag"></i>${escapeHtml((milestone && (milestone.title || milestone.id)) || '未归属任务')}</div>
+      <div class="delivery-ol-meta">
+        ${st ? `<span class="status-tag status-${displayStatus}" style="font-size:10px;"><i class="fas ${st.icon}"></i>${escapeHtml(st.label)}</span>` : ''}
+        ${milestone ? renderDeliveryCompletenessBadge(milestone) : ''}
+        ${milestone && canManage && !editing ? `
+          <button type="button" class="btn btn-ghost btn-sm" onclick="showNewSubTaskModal('${milestone.id}')">添加任务</button>
+        ` : ''}
+        ${milestone ? renderDeliveryFillActions(milestone, editing) : ''}
+      </div>
+    </div>
+    ${milestone ? (editing ? `<div class="delivery-ol-edit" style="--d:1">${renderDeliveryInlineForm(milestone)}</div>` : renderDeliveryNodeFields(milestone, 1)) : ''}
+    ${kids.map(t => renderDeliveryTaskBlock(t, workTasks, 1)).join('')}
+  `;
 }
 
 function renderProjectDeliveryBoard(project) {
   const canManage = canManageProject(project) && !isProjectArchived(project);
-  const scope = state.projectDeliveryTab === 'tasks' ? 'tasks' : 'milestones';
-  const isMsScope = scope === 'milestones';
-  const milestones = getProjectMilestones(project);
-  const workTasks = getProjectWorkTasksFlat(project);
-  const allRows = isMsScope
-    ? milestones.map(m => ({ task: m, kind: '里程碑' }))
-    : workTasks.map(t => ({ task: t, kind: '任务' }));
+  const { milestones, unassigned, workTasks } = buildDeliveryGroups(project);
+  const scored = [...milestones, ...workTasks];
+  const counts = countDeliveryBuckets(scored);
+  const filter = normalizeDeliveryFilter(state.deliveryFilter);
+  const filterBtn = (id, label, count) => `
+    <button type="button" class="delivery-filter-btn${filter === id ? ' active' : ''}" onclick="setDeliveryFilter('${id}')">
+      ${label} ${count}
+    </button>
+  `;
 
-  if (state.inlineDeliveryEditId) {
-    const editingRow = allRows.find(({ task }) => task.id === state.inlineDeliveryEditId)
-      || (() => {
-        const t = tasks.find(x => x.id === state.inlineDeliveryEditId);
-        return t ? { task: t, kind: isMilestoneTask(t) ? '里程碑' : '任务' } : null;
-      })();
-    if (editingRow) {
-      const task = editingRow.task;
-      const isMs = isMilestoneTask(task);
-      const f = state.deliveryForm || {};
-      return `
-        <section style="margin-top:8px;">
-          <div class="project-inline-delivery-editor" style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);">
-            <div class="project-inline-delivery-title">
-              <strong>${escapeHtml(task.title || task.id)}</strong>
-              <div style="display:flex;gap:6px;">
-                <button type="button" class="btn btn-ghost btn-sm" onclick="cancelEditTaskDelivery()">取消</button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="saveTaskDeliveryFields('${task.id}')"><i class="fas fa-save"></i> 保存</button>
-              </div>
-            </div>
-            <div class="project-inline-delivery-grid">
-              ${isMs ? `
-              <div>
-                <label class="form-label">交付物</label>
-                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.deliveryForm.deliverables=this.value">${escapeHtml(f.deliverables || '')}</textarea>
-              </div>
-              <div>
-                <label class="form-label">验收标准</label>
-                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.deliveryForm.acceptanceCriteria=this.value">${escapeHtml(f.acceptanceCriteria || '')}</textarea>
-              </div>
-              <div>
-                <label class="form-label">完成证据</label>
-                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.deliveryForm.completionEvidence=this.value" placeholder="签字/链接/截图等">${escapeHtml(f.completionEvidence || '')}</textarea>
-              </div>
-              ` : ''}
-              <div>
-                <label class="form-label">验证记录</label>
-                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.deliveryForm.verification=this.value">${escapeHtml(f.verification || '')}</textarea>
-              </div>
-              <div>
-                <label class="form-label">业务反馈</label>
-                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.deliveryForm.feedback=this.value">${escapeHtml(f.feedback || '')}</textarea>
-              </div>
-              <div>
-                <label class="form-label">遗留问题</label>
-                <textarea class="textarea" style="width:100%;height:56px;" oninput="state.deliveryForm.leftover=this.value">${escapeHtml(f.leftover || '')}</textarea>
-              </div>
-            </div>
-          </div>
-        </section>
-      `;
+  const cards = [];
+  const editingId = state.inlineDeliveryEditId;
+  const containsEdit = (milestone, descendants) => {
+    if (!editingId) return false;
+    if (milestone && milestone.id === editingId) return true;
+    return (descendants || []).some(t => t.id === editingId);
+  };
+  milestones.forEach(m => {
+    const descendants = getDeliveryDescendants(m.id, workTasks);
+    if (groupMatchesDeliveryFilter(m, descendants, filter) || containsEdit(m, descendants)) {
+      cards.push(renderDeliveryMilestoneCard(m, workTasks));
     }
+  });
+  if (unassigned.length && (groupMatchesDeliveryFilter(null, unassigned, filter) || containsEdit(null, unassigned))) {
+    cards.push(renderDeliveryMilestoneCard(null, unassigned));
   }
 
-  let completeCount = 0;
-  let partialCount = 0;
-  let emptyCount = 0;
-  allRows.forEach(({ task }) => {
-    const c = getDeliveryCompleteness(task);
-    if (c.complete) completeCount += 1;
-    else if (c.filled === 0) emptyCount += 1;
-    else partialCount += 1;
-  });
-
-  const rows = allRows.map(({ task, kind }) => {
-    const isMs = kind === '里程碑';
-    const milestone = isMs ? task : getOwningMilestone(task);
-    return `
-      <tr onclick="viewTask('${task.id}')" style="cursor:pointer;">
-        <td>
-          <div style="font-weight:600;color:var(--text);">${escapeHtml(task.title || task.id)}</div>
-          ${!isMs ? `<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">归属：${escapeHtml((milestone && milestone.title) || '—')}</div>` : ''}
-        </td>
-        <td style="text-align:center;">${renderDeliveryCompletenessBadge(task)}</td>
-        ${isMs ? `
-          <td>${renderDeliveryFieldCell(getMilestoneDeliverablesText(task))}</td>
-          <td>${renderDeliveryFieldCell(getMilestoneAcceptanceText(task))}</td>
-        ` : ''}
-        <td>${renderDeliveryFieldCell(task.verification)}</td>
-        <td>${renderDeliveryFieldCell(task.feedback)}</td>
-        <td>${renderDeliveryFieldCell(task.leftover)}</td>
-        <td class="col-actions" onclick="event.stopPropagation();">
-          ${canEditTask(task) ? `
-            <button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${task.id}')" title="填写">
-              <i class="fas fa-edit"></i>
-            </button>
-          ` : '<span style="color:#D1D5DB;">—</span>'}
-        </td>
-      </tr>
-    `;
-  }).join('');
-
-  const colCount = isMsScope ? 8 : 6;
-  const emptyTitle = isMsScope ? '暂无里程碑' : '暂无任务';
-  const emptyHint = canManage
-    ? (isMsScope ? '请先添加里程碑' : '请先添加任务')
-    : '暂无内容';
+  const hasSource = milestones.length || workTasks.length;
+  let body;
+  if (!hasSource) {
+    body = renderEmptyState({
+      icon: 'fa-clipboard-check',
+      title: '暂无里程碑或任务',
+      hint: canManage ? '请先添加里程碑或任务' : '暂无内容',
+    });
+  } else if (!cards.length) {
+    body = renderEmptyState({
+      icon: 'fa-filter',
+      title: '没有符合筛选的项',
+      hint: '试试切换「全部」或其它齐备状态',
+    });
+  } else {
+    body = `<div class="delivery-outline">${cards.join('')}</div>`;
+  }
 
   return `
-    <section style="margin-top:8px;">
-      <div class="project-detail-section-title">
-        <span>${isMsScope ? '里程碑交付检查' : '任务交付检查'}</span>
-        <span style="font-size:12px;font-weight:500;color:#6B7280;">
-          已齐备 ${completeCount} · 部分 ${partialCount} · 未填 ${emptyCount} · 共 ${allRows.length}
-        </span>
-      </div>
-      <p style="font-size:12px;color:#6B7280;margin:0 0 12px;">${isMsScope
-        ? '展示各里程碑的交付物、验收标准、验证、反馈与遗留；点击编辑可在本页直接填写。'
-        : '展示各任务的验证、反馈与遗留；点击编辑可在本页直接填写。'}</p>
-      <div class="todo-table-card">
-        <div class="todo-table-wrap">
-          <table class="todo-table todo-table--slim">
-            <thead>
-              <tr>
-                <th>${isMsScope ? '里程碑' : '任务'}</th>
-                <th style="width:90px;text-align:center;">齐备</th>
-                ${isMsScope ? `
-                  <th>交付物</th>
-                  <th>验收标准</th>
-                ` : ''}
-                <th>验证记录</th>
-                <th>业务反馈</th>
-                <th>遗留问题</th>
-                <th style="width:64px;">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${allRows.length
-                ? rows
-                : `<tr><td colspan="${colCount}">${renderEmptyState({ icon: 'fa-clipboard-check', title: emptyTitle, hint: emptyHint })}</td></tr>`}
-            </tbody>
-          </table>
+    <section class="delivery-board">
+      <div class="delivery-board-head">
+        <div>
+          <div class="project-detail-section-title" style="margin:0;">里程碑 · 任务 · 交付</div>
+          <p class="delivery-board-hint">里程碑下错位列出任务；交付物、遗留问题按行展开，验收记录显示最终文件。</p>
+        </div>
+        <div class="delivery-board-tools">
+          ${canManage ? `
+            <button type="button" class="btn btn-ghost btn-sm" onclick="showNewMilestoneModal('${project.id}')"><i class="fas fa-flag"></i>添加里程碑</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="showNewTaskModal('${project.id}')"><i class="fas fa-plus"></i>添加任务</button>
+          ` : ''}
+          <div class="delivery-filter" role="tablist" aria-label="齐备筛选">
+          ${filterBtn('all', '全部', counts.total)}
+          ${filterBtn('empty', '未填', counts.empty)}
+          ${filterBtn('partial', '部分', counts.partial)}
+          ${filterBtn('complete', '已齐备', counts.complete)}
+          </div>
         </div>
       </div>
+      ${body}
     </section>
   `;
 }
@@ -328,9 +586,8 @@ async function mountProjectGantt() {
     el.innerHTML = `<div style="padding:24px;color:#DC2626;font-size:13px;">${escapeHtml(err.message || '加载失败')}</div>`;
     return;
   }
-  // 异步加载后页面可能已切走
   const host = document.getElementById('project-gantt');
-  if (!host || state.projectDetailTab !== 'milestones' || state.projectPlanView !== 'gantt' || host.getAttribute('data-project-id') !== projectId) return;
+  if (!host || state.projectDetailTab !== 'work' || state.projectPlanView !== 'gantt' || host.getAttribute('data-project-id') !== projectId) return;
   const { rows, unscheduled } = buildProjectGanttTasks(project);
   if (!rows.length) {
     host.innerHTML = renderEmptyState({
@@ -359,7 +616,6 @@ async function mountProjectGantt() {
         const src = tasks.find(t => t.id === task.id);
         const start = task.start instanceof Date ? formatLocalDate(task.start) : String(task.start || '').slice(0, 10);
         const endRaw = task.end instanceof Date ? formatLocalDate(task.end) : String(task.end || '').slice(0, 10);
-        // 展示截止用实际 due（同日条在图上多画了一天）
         const dueShow = src ? (normalizeDateStr(resolveTaskDueDate(src)) || src.dueDate || endRaw) : endRaw;
         const assignee = src ? (src.assignee || '-') : '-';
         return `
@@ -384,45 +640,44 @@ async function mountProjectGantt() {
 
 function getDeliveryCompleteness(task) {
   const isMs = isMilestoneTask(task);
+  const recordFilled = hasDeliveryRecord(task);
   const fields = isMs
     ? [
-        { key: 'deliverables', label: '交付物', value: getMilestoneDeliverablesText(task) },
-        { key: 'acceptance', label: '验收标准', value: getMilestoneAcceptanceText(task) },
-        { key: 'verification', label: '验证', value: task.verification },
-        { key: 'feedback', label: '反馈', value: task.feedback },
-        { key: 'leftover', label: '遗留', value: task.leftover },
+        { key: 'deliverables', label: '交付物', filled: !!String(getMilestoneDeliverablesText(task) || '').trim() },
+        { key: 'acceptance', label: '验收标准', filled: !!String(getMilestoneAcceptanceText(task) || '').trim() },
+        { key: 'verification', label: '验收记录', filled: recordFilled },
+        { key: 'feedback', label: '业务反馈', filled: !!String(task.feedback || '').trim() },
+        { key: 'leftover', label: '遗留问题', filled: !!String(task.leftover || '').trim() },
       ]
     : [
-        { key: 'verification', label: '验证', value: task.verification },
-        { key: 'feedback', label: '反馈', value: task.feedback },
-        { key: 'leftover', label: '遗留', value: task.leftover },
+        { key: 'verification', label: '验收记录', filled: recordFilled },
+        { key: 'feedback', label: '业务反馈', filled: !!String(task.feedback || '').trim() },
+        { key: 'leftover', label: '遗留问题', filled: !!String(task.leftover || '').trim() },
       ];
-  const filled = fields.filter(f => String(f.value || '').trim()).length;
+  const filled = fields.filter(f => f.filled).length;
   return {
     filled,
     total: fields.length,
     complete: filled === fields.length && filled > 0,
-    missing: fields.filter(f => !String(f.value || '').trim()).map(f => f.label),
+    missing: fields.filter(f => !f.filled).map(f => f.label),
   };
 }
 
 function renderDeliveryCompletenessBadge(task) {
   const c = getDeliveryCompleteness(task);
   if (!c.total) return '';
-  const tip = c.complete ? '交付信息已齐备' : `缺：${c.missing.join('、') || '待填'}（请到「交付检查」填写）`;
-  const color = c.complete ? '#047857' : (c.filled === 0 ? '#9CA3AF' : '#B45309');
-  const bg = c.complete ? '#ECFDF5' : (c.filled === 0 ? '#F3F4F6' : '#FFFBEB');
-  return `<span title="${escapeHtml(tip)}" style="font-size:10px;padding:1px 6px;border-radius:4px;background:${bg};color:${color};white-space:nowrap;font-weight:600;">齐备 ${c.filled}/${c.total}</span>`;
+  const tip = c.complete ? '交付信息已齐备' : `缺：${c.missing.join('、') || '待填'}（请在项目执行中填写）`;
+  const kind = c.complete ? 'is-complete' : (c.filled === 0 ? 'is-empty' : 'is-partial');
+  return `<span title="${escapeHtml(tip)}" class="delivery-badge ${kind}">齐备 ${c.filled}/${c.total}</span>`;
 }
 
-/** 里程碑/任务详情仅展示齐备数；明细与填写统一在「交付检查」 */
 function renderTaskDeliveryCompletenessSection(task, canEdit) {
   if (!task) return '';
   const c = getDeliveryCompleteness(task);
   if (!c.total) return '';
   const goDelivery = canEdit
-    ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${task.id}')"><i class="fas fa-arrow-right"></i> 去交付检查</button>`
-    : `<span style="font-size:12px;color:var(--text-muted);">明细见「交付检查」</span>`;
+    ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${task.id}')"><i class="fas fa-arrow-right"></i> 去填写</button>`
+    : `<span style="font-size:12px;color:var(--text-muted);">明细见「项目执行」</span>`;
   return `
     <div class="detail-section">
       <div class="detail-section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -452,8 +707,6 @@ function openTaskDeliveryEdit(taskId) {
   state.deliveryForm = {
     deliverables: getMilestoneDeliverablesText(task) || '',
     acceptanceCriteria: getMilestoneAcceptanceText(task) || '',
-    completionEvidence: task.completionEvidence || '',
-    verification: task.verification || '',
     feedback: task.feedback || '',
     leftover: task.leftover || '',
   };
@@ -462,9 +715,12 @@ function openTaskDeliveryEdit(taskId) {
   if (task.projectId) {
     state.page = 'projectDetail';
     state.currentProjectId = task.projectId;
+    state.form = { projectId: task.projectId };
   }
-  state.projectDetailTab = 'delivery';
-  state.projectDeliveryTab = isMilestoneTask(task) ? 'milestones' : 'tasks';
+  state.projectDetailTab = 'work';
+  state.projectPlanView = 'list';
+  state.deliveryFilter = 'all';
+  ensureDeliveryOpenMap()[taskId] = true;
   render();
 }
 
@@ -485,17 +741,13 @@ function saveTaskDeliveryFields(taskId) {
   const before = {
     deliverables: task.deliverables || '',
     acceptanceCriteria: task.acceptanceCriteria || '',
-    completionEvidence: task.completionEvidence || '',
-    verification: task.verification || '',
     feedback: task.feedback || '',
     leftover: task.leftover || '',
   };
   if (isMilestoneTask(task)) {
     task.deliverables = String(f.deliverables || '').trim();
     task.acceptanceCriteria = String(f.acceptanceCriteria || '').trim();
-    task.completionEvidence = String(f.completionEvidence || '').trim();
   }
-  task.verification = String(f.verification || '').trim();
   task.feedback = String(f.feedback || '').trim();
   task.leftover = String(f.leftover || '').trim();
   appendChangeLogEntry({
@@ -505,16 +757,12 @@ function saveTaskDeliveryFields(taskId) {
     before: [
       before.deliverables && `交付物:${before.deliverables}`,
       before.acceptanceCriteria && `验收:${before.acceptanceCriteria}`,
-      before.completionEvidence && `证据:${before.completionEvidence}`,
-      before.verification && `验证:${before.verification}`,
       before.feedback && `反馈:${before.feedback}`,
       before.leftover && `遗留:${before.leftover}`,
     ].filter(Boolean).join('；') || '（空）',
     after: [
       task.deliverables && `交付物:${task.deliverables}`,
       task.acceptanceCriteria && `验收:${task.acceptanceCriteria}`,
-      task.completionEvidence && `证据:${task.completionEvidence}`,
-      task.verification && `验证:${task.verification}`,
       task.feedback && `反馈:${task.feedback}`,
       task.leftover && `遗留:${task.leftover}`,
     ].filter(Boolean).join('；') || '（空）',

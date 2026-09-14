@@ -201,8 +201,15 @@ function render() {
   } else {
     hideTaskCommentMentionDropdown();
   }
-  if (state.page === 'projectDetail' && state.projectDetailTab === 'milestones' && state.projectPlanView === 'gantt') {
-    requestAnimationFrame(() => { mountProjectGantt(); });
+  if (state.page === 'projectDetail' && state.projectDetailTab === 'work') {
+    requestAnimationFrame(() => {
+      if (state.projectPlanView === 'gantt') mountProjectGantt();
+      hydrateAuthedImages(document.getElementById('app'));
+      if (state.inlineDeliveryEditId) {
+        const el = document.getElementById('delivery-edit-anchor');
+        if (el) el.scrollIntoView({ block: 'nearest' });
+      }
+    });
   }
 }
 

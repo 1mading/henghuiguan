@@ -109,7 +109,7 @@ function renderTaskEditModal() {
                 <i class="fas fa-clipboard-check" style="color:var(--text-muted);"></i>交付齐备
                 ${renderDeliveryCompletenessBadge(task)}
               </span>
-              ${canEdit ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${task.id}')"><i class="fas fa-arrow-right"></i> 去交付检查</button>` : `<span style="font-size:12px;color:var(--text-muted);">明细在交付检查</span>`}
+              ${canEdit ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${task.id}')"><i class="fas fa-arrow-right"></i> 去填写</button>` : `<span style="font-size:12px;color:var(--text-muted);">明细在项目执行</span>`}
             </div>
             ` : ''}
             <div class="form-section-title" style="margin-top:8px;"><i class="fas fa-exclamation-triangle"></i>依赖与风险</div>
@@ -154,7 +154,7 @@ function renderTaskEditModal() {
                 <i class="fas fa-clipboard-check" style="color:var(--text-muted);"></i>交付齐备
                 ${renderDeliveryCompletenessBadge(task)}
               </span>
-              ${canEdit ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${task.id}')"><i class="fas fa-arrow-right"></i> 去交付检查</button>` : `<span style="font-size:12px;color:var(--text-muted);">明细在交付检查</span>`}
+              ${canEdit ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${task.id}')"><i class="fas fa-arrow-right"></i> 去填写</button>` : `<span style="font-size:12px;color:var(--text-muted);">明细在项目执行</span>`}
             </div>
             ` : ''}
             `}

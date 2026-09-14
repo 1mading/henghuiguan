@@ -695,17 +695,17 @@ function renderProjectDetailTaskPanel(project) {
 }
 
 function normalizeProjectDetailTab(tab) {
-  if (tab === 'progress' || tab === 'milestones' || tab === 'tasks' || tab === 'delivery' || tab === 'plan') return tab;
+  if (isProjectWorkTab(tab)) return 'work';
+  if (tab === 'progress' || tab === 'plan') return 'plan';
   return 'plan';
 }
 
 function isProjectDetailEditing() {
-  // 编辑态：仅保留当前页签，避免其它页签干扰
+  // 编辑态：仅保留当前页签，避免其它页签干扰（交付检查卡片内填写不锁页签）
   return !!(
     state.editingProjectPlan
     || state.editingProjectFocus
     || state.taskEditInline
-    || state.inlineDeliveryEditId
   );
 }
 
@@ -713,8 +713,10 @@ function setProjectDetailTab(tab) {
   if (isProjectDetailEditing()) return;
   const next = normalizeProjectDetailTab(tab);
   state.projectDetailTab = next;
-  if (next === 'milestones' && state.projectPlanView === 'delivery') {
-    state.projectPlanView = 'table';
+  if (next !== 'work') {
+    state.inlineDeliveryEditId = null;
+    state.editingDeliveryTaskId = null;
+    state.deliveryForm = null;
   }
   render();
 }
@@ -722,11 +724,8 @@ function setProjectDetailTab(tab) {
 function renderProjectDetailTabs() {
   const tab = normalizeProjectDetailTab(state.projectDetailTab);
   const items = [
-    { id: 'plan', label: '项目计划书', icon: 'fa-file-alt' },
-    { id: 'progress', label: '项目推进', icon: 'fa-rocket' },
-    { id: 'milestones', label: '里程碑', icon: 'fa-flag' },
-    { id: 'tasks', label: '任务', icon: 'fa-tasks' },
-    { id: 'delivery', label: '交付检查', icon: 'fa-clipboard-check' },
+    { id: 'plan', label: '计划与推进', icon: 'fa-file-alt' },
+    { id: 'work', label: '项目执行', icon: 'fa-flag' },
   ];
   const visible = isProjectDetailEditing()
     ? items.filter(item => item.id === tab)
@@ -749,50 +748,28 @@ function renderProjectDetailTabs() {
 function renderProjectDetailTabBody(project, canManage) {
   const tab = normalizeProjectDetailTab(state.projectDetailTab);
   const editingOnly = isProjectDetailEditing();
-  if (tab === 'milestones') {
+  if (tab === 'work') {
     if (editingOnly && state.taskEditInline) {
       return `<div class="project-detail-tab-panel">${renderTaskEditModal()}</div>`;
     }
-    const view = state.projectPlanView === 'gantt' ? 'gantt' : 'table';
+    const view = normalizeProjectWorkView(state.projectPlanView);
     return `
       <div class="project-detail-tab-panel">
         ${renderProjectPlanViewToggle()}
         ${view === 'gantt'
           ? renderProjectGanttSection(project)
-          : renderProjectMilestonesTableSection(project)}
-      </div>
-    `;
-  }
-  if (tab === 'tasks') {
-    if (editingOnly && state.taskEditInline) {
-      return `<div class="project-detail-tab-panel">${renderTaskEditModal()}</div>`;
-    }
-    return `
-      <div class="project-detail-tab-panel">
-        ${renderProjectTasksTableSection(project)}
-      </div>
-    `;
-  }
-  if (tab === 'delivery') {
-    return `
-      <div class="project-detail-tab-panel">
-        ${state.inlineDeliveryEditId ? '' : renderProjectDeliveryTabToggle()}
-        ${renderProjectDeliveryBoard(project)}
-      </div>
-    `;
-  }
-  if (tab === 'progress') {
-    return `
-      <div class="project-detail-tab-panel project-detail-side">
-        ${renderProjectFocusPanel(project, canManage)}
-        ${editingOnly && state.editingProjectFocus ? '' : renderProjectIssuesPanel(project, canManage)}
+          : view === 'table'
+            ? `${renderProjectMilestonesTableSection(project)}${renderProjectTasksTableSection(project)}`
+            : renderProjectDeliveryBoard(project)}
       </div>
     `;
   }
   return `
     <div class="project-detail-tab-panel project-detail-side">
+      ${renderProjectFocusPanel(project, canManage)}
       ${renderProjectPlanPanel(project, canManage)}
-      ${editingOnly && state.editingProjectPlan ? '' : renderProjectChangeLogsSection(project)}
+      ${editingOnly ? '' : renderProjectIssuesPanel(project, canManage)}
+      ${editingOnly ? '' : renderProjectChangeLogsSection(project)}
     </div>
   `;
 }
@@ -832,12 +809,23 @@ function renderProjectDetail() {
     return renderProjects();
   }
 
-  // 兼容旧状态：曾用 projectPlanView=delivery 表示交付齐备
+  // 兼容旧状态：里程碑/任务/交付检查 已合并为项目执行
   if (state.projectPlanView === 'delivery') {
-    state.projectDetailTab = 'delivery';
-    state.projectPlanView = 'table';
+    state.projectPlanView = 'list';
+  }
+  if (state.projectDetailTab === 'progress') {
+    state.projectDetailTab = 'plan';
+  }
+  if (state.projectDetailTab === 'milestones' || state.projectDetailTab === 'tasks' || state.projectDetailTab === 'delivery') {
+    if (state.projectDetailTab === 'tasks' && state.projectPlanView !== 'gantt') {
+      state.projectPlanView = 'table';
+    }
+    if (state.projectDetailTab === 'delivery') {
+      state.projectPlanView = 'list';
+    }
   }
   state.projectDetailTab = normalizeProjectDetailTab(state.projectDetailTab);
+  state.projectPlanView = normalizeProjectWorkView(state.projectPlanView);
 
   const stats = getProjectListStats(project);
   const accent = getProjectAccentColor(project);
@@ -1002,7 +990,7 @@ function showNewMilestoneModal(projectId) {
     state.prevPage = state.page;
     state.page = 'projectDetail';
   }
-  state.projectDetailTab = 'milestones';
+  state.projectDetailTab = 'work';
   state.taskEditInline = true;
   state.showModal = null;
   render();
@@ -1041,7 +1029,7 @@ function showNewTaskModal(projectId) {
     state.prevPage = state.page;
     state.page = 'projectDetail';
   }
-  state.projectDetailTab = 'tasks';
+  state.projectDetailTab = 'work';
   state.taskEditInline = true;
   state.showModal = null;
   render();
@@ -1073,7 +1061,7 @@ function showNewSubTaskModal(parentTaskId) {
     state.prevPage = state.page;
     state.page = 'projectDetail';
   }
-  state.projectDetailTab = 'tasks';
+  state.projectDetailTab = 'work';
   state.taskEditInline = true;
   state.showModal = null;
   render();

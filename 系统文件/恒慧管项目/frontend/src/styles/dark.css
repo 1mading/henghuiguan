@@ -322,6 +322,73 @@ html[data-theme="dark"] .todo-table tbody tr.todo-row--duesoon td {
   background: var(--warning-soft) !important;
 }
 
+html[data-theme="dark"] .delivery-card,
+html[data-theme="dark"] .delivery-filter-btn {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .delivery-check {
+  background: var(--bg-muted);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .delivery-check.is-filled {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+html[data-theme="dark"] .delivery-check-body {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .delivery-edit-k {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .delivery-evidence-box {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .delivery-badge.is-complete {
+  background: rgba(16, 185, 129, 0.16);
+  color: #6ee7b7;
+}
+
+html[data-theme="dark"] .delivery-badge.is-partial {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+}
+
+html[data-theme="dark"] .delivery-badge.is-empty {
+  background: var(--bg-muted);
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .delivery-outline,
+html[data-theme="dark"] .delivery-ol-row.is-task {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .delivery-ol-row.is-node,
+html[data-theme="dark"] .delivery-ol-edit {
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .delivery-ol-title,
+html[data-theme="dark"] .delivery-ol-v {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .delivery-evidence-name {
+  color: var(--text);
+}
+
 html[data-theme="dark"] .progress-bar,
 html[data-theme="dark"] .todo-board-subtasks .progress-bar {
   background: var(--border) !important;

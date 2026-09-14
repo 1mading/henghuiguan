@@ -933,6 +933,7 @@ async function parseApiJsonResponse(res, fallbackMessage) {
 
 async function submitWikiDocLink(entityType, entityId, payload, opts) {
   const silent = !!(opts && opts.silent);
+  const skipClose = !!(opts && opts.skipClose);
   const res = await fetch(ApiConfig.baseUrl + '/files/link-dingtalk-doc', {
     method: 'POST',
     headers: {
@@ -948,13 +949,13 @@ async function submitWikiDocLink(entityType, entityId, payload, opts) {
     const p = projects.find(x => x.id === entityId);
     if (p) {
       if (!p.documents) p.documents = [];
-      p.documents.push(data.item);
+      upsertLocalAttachment(p.documents, data.item);
     }
   } else {
     const t = tasks.find(x => x.id === entityId);
     if (t) {
       if (!t.attachments) t.attachments = [];
-      t.attachments.push(data.item);
+      upsertLocalAttachment(t.attachments, data.item);
       if (t.projectId) {
         const p = projects.find(x => x.id === t.projectId);
         if (p) syncTaskAttachmentToProject(p, t, data.item);
@@ -966,9 +967,22 @@ async function submitWikiDocLink(entityType, entityId, payload, opts) {
     return data.item;
   }
   save();
-  state.showModal = null;
-  render();
+  if (!skipClose) {
+    state.showModal = null;
+    render();
+  }
   return data.item;
+}
+
+function upsertLocalAttachment(list, item) {
+  if (!item || !Array.isArray(list)) return;
+  const idx = list.findIndex(a =>
+    (item.id && a.id === item.id) ||
+    (item.nodeId && a.source === 'dingtalk_wiki' && a.nodeId === item.nodeId) ||
+    (item.fileId && a.fileId === item.fileId)
+  );
+  if (idx >= 0) list[idx] = { ...list[idx], ...item };
+  else list.push(item);
 }
 
 const wikiNodeLookup = {};
@@ -1031,10 +1045,22 @@ async function showWikiDocPicker(entityType, entityId, opts) {
     return;
   }
   const pendingMode = !!(opts && opts.pendingMode);
+  const returnToDelivery = !!(opts && opts.returnToDelivery);
   if (pendingMode) {
     state._wikiPickerReturn = {
+      kind: 'pending',
       showModal: state.showModal || 'quickCreate',
       form: state.form,
+    };
+  } else if (returnToDelivery) {
+    state._wikiPickerReturn = {
+      kind: 'delivery',
+      inlineDeliveryEditId: state.inlineDeliveryEditId,
+      editingDeliveryTaskId: state.editingDeliveryTaskId,
+      deliveryForm: state.deliveryForm,
+      page: state.page,
+      currentProjectId: state.currentProjectId,
+      form: { projectId: state.currentProjectId || (state.form && state.form.projectId) || '' },
     };
   } else {
     state._wikiPickerReturn = null;
@@ -1056,6 +1082,7 @@ async function showWikiDocPicker(entityType, entityId, opts) {
     wikiMineError: '',
     wikiBindError: '',
     wikiSearch: '',
+    wikiLinkPurpose: (opts && opts.linkPurpose) || '',
   };
   state.showModal = 'wikiDocPicker';
   render();
@@ -1329,6 +1356,22 @@ function renderWikiDocPickerModal() {
   `;
 }
 
+function restoreWikiPickerDeliveryReturn(ret) {
+  const r = ret || state._wikiPickerReturn;
+  state._wikiPickerReturn = null;
+  if (!r || r.kind !== 'delivery') return false;
+  state.inlineDeliveryEditId = r.inlineDeliveryEditId || null;
+  state.editingDeliveryTaskId = r.editingDeliveryTaskId || null;
+  state.deliveryForm = r.deliveryForm || null;
+  state.page = r.page || state.page;
+  if (r.currentProjectId) state.currentProjectId = r.currentProjectId;
+  state.form = r.form && r.form.projectId ? { projectId: r.form.projectId } : (state.form || {});
+  state.projectDetailTab = 'work';
+  state.projectPlanView = 'list';
+  state.showModal = null;
+  return true;
+}
+
 function restoreWikiPickerReturnForm() {
   const ret = state._wikiPickerReturn;
   state._wikiPickerReturn = null;
@@ -1372,10 +1415,19 @@ async function confirmWikiDocPicker() {
     return;
   }
   try {
+    const deliveryReturn = state._wikiPickerReturn && state._wikiPickerReturn.kind === 'delivery'
+      ? state._wikiPickerReturn
+      : null;
+    const linkPurpose = state.form.wikiLinkPurpose || '';
     await submitWikiDocLink(state.form.wikiEntityType, state.form.wikiEntityId, {
       nodeId: node.nodeId,
       workspaceId: node.workspaceId,
-    });
+      linkPurpose,
+    }, { skipClose: !!deliveryReturn });
+    state.showModal = null;
+    if (deliveryReturn) restoreWikiPickerDeliveryReturn(deliveryReturn);
+    else state._wikiPickerReturn = null;
+    render();
   } catch (e) {
     alert(e.message || '添加钉钉文档失败');
   }
@@ -1489,6 +1541,7 @@ async function uploadFileToEntity(entityType, entityId, file, fileName, uploadPu
     const t = tasks.find(x => x.id === entityId);
     if (t) {
       if (!t.attachments) t.attachments = [];
+      if (uploadPurpose === 'evidence' && data.item) data.item.purpose = 'evidence';
       t.attachments.push(data.item);
       if (t.projectId) {
         const p = projects.find(x => x.id === t.projectId);

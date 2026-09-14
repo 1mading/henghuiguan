@@ -13,9 +13,12 @@ let state = {
   todoPageSize: 20,
   todoViewMode: 'all', // all | mine | created | handled
   todoViewLayout: 'board', // board | list
-  projectDetailTab: 'plan', // plan | progress | milestones | tasks | delivery
-  projectPlanView: 'table', // table | gantt（里程碑页签内）
-  projectDeliveryTab: 'milestones', // milestones | tasks（交付检查子页签）
+  projectDetailTab: 'plan', // plan（含推进） | work
+  projectPlanView: 'table', // table | gantt | list（项目执行页内，默认表格）
+  deliveryFilter: 'all', // all | empty | partial | complete
+  deliveryExpandedId: null,
+  deliveryExpandedField: null,
+  deliveryOpenTaskIds: {},
   projectChangePage: 1,
   taskEditInline: false,
   inlineDeliveryEditId: null,
@@ -372,7 +375,7 @@ const LOG_FIELD_LABELS = {
   deliverables: '交付物',
   acceptanceCriteria: '验收标准',
   completionEvidence: '完成证据',
-  verification: '验证记录',
+  verification: '验收记录',
   feedback: '业务反馈',
   leftover: '遗留问题',
   originalPlanStartDate: '原定开始',

@@ -73,13 +73,17 @@ function closeModal() {
   hideTaskCommentMentionDropdown();
   closeImageLightbox();
   state.collabDropdownOpen = null;
-  state.editingDeliveryTaskId = null;
-  state.deliveryForm = null;
-  state.inlineDeliveryEditId = null;
+  const wikiReturn = state.showModal === 'wikiDocPicker' ? state._wikiPickerReturn : null;
+  if (!(wikiReturn && wikiReturn.kind === 'delivery')) {
+    state.editingDeliveryTaskId = null;
+    state.deliveryForm = null;
+    state.inlineDeliveryEditId = null;
+  }
   state.taskEditInline = false;
   // 关闭前不要用可能已是 0 的主区滚动覆盖记忆；保留 open 时记下的位置
-  if (state.showModal === 'wikiDocPicker' && state._wikiPickerReturn) {
-    restoreWikiPickerReturnForm();
+  if (wikiReturn) {
+    if (wikiReturn.kind === 'delivery') restoreWikiPickerDeliveryReturn(wikiReturn);
+    else restoreWikiPickerReturnForm();
     render();
     return;
   }
@@ -448,7 +452,15 @@ function viewProject(projectId) {
   state.editingProjectFocus = false;
   state.editingProjectPlan = false;
   state.projectDetailTab = 'plan';
+  state.projectPlanView = 'table';
   state.projectChangePage = 1;
+  state.deliveryFilter = 'all';
+  state.deliveryExpandedId = null;
+  state.deliveryExpandedField = null;
+  state.deliveryOpenTaskIds = {};
+  state.inlineDeliveryEditId = null;
+  state.editingDeliveryTaskId = null;
+  state.deliveryForm = null;
   if (!state.detailTaskScope) state.detailTaskScope = 'all';
   state.page = 'projectDetail';
   render();
@@ -498,7 +510,7 @@ function editTask(taskId) {
   if (state.page === 'projectDetail') {
     state.taskEditInline = true;
     state.showModal = null;
-    state.projectDetailTab = isMilestoneTask(task) ? 'milestones' : 'tasks';
+    state.projectDetailTab = 'work';
   } else {
     state.taskEditInline = false;
     state.showModal = 'taskEdit';

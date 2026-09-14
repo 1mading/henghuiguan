@@ -52,8 +52,12 @@ function isWikiAttachment(meta) {
   return meta?.source === 'dingtalk_wiki';
 }
 
-function buildWikiAttachmentItem(node, docUrl, userName, idPrefix) {
-  return {
+function isEvidenceLinkPurpose(value) {
+  return String(value || '').trim() === 'evidence';
+}
+
+function buildWikiAttachmentItem(node, docUrl, userName, idPrefix, extra) {
+  const item = {
     id: genDocId(idPrefix),
     source: 'dingtalk_wiki',
     name: node.name || '钉钉文档',
@@ -64,6 +68,8 @@ function buildWikiAttachmentItem(node, docUrl, userName, idPrefix) {
     uploadedBy: userName,
     uploadedAt: new Date().toISOString(),
   };
+  if (extra && extra.purpose) item.purpose = extra.purpose;
+  return item;
 }
 
 function wikiAlreadyLinked(items, nodeId) {
@@ -130,7 +136,8 @@ function matchAttachmentRef(meta, refId) {
   return meta.fileId === refId || meta.id === refId;
 }
 
-function attachWikiDocToEntity(store, req, entityType, entityId, node, docUrl) {
+function attachWikiDocToEntity(store, req, entityType, entityId, node, docUrl, extra) {
+  const purpose = extra && extra.purpose === 'evidence' ? 'evidence' : '';
   if (entityType === 'project') {
     const project = store.projects.find(p => p.id === entityId);
     if (!project) return { status: 404, body: { success: false, message: '项目不存在' } };
@@ -165,9 +172,18 @@ function attachWikiDocToEntity(store, req, entityType, entityId, node, docUrl) {
       return { status: 403, body: { success: false, message: '无权上传任务附件' } };
     }
     if (wikiAlreadyLinked(task.attachments, node.nodeId)) {
+      const existing = (task.attachments || []).find(item =>
+        item?.source === 'dingtalk_wiki' && item.nodeId === node.nodeId
+      );
+      if (purpose === 'evidence' && existing && existing.purpose !== 'evidence') {
+        existing.purpose = 'evidence';
+        persistStore();
+        emitFileEntityChange(req, 'task', entityId, 'task.attachments');
+        return { status: 200, body: { success: true, item: existing, entityType, entityId, reused: true } };
+      }
       return { status: 409, body: { success: false, message: '该钉钉文档已添加' } };
     }
-    const item = buildWikiAttachmentItem(node, docUrl, req.user.name, 'ATT');
+    const item = buildWikiAttachmentItem(node, docUrl, req.user.name, 'ATT', purpose ? { purpose } : null);
     if (!Array.isArray(task.attachments)) task.attachments = [];
     task.attachments.push(item);
     const project = store.projects.find(p => p.id === task.projectId);
@@ -178,8 +194,8 @@ function attachWikiDocToEntity(store, req, entityType, entityId, node, docUrl) {
       operator: req.user.name,
       operateTime: new Date().toLocaleString('zh-CN'),
       before: '-',
-      after: `添加钉钉文档：${item.name}`,
-      reason: '任务附件',
+      after: `添加钉钉文档${purpose === 'evidence' ? '（验收记录）' : ''}：${item.name}`,
+      reason: purpose === 'evidence' ? '验收记录' : '任务附件',
       project: project?.name || '临时任务',
     });
     persistStore();
@@ -248,6 +264,7 @@ router.post('/files/upload', requireAuth, upload.single('file'), (req, res) => {
       if (!task) return res.status(404).json({ success: false, message: '任务不存在' });
       const uploadPurpose = String(req.body.uploadPurpose || 'attachment').trim();
       const isCommentImage = uploadPurpose === 'comment';
+      const isEvidence = uploadPurpose === 'evidence';
 
       if (isCommentImage) {
         if (!canPostTaskComment(req.user, task, store.projects, users)) {
@@ -267,6 +284,7 @@ router.post('/files/upload', requireAuth, upload.single('file'), (req, res) => {
         uploadedBy: req.user.name,
         uploadedAt: new Date().toISOString(),
       };
+      if (isEvidence) item.purpose = 'evidence';
 
       if (!isCommentImage) {
         if (!Array.isArray(task.attachments)) task.attachments = [];
@@ -279,8 +297,8 @@ router.post('/files/upload', requireAuth, upload.single('file'), (req, res) => {
           operator: req.user.name,
           operateTime: new Date().toLocaleString('zh-CN'),
           before: '-',
-          after: `上传附件：${item.name}`,
-          reason: '任务附件',
+          after: `上传${isEvidence ? '验收记录' : '附件'}：${item.name}`,
+          reason: isEvidence ? '验收记录' : '任务附件',
           project: project?.name || '临时任务',
         });
         persistStore();
@@ -315,8 +333,10 @@ router.post('/files/link-dingtalk-doc', requireAuth, async (req, res) => {
     }
 
     const { node, docUrl } = await resolveWikiNodeForAttach(req.body, req.user);
+    const linkPurpose = String(req.body.linkPurpose || req.body.uploadPurpose || '').trim();
+    const extra = isEvidenceLinkPurpose(linkPurpose) ? { purpose: 'evidence' } : null;
     const store = getDb();
-    const result = attachWikiDocToEntity(store, req, entityType, entityId, node, docUrl);
+    const result = attachWikiDocToEntity(store, req, entityType, entityId, node, docUrl, extra);
     return res.status(result.status).json(result.body);
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
