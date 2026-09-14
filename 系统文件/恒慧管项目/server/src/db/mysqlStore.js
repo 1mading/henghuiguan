@@ -200,6 +200,7 @@ async function loadPayload() {
       notifications: [],
       workCalendar: null,
       rolePermissions: null,
+      llmSettings: null,
       systemUpdates: [],
       performanceTemplates: [],
       performanceCycles: [],

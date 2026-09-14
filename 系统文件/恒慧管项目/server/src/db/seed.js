@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs');
-const { getDb, isEmpty, replaceAllData } = require('./database');
+const { getDb, isEmpty, isStoreLoadFailed, replaceAllData } = require('./database');
 
 const seedPath = path.join(__dirname, 'seed-data.json');
 const seedLocalPath = path.join(__dirname, 'seed-data.local.json');
@@ -21,6 +21,10 @@ function loadSeedData() {
 
 function seedIfEmpty() {
   getDb();
+  if (isStoreLoadFailed()) {
+    console.error('[seed] MySQL 未连接，跳过演示数据初始化（请先启动 MySQL 并重启后端）');
+    return false;
+  }
   const skipSeed = path.join(__dirname, '../../data/.skip-seed');
   if (fs.existsSync(skipSeed)) {
     console.log('[seed] 检测到 .skip-seed，跳过初始化（库已刻意清空）');

@@ -25,6 +25,7 @@ const COLLECTIONS = [
   { storeKey: 'projectTemplates', table: 'project_templates', kind: 'entity' },
   { storeKey: 'workCalendar', table: 'app_meta', kind: 'meta', metaKey: 'workCalendar' },
   { storeKey: 'rolePermissions', table: 'app_meta', kind: 'meta', metaKey: 'rolePermissions' },
+  { storeKey: 'llmSettings', table: 'app_meta', kind: 'meta', metaKey: 'llmSettings' },
 ];
 
 const ENTITY_TABLES = [...new Set(COLLECTIONS.filter(c => c.kind === 'entity').map(c => c.table))];

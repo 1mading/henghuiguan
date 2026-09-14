@@ -79,6 +79,7 @@ let state = {
   textPolishApiKeyDraft: '',
   textPolishTemplatesOpen: false,
   textPolishSavingTemplate: false,
+  textPolishSendingChat: false,
   dataSecurityTab: 'database',
   dataSecurityLoading: false,
   dataSecurityError: null,

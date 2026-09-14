@@ -13,11 +13,25 @@ const {
   syncUsersFromDingTalk,
   diagnoseDingTalkSync,
   listDingTalkDepartments,
+  buildJsapiConfig,
 } = require('../services/dingtalk');
 const { createInboxFromPush } = require('../services/appNotifications');
 const { normalizeStaffDeptCatalog, upsertCatalogDept, buildOrgForest } = require('../utils/staffProfile');
 
 const router = express.Router();
+
+router.get('/dingtalk/jsapi-config', requireAuth, async (req, res) => {
+  const pageUrl = String(req.query.url || '').trim();
+  if (!pageUrl) {
+    return res.status(400).json({ success: false, message: '缺少 url 参数（当前页地址，不含 #）' });
+  }
+  try {
+    const data = await buildJsapiConfig(pageUrl);
+    res.json({ success: true, data });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message || 'JSAPI 签名失败' });
+  }
+});
 
 router.get('/dingtalk/sync/diagnose', requireAuth, async (req, res) => {
   if (!isFullAccess(req.user.role)) {

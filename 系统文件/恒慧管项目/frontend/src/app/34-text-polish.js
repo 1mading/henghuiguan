@@ -212,6 +212,120 @@ async function runTextPolish() {
   }
 }
 
+async function pickDingTalkConversation(corpId) {
+  if (typeof dd === 'undefined') {
+    throw new Error('请在钉钉客户端内打开恒慧管后再发送到群聊');
+  }
+  const id = String(corpId || '').trim();
+  if (!id) {
+    throw new Error('未加载企业 CorpId，请刷新页面后重试');
+  }
+  try {
+    await AuthService.ensureDingTalkJsApiConfig(['chooseChat', 'biz.chat.pickConversation']);
+  } catch (e) {
+    const msg = String(e.message || e);
+    if (/not authed|unauthorized|未授权|鉴权/i.test(msg)) {
+      throw new Error('钉钉选群未授权：请确认应用已发布，并开通「选择会话/chooseChat」权限后重试');
+    }
+    throw e;
+  }
+  return new Promise(function(resolve, reject) {
+    dd.ready(function() {
+      if (typeof dd.chooseChat === 'function') {
+        dd.chooseChat({
+          corpId: id,
+          isAllowCreateGroup: false,
+          filterNotOwnerGroup: false,
+          success: function(res) {
+            const cid = (res && (res.cid || res.openConversationId)) || '';
+            if (!cid) {
+              reject(new Error('未获取到群会话，请重试'));
+              return;
+            }
+            resolve({ cid: String(cid), title: (res && res.title) || '' });
+          },
+          fail: function(err) {
+            const msg = (err && (err.errorMessage || err.message)) || '未选择群聊';
+            reject(new Error(msg));
+          },
+        });
+        return;
+      }
+      if (dd.biz && dd.biz.chat && typeof dd.biz.chat.pickConversation === 'function') {
+        dd.biz.chat.pickConversation({
+          corpId: id,
+          isConfirm: true,
+          onSuccess: function(res) {
+            const cid = (res && res.cid) || '';
+            if (!cid) {
+              reject(new Error('未获取到群会话，请重试'));
+              return;
+            }
+            resolve({ cid: String(cid), title: (res && res.title) || '' });
+          },
+          onFail: function(err) {
+            const msg = typeof err === 'string' ? err : ((err && err.errorMessage) || '未选择群聊');
+            reject(new Error(msg));
+          },
+        });
+        return;
+      }
+      reject(new Error('当前钉钉版本不支持选群，请升级客户端或使用「复制」后手动粘贴'));
+    });
+  });
+}
+
+async function sendTextPolishResultToChat() {
+  const text = String(state.textPolishResult || '').trim();
+  if (!text) {
+    alert('暂无润色结果可发送');
+    return;
+  }
+  if (!ApiConfig.enabled || !authSession.token) {
+    alert('请连接服务端后再发送');
+    return;
+  }
+  if (!AuthService.isDingTalkClient()) {
+    alert('发送到群聊请在钉钉客户端内打开恒慧管（手机或电脑钉钉均可）');
+    return;
+  }
+  if (!currentUser || !currentUser.dingTalkUserId) {
+    alert('当前账号未绑定钉钉 userid，请联系管理员同步通讯录');
+    return;
+  }
+  if (state.textPolishSendingChat) return;
+
+  state.textPolishSendingChat = true;
+  render();
+  try {
+    if (!DingTalkApi.corpId) await loadPublicConfig();
+    const picked = await pickDingTalkConversation(DingTalkApi.corpId);
+    const res = await fetch(ApiConfig.baseUrl + '/text-polish/send-chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + authSession.token,
+      },
+      body: JSON.stringify({
+        cid: picked.cid,
+        content: text,
+      }),
+      signal: AbortSignal.timeout(ApiConfig.timeout || 15000),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.success === false) {
+      throw new Error(json.message || `发送失败 (${res.status})`);
+    }
+    const title = picked.title ? `「${picked.title}」` : '群聊';
+    alert(json.data && json.data.mock ? `演示模式：已模拟发送到${title}` : `已发送到${title}`);
+  } catch (e) {
+    alert(e.message || '发送到群聊失败');
+  } finally {
+    state.textPolishSendingChat = false;
+    if (state.page === 'textPolish') render();
+  }
+}
+
 async function copyTextPolishResult() {
   const text = String(state.textPolishResult || '').trim();
   if (!text) {
@@ -520,10 +634,13 @@ function renderTextPolish() {
         </div>
         <div class="sql-tool-panel text-polish-panel">
           <h3>润色结果</h3>
-          <div class="sql-tool-desc">可直接复制到钉钉/邮件发送；也可「采用到草稿」继续改；满意的结果可「存为模版」复用。</div>
+          <div class="sql-tool-desc">可直接「发送到群聊」（钉钉内选群）、复制到邮件/通知，或「存为模版」复用。</div>
           <pre class="sql-tool-output text-polish-output${result ? '' : ' is-empty'}">${escapeHtml(result || (busy ? '正在润色…' : '（点击「润色」后显示结果）'))}</pre>
           <div class="sql-tool-actions">
-            <button type="button" class="btn btn-primary btn-sm" onclick="copyTextPolishResult()" ${!result || busy ? 'disabled' : ''}>
+            <button type="button" class="btn btn-primary btn-sm" onclick="sendTextPolishResultToChat()" ${!result || busy || state.textPolishSendingChat ? 'disabled' : ''}>
+              <i class="fas ${state.textPolishSendingChat ? 'fa-spinner fa-spin' : 'fa-paper-plane'}"></i> ${state.textPolishSendingChat ? '发送中…' : '发送到群聊'}
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="copyTextPolishResult()" ${!result || busy ? 'disabled' : ''}>
               <i class="fas fa-copy"></i> 复制
             </button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="applyTextPolishResultToDraft()" ${!result || busy ? 'disabled' : ''}>

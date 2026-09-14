@@ -61,7 +61,7 @@ jdbc:mysql://127.0.0.1:3306/henghuiguan?useSSL=false&characterEncoding=utf8&serv
 | `change_logs` / `transfer_logs` / `push_logs` | 日志 |
 | `notifications` | 站内通知 |
 | `kpi_plans` | 绩效计划 |
-| `app_meta` | 单例配置（如 `workCalendar`） |
+| `app_meta` | 单例配置（如 `workCalendar`、`rolePermissions`、`llmSettings`） |
 | `app_store` | 方案 A 整库备份，可忽略 |
 
 完整对象在每行的 `data` 字段（JSON）。

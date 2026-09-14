@@ -3,6 +3,7 @@ const { requireAuth } = require('../middleware/auth');
 const { writeErr } = require('../utils/response');
 const { isFullAccess } = require('../utils/roles');
 const textPolish = require('../services/textPolish');
+const { sendConversationMessage } = require('../services/dingtalk');
 
 const router = express.Router();
 
@@ -91,6 +92,21 @@ router.post('/text-polish/templates', requireAuth, requireTextPolishAdmin, (req,
     });
   } catch (e) {
     writeErr(res, e.status || 500, e.message || '保存模版失败');
+  }
+});
+
+router.post('/text-polish/send-chat', requireAuth, requireTextPolishAdmin, async (req, res) => {
+  try {
+    const cid = req.body?.cid;
+    const content = req.body?.content;
+    const result = await sendConversationMessage({
+      senderUserId: req.user?.dingTalkUserId,
+      cid,
+      content,
+    });
+    res.json({ success: true, data: result });
+  } catch (e) {
+    writeErr(res, e.status || 500, e.message || '发送到群聊失败');
   }
 });
 

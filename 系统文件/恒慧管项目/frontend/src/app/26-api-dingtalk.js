@@ -106,6 +106,7 @@ const DingTalkApi = {
     pushWorkNotification: '/dingtalk/push/work-notification', // POST 工作通知
     pushBatch: '/dingtalk/push/batch',                    // POST 批量推送
     queryPushStatus: '/dingtalk/push/status',             // GET  查询推送状态
+    jsapiConfig: '/dingtalk/jsapi-config',                  // GET  H5 dd.config 签名
   },
 };
 
@@ -127,6 +128,51 @@ const AuthService = {
   isDingTalkClient() {
     if (typeof dd !== 'undefined') return true;
     return /DingTalk|dingtalk/i.test(navigator.userAgent || '');
+  },
+
+  /** 钉钉 H5 调用 chooseChat 等 JSAPI 前必须先 dd.config（否则 API not authed） */
+  async ensureDingTalkJsApiConfig(jsApiList) {
+    if (typeof dd === 'undefined') {
+      throw new Error('请在钉钉客户端内打开恒慧管');
+    }
+    if (!ApiConfig.enabled || !authSession.token) {
+      throw new Error('请连接服务端后再使用钉钉选群');
+    }
+    if (!DingTalkApi.corpId || !DingTalkApi.agentId) {
+      await loadPublicConfig();
+    }
+    const list = Array.isArray(jsApiList) && jsApiList.length
+      ? jsApiList
+      : ['chooseChat', 'biz.chat.pickConversation'];
+    const pageUrl = location.href.split('#')[0];
+    const res = await fetch(
+      ApiConfig.baseUrl + DingTalkApi.endpoints.jsapiConfig + '?url=' + encodeURIComponent(pageUrl),
+      {
+        headers: { Authorization: 'Bearer ' + authSession.token },
+        signal: AbortSignal.timeout(ApiConfig.timeout || 15000),
+      },
+    );
+    const json = await parseJsonResponse(res);
+    if (!res.ok || json.success === false) {
+      throw new Error(json.message || `JSAPI 签名失败 (${res.status})`);
+    }
+    const cfg = json.data || {};
+    await new Promise(function(resolve, reject) {
+      dd.config({
+        agentId: String(cfg.agentId || DingTalkApi.agentId || ''),
+        corpId: String(cfg.corpId || DingTalkApi.corpId || ''),
+        timeStamp: cfg.timeStamp,
+        nonceStr: cfg.nonceStr,
+        signature: cfg.signature,
+        type: 0,
+        jsApiList: list,
+      });
+      dd.ready(function() { resolve(); });
+      dd.error(function(err) {
+        const msg = (err && (err.errorMessage || err.message)) || 'dd.config 失败';
+        reject(new Error(msg));
+      });
+    });
   },
 
   parseUrlParams() {

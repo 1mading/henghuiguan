@@ -66,6 +66,12 @@ const COLLECTION_META = {
     sensitivity: 'medium',
     note: '各角色菜单与能力配置',
   },
+  llmSettings: {
+    label: '文案润色配置',
+    table: 'app_meta',
+    sensitivity: 'high',
+    note: '大模型网关、API Key、模型列表与润色模版',
+  },
   systemUpdates: {
     label: '系统更新',
     table: 'system_updates',

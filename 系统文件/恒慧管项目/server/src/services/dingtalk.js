@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const config = require('../config');
 const {
   getAllUsers,
@@ -21,6 +22,8 @@ const {
 
 let cachedAccessToken = null;
 let tokenExpiresAt = 0;
+let cachedJsapiTicket = null;
+let jsapiTicketExpiresAt = 0;
 
 function isConfigured() {
   return !!(config.dingtalk.appKey && config.dingtalk.appSecret);
@@ -41,6 +44,56 @@ async function getAccessToken() {
   cachedAccessToken = data.access_token;
   tokenExpiresAt = Date.now() + (data.expires_in || 7200) * 1000;
   return cachedAccessToken;
+}
+
+async function getJsapiTicket() {
+  if (!isConfigured()) {
+    throw new Error('钉钉未配置，无法生成 JSAPI 签名');
+  }
+  if (cachedJsapiTicket && Date.now() < jsapiTicketExpiresAt - 60000) {
+    return cachedJsapiTicket;
+  }
+  const accessToken = await getAccessToken();
+  const res = await fetch(
+    `https://oapi.dingtalk.com/get_jsapi_ticket?access_token=${encodeURIComponent(accessToken)}`,
+  );
+  const data = await res.json();
+  if (data.errcode !== 0) {
+    throw new Error(formatDingTalkApiError('get_jsapi_ticket', data));
+  }
+  cachedJsapiTicket = data.ticket;
+  jsapiTicketExpiresAt = Date.now() + (data.expires_in || 7200) * 1000;
+  return cachedJsapiTicket;
+}
+
+function signJsapi(pageUrl, nonceStr, timeStamp, ticket) {
+  const plain = `jsapi_ticket=${ticket}&noncestr=${nonceStr}&timestamp=${timeStamp}&url=${pageUrl}`;
+  return crypto.createHash('sha256').update(plain).digest('hex');
+}
+
+/** H5 微应用 dd.config 所需签名（url 为当前页地址，不含 # 及后面部分） */
+async function buildJsapiConfig(pageUrl) {
+  const url = String(pageUrl || '').split('#')[0].trim();
+  if (!url) {
+    throw new Error('缺少页面 URL');
+  }
+  const corpId = String(config.dingtalk.corpId || '').trim();
+  const agentId = String(config.dingtalk.agentId || '').trim();
+  if (!corpId || !agentId) {
+    throw new Error('DINGTALK_CORP_ID / DINGTALK_AGENT_ID 未配置');
+  }
+  const nonceStr = crypto.randomBytes(8).toString('hex');
+  const timeStamp = String(Math.floor(Date.now() / 1000));
+  const ticket = await getJsapiTicket();
+  const signature = signJsapi(url, nonceStr, timeStamp, ticket);
+  return {
+    corpId,
+    agentId,
+    timeStamp,
+    nonceStr,
+    signature,
+    url,
+  };
 }
 
 function formatDingTalkApiError(path, data) {
@@ -171,6 +224,68 @@ function resolveWorkNotificationPageUrl(url) {
   if (custom) return custom;
   if (config.publicBaseUrl) return `${config.publicBaseUrl}/app`;
   return '';
+}
+
+/** 以当前用户身份向所选群/单聊会话发送普通文本（需前端 pickConversation / chooseChat 返回 cid） */
+async function sendConversationMessage({ senderUserId, cid, content }) {
+  const sender = String(senderUserId || '').trim();
+  const conversationId = String(cid || '').trim();
+  const text = String(content || '').trim();
+  if (!sender) {
+    throw new Error('当前账号未绑定钉钉 userid，请联系管理员同步通讯录');
+  }
+  if (!conversationId) {
+    throw new Error('缺少会话 cid');
+  }
+  if (!text) {
+    throw new Error('消息内容不能为空');
+  }
+  const safeContent = text.slice(0, 2000);
+
+  if (!isConfigured()) {
+    return {
+      success: true,
+      mock: true,
+      message: '钉钉未配置，演示模式已记录发送',
+      sender,
+      cid: conversationId,
+    };
+  }
+
+  const accessToken = await getAccessToken();
+  const body = {
+    sender,
+    cid: conversationId,
+    msg: {
+      msgtype: 'text',
+      text: { content: safeContent },
+    },
+  };
+
+  const res = await fetch(
+    `https://oapi.dingtalk.com/message/send_to_conversation?access_token=${encodeURIComponent(accessToken)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(`钉钉发送失败: HTTP ${res.status}，响应非 JSON`);
+  }
+  if (data.errcode !== 0) {
+    throw new Error(formatDingTalkApiError('message/send_to_conversation', data));
+  }
+  return {
+    success: true,
+    receiver: data.receiver,
+    sender,
+    cid: conversationId,
+  };
 }
 
 async function sendWorkNotification({ dingTalkUserIds, title, content, url, withLink = true }) {
@@ -1120,6 +1235,7 @@ async function ensureUserForDingTalkLogin(dingTalkUserId) {
 
   if (name) {
     const byName = allUsers.find(u =>
+      namesMatch(u.name, name) ||
       u.name === name ||
       u.name === nameCore ||
       name.startsWith(u.name) ||
@@ -1962,8 +2078,10 @@ async function diagnoseDingTalkSync() {
 module.exports = {
   isConfigured,
   getAccessToken,
+  buildJsapiConfig,
   getUserIdByAuthCode,
   buildWorkAppJumpUrl,
+  sendConversationMessage,
   sendWorkNotification,
   syncUsersFromDingTalk,
   replaceUsersFromDingTalk,

@@ -22,6 +22,7 @@ const DEFAULT_STORE = {
   notifications: [],
   workCalendar: null,
   rolePermissions: null,
+  llmSettings: null,
   systemUpdates: [],
   performanceTemplates: [],
   performanceCycles: [],
@@ -40,6 +41,8 @@ let storePath = null;
 let storeFileMtimeMs = null;
 /** MySQL 驱动下最近一次成功落盘时间戳（ms） */
 let storeMysqlSyncedAt = null;
+/** MySQL 读取失败时为 true，禁止 seed/落盘以免覆盖正式数据 */
+let storeLoadFailed = false;
 
 function useMysql() {
   return config.dbDriver === 'mysql';
@@ -156,6 +159,7 @@ function finalizeLoadedStore(dirtyHint = false) {
 
 function loadStoreFromMysql() {
   const tmp = path.join(os.tmpdir(), `hhg-mysql-load-${process.pid}.json`);
+  storeLoadFailed = false;
   try {
     runMysqlWorker('load', tmp);
     const raw = fs.readFileSync(tmp, 'utf8');
@@ -170,7 +174,9 @@ function loadStoreFromMysql() {
     storeFileMtimeMs = storeMysqlSyncedAt;
     return finalizeLoadedStore(false);
   } catch (e) {
-    console.warn('[db] MySQL 读取失败，使用空库', e.message);
+    storeLoadFailed = true;
+    console.error('[db] MySQL 读取失败，内存为空库且禁止写入/初始化', e.message);
+    console.error('[db] 请先启动 MySQL（D:\\HHG_MYSQL\\start-mysql.bat），再重启恒慧管后端');
     store = structuredClone(DEFAULT_STORE);
     storeMysqlSyncedAt = null;
     storeFileMtimeMs = null;
@@ -216,7 +222,12 @@ function reloadStoreFromDisk() {
   store = null;
   storeFileMtimeMs = null;
   storeMysqlSyncedAt = null;
+  storeLoadFailed = false;
   return loadStoreFromDisk();
+}
+
+function isStoreLoadFailed() {
+  return storeLoadFailed === true;
 }
 
 /**
@@ -236,6 +247,10 @@ function reloadStoreFromDiskIfStale() {
 }
 
 function persistStoreToMysql() {
+  if (storeLoadFailed) {
+    console.error('[db] MySQL 未成功加载，已拒绝写入以防覆盖正式数据');
+    return false;
+  }
   const tmp = path.join(os.tmpdir(), `hhg-mysql-save-${process.pid}.json`);
   try {
     fs.writeFileSync(tmp, JSON.stringify(store), 'utf8');
@@ -854,6 +869,7 @@ module.exports = {
   getStaffDeptCatalog,
   setStaffDeptCatalog,
   isEmpty,
+  isStoreLoadFailed,
   insertPushLog,
   persistStore,
   reloadStoreFromDisk,
