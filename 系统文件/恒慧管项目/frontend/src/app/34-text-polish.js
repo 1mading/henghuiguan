@@ -212,69 +212,6 @@ async function runTextPolish() {
   }
 }
 
-async function pickDingTalkConversation(corpId) {
-  if (typeof dd === 'undefined') {
-    throw new Error('请在钉钉客户端内打开恒慧管后再发送到群聊');
-  }
-  const id = String(corpId || '').trim();
-  if (!id) {
-    throw new Error('未加载企业 CorpId，请刷新页面后重试');
-  }
-  try {
-    await AuthService.ensureDingTalkJsApiConfig(['chooseChat', 'biz.chat.pickConversation']);
-  } catch (e) {
-    const msg = String(e.message || e);
-    if (/not authed|unauthorized|未授权|鉴权/i.test(msg)) {
-      throw new Error('钉钉选群未授权：请确认应用已发布，并开通「选择会话/chooseChat」权限后重试');
-    }
-    throw e;
-  }
-  return new Promise(function(resolve, reject) {
-    dd.ready(function() {
-      if (typeof dd.chooseChat === 'function') {
-        dd.chooseChat({
-          corpId: id,
-          isAllowCreateGroup: false,
-          filterNotOwnerGroup: false,
-          success: function(res) {
-            const cid = (res && (res.cid || res.openConversationId)) || '';
-            if (!cid) {
-              reject(new Error('未获取到群会话，请重试'));
-              return;
-            }
-            resolve({ cid: String(cid), title: (res && res.title) || '' });
-          },
-          fail: function(err) {
-            const msg = (err && (err.errorMessage || err.message)) || '未选择群聊';
-            reject(new Error(msg));
-          },
-        });
-        return;
-      }
-      if (dd.biz && dd.biz.chat && typeof dd.biz.chat.pickConversation === 'function') {
-        dd.biz.chat.pickConversation({
-          corpId: id,
-          isConfirm: true,
-          onSuccess: function(res) {
-            const cid = (res && res.cid) || '';
-            if (!cid) {
-              reject(new Error('未获取到群会话，请重试'));
-              return;
-            }
-            resolve({ cid: String(cid), title: (res && res.title) || '' });
-          },
-          onFail: function(err) {
-            const msg = typeof err === 'string' ? err : ((err && err.errorMessage) || '未选择群聊');
-            reject(new Error(msg));
-          },
-        });
-        return;
-      }
-      reject(new Error('当前钉钉版本不支持选群，请升级客户端或使用「复制」后手动粘贴'));
-    });
-  });
-}
-
 async function sendTextPolishResultToChat() {
   const text = String(state.textPolishResult || '').trim();
   if (!text) {
@@ -299,7 +236,7 @@ async function sendTextPolishResultToChat() {
   render();
   try {
     if (!DingTalkApi.corpId) await loadPublicConfig();
-    const picked = await pickDingTalkConversation(DingTalkApi.corpId);
+    const picked = await AuthService.pickDingTalkConversation(DingTalkApi.corpId);
     const res = await fetch(ApiConfig.baseUrl + '/text-polish/send-chat', {
       method: 'POST',
       headers: {
@@ -319,7 +256,12 @@ async function sendTextPolishResultToChat() {
     const title = picked.title ? `「${picked.title}」` : '群聊';
     alert(json.data && json.data.mock ? `演示模式：已模拟发送到${title}` : `已发送到${title}`);
   } catch (e) {
-    alert(e.message || '发送到群聊失败');
+    const msg = String(e.message || e || '发送到群聊失败');
+    if (/not authed|unauthorized|未授权|鉴权/i.test(msg)) {
+      alert('钉钉选群未授权：请完全退出恒慧管后重新从工作台打开，或联系管理员在开放平台开通「选择会话」权限并发布应用');
+    } else {
+      alert(msg);
+    }
   } finally {
     state.textPolishSendingChat = false;
     if (state.page === 'textPolish') render();

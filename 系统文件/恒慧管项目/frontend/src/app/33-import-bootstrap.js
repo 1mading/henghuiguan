@@ -1242,6 +1242,12 @@ async function bootstrapApp() {
       state.authError = '当前不在钉钉客户端内。请从钉钉工作台打开「恒慧管」完成免登。';
     }
     if (ApiConfig.enabled && authSession.token) {
+      if (AuthService.isDingTalkClient()) {
+        await Promise.race([
+          AuthService.prefetchDingTalkJsApiConfig(),
+          new Promise(function(r) { setTimeout(r, 5000); }),
+        ]);
+      }
       // 登录路径已拉过 bootstrap 时跳过，避免首开双倍全量请求
       if (!DataService._serverReady) {
         await DataService.loadFromServer();

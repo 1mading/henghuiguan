@@ -71,9 +71,23 @@ function signJsapi(pageUrl, nonceStr, timeStamp, ticket) {
   return crypto.createHash('sha256').update(plain).digest('hex');
 }
 
+/** 与前端 location 对齐，避免末尾斜杠不一致导致签名失败 */
+function normalizeJsapiPageUrl(raw) {
+  const base = String(raw || '').split('#')[0].trim();
+  if (!base) return '';
+  try {
+    const u = new URL(base);
+    let path = u.pathname || '/';
+    if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
+    return `${u.protocol}//${u.host}${path}${u.search || ''}`;
+  } catch {
+    return base.replace(/\/+$/, '') || base;
+  }
+}
+
 /** H5 微应用 dd.config 所需签名（url 为当前页地址，不含 # 及后面部分） */
 async function buildJsapiConfig(pageUrl) {
-  const url = String(pageUrl || '').split('#')[0].trim();
+  const url = normalizeJsapiPageUrl(pageUrl);
   if (!url) {
     throw new Error('缺少页面 URL');
   }
@@ -2079,6 +2093,7 @@ module.exports = {
   isConfigured,
   getAccessToken,
   buildJsapiConfig,
+  normalizeJsapiPageUrl,
   getUserIdByAuthCode,
   buildWorkAppJumpUrl,
   sendConversationMessage,

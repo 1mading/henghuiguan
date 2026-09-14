@@ -130,21 +130,98 @@ const AuthService = {
     return /DingTalk|dingtalk/i.test(navigator.userAgent || '');
   },
 
-  /** 钉钉 H5 调用 chooseChat 等 JSAPI 前必须先 dd.config（否则 API not authed） */
+  /** 钉钉 JSAPI 鉴权列表（须在首次 dd.config 一次注册；免登 requestAuthCode 不在此列） */
+  DINGTALK_JSAPI_LIST: [
+    'runtime.info',
+    'biz.chat.pickConversation',
+    'chooseChat',
+  ],
+
+  _jsApiConfigDone: false,
+  _jsApiConfigPromise: null,
+  _jsApiErrorHooked: false,
+
+  getJsapiPageUrl() {
+    try {
+      const u = new URL(location.href.split('#')[0]);
+      let path = u.pathname || '/';
+      if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
+      return `${u.protocol}//${u.host}${path}${u.search || ''}`;
+    } catch {
+      return String(location.href.split('#')[0] || '').replace(/\/+$/, '');
+    }
+  },
+
+  jsapiPageUrlCandidates() {
+    const primary = this.getJsapiPageUrl();
+    const set = new Set([primary]);
+    if (primary && !primary.endsWith('/')) set.add(`${primary}/`);
+    try {
+      const u = new URL(primary);
+      set.add(`${u.origin}${u.pathname.replace(/\/+$/, '') || '/'}`);
+    } catch { /* ignore */ }
+    return [...set].filter(Boolean);
+  },
+
+  hookDingTalkJsApiError() {
+    if (this._jsApiErrorHooked || typeof dd === 'undefined' || typeof dd.error !== 'function') return;
+    this._jsApiErrorHooked = true;
+    dd.error(function(err) {
+      console.warn('[钉钉 JSAPI]', err);
+    });
+  },
+
+  /** 登录后预鉴权（选群等能力依赖 dd.config，与 requestAuthCode 免登不是同一套） */
+  prefetchDingTalkJsApiConfig() {
+    if (!this.isDingTalkClient() || !ApiConfig.enabled || !authSession.token) {
+      return Promise.resolve(false);
+    }
+    return this.ensureDingTalkJsApiConfig().then(() => true).catch((e) => {
+      console.warn('[钉钉] JSAPI 预鉴权失败', e);
+      return false;
+    });
+  },
+
   async ensureDingTalkJsApiConfig(jsApiList) {
     if (typeof dd === 'undefined') {
       throw new Error('请在钉钉客户端内打开恒慧管');
     }
     if (!ApiConfig.enabled || !authSession.token) {
-      throw new Error('请连接服务端后再使用钉钉选群');
+      throw new Error('请连接服务端后再使用钉钉 JSAPI');
     }
-    if (!DingTalkApi.corpId || !DingTalkApi.agentId) {
-      await loadPublicConfig();
-    }
-    const list = Array.isArray(jsApiList) && jsApiList.length
-      ? jsApiList
-      : ['chooseChat', 'biz.chat.pickConversation'];
-    const pageUrl = location.href.split('#')[0];
+    if (this._jsApiConfigDone) return;
+    if (this._jsApiConfigPromise) return this._jsApiConfigPromise;
+
+    const self = this;
+    this._jsApiConfigPromise = (async function() {
+      if (!DingTalkApi.corpId || !DingTalkApi.agentId) {
+        await loadPublicConfig();
+      }
+      self.hookDingTalkJsApiError();
+      const list = [...new Set([
+        ...(self.DINGTALK_JSAPI_LIST || []),
+        ...(Array.isArray(jsApiList) ? jsApiList : []),
+      ])];
+      const urls = self.jsapiPageUrlCandidates();
+      let lastErr = null;
+      for (const pageUrl of urls) {
+        try {
+          await self._runDingTalkJsApiConfig(pageUrl, list);
+          self._jsApiConfigDone = true;
+          return;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr || new Error('钉钉 JSAPI 鉴权失败');
+    })().finally(function() {
+      self._jsApiConfigPromise = null;
+    });
+
+    return this._jsApiConfigPromise;
+  },
+
+  async _runDingTalkJsApiConfig(pageUrl, jsApiList) {
     const res = await fetch(
       ApiConfig.baseUrl + DingTalkApi.endpoints.jsapiConfig + '?url=' + encodeURIComponent(pageUrl),
       {
@@ -158,19 +235,104 @@ const AuthService = {
     }
     const cfg = json.data || {};
     await new Promise(function(resolve, reject) {
+      let settled = false;
+      function finish(err) {
+        if (settled) return;
+        settled = true;
+        if (err) reject(err);
+        else resolve();
+      }
       dd.config({
         agentId: String(cfg.agentId || DingTalkApi.agentId || ''),
         corpId: String(cfg.corpId || DingTalkApi.corpId || ''),
-        timeStamp: cfg.timeStamp,
-        nonceStr: cfg.nonceStr,
-        signature: cfg.signature,
+        timeStamp: String(cfg.timeStamp || ''),
+        nonceStr: String(cfg.nonceStr || ''),
+        signature: String(cfg.signature || ''),
         type: 0,
-        jsApiList: list,
+        jsApiList,
       });
-      dd.ready(function() { resolve(); });
+      dd.ready(function() { finish(); });
       dd.error(function(err) {
-        const msg = (err && (err.errorMessage || err.message)) || 'dd.config 失败';
-        reject(new Error(msg));
+        const msg = (err && (err.errorMessage || err.message)) || JSON.stringify(err || {});
+        finish(new Error(msg));
+      });
+    });
+  },
+
+  async pickDingTalkConversation(corpId) {
+    if (typeof dd === 'undefined') {
+      throw new Error('请在钉钉客户端内打开恒慧管后再发送到群聊');
+    }
+    const id = String(corpId || DingTalkApi.corpId || '').trim();
+    if (!id) {
+      throw new Error('未加载企业 CorpId，请刷新页面后重试');
+    }
+    await this.ensureDingTalkJsApiConfig();
+
+    const invokePickConversation = () => new Promise(function(resolve, reject) {
+      if (!dd.biz || !dd.biz.chat || typeof dd.biz.chat.pickConversation !== 'function') {
+        reject(new Error('当前钉钉版本不支持选群'));
+        return;
+      }
+      dd.biz.chat.pickConversation({
+        corpId: id,
+        isConfirm: 'true',
+        onSuccess: function(res) {
+          const cid = (res && res.cid) || '';
+          if (!cid) {
+            reject(new Error('未获取到群会话，请重试'));
+            return;
+          }
+          resolve({ cid: String(cid), title: (res && res.title) || '' });
+        },
+        onFail: function(err) {
+          const msg = typeof err === 'string' ? err : ((err && (err.errorMessage || err.message)) || '未选择群聊');
+          reject(new Error(msg));
+        },
+      });
+    });
+
+    const invokeChooseChat = () => new Promise(function(resolve, reject) {
+      if (typeof dd.chooseChat !== 'function') {
+        reject(new Error('chooseChat 不可用'));
+        return;
+      }
+      dd.chooseChat({
+        corpId: id,
+        isAllowCreateGroup: false,
+        filterNotOwnerGroup: false,
+        success: function(res) {
+          const cid = (res && (res.cid || res.openConversationId)) || '';
+          if (!cid) {
+            reject(new Error('未获取到群会话，请重试'));
+            return;
+          }
+          resolve({ cid: String(cid), title: (res && res.title) || '' });
+        },
+        fail: function(err) {
+          const msg = (err && (err.errorMessage || err.message)) || '未选择群聊';
+          reject(new Error(msg));
+        },
+      });
+    });
+
+    return new Promise(function(resolve, reject) {
+      dd.ready(async function() {
+        try {
+          resolve(await invokePickConversation());
+        } catch (e1) {
+          const m1 = String(e1.message || e1);
+          if (/not authed|unauthorized|未授权|鉴权|不支持/i.test(m1)) {
+            try {
+              resolve(await invokeChooseChat());
+              return;
+            } catch (e2) {
+              reject(e2);
+              return;
+            }
+          }
+          reject(e1);
+        }
       });
     });
   },
@@ -395,6 +557,8 @@ const AuthService = {
         console.warn('[登录] 退出接口失败:', e);
       }
     }
+    this._jsApiConfigDone = false;
+    this._jsApiConfigPromise = null;
     authSession = { token: null, refreshToken: null, dingTalkUserId: null, loginSource: 'demo', expiresAt: null };
     const fallback = users.find(u => u.name === '王元斌') || users[0];
     currentUser = fallback;
