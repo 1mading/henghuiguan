@@ -116,6 +116,7 @@ function toTaskItem(t, projectMap) {
     }
     item.deliverables = String(t.deliverables || '').trim() || fromDescDeliverables;
     item.acceptanceCriteria = String(t.acceptanceCriteria || '').trim() || fromDescAcceptance;
+    item.outOfScope = String(t.outOfScope || '').trim();
     item.completionEvidence = String(t.completionEvidence || '').trim();
     item.depsRisks = String(t.depsRisks || '').trim();
     item.escalation = String(t.escalation || '').trim();

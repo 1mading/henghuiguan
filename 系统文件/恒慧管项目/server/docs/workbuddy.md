@@ -79,7 +79,7 @@ Base：`{PUBLIC_BASE_URL}/api`
 - 计划书字段：`objective`、`value`、`scope`、`outOfScope`、`endDate`、`planVerified` / `planVerifiedBy` / `planVerifiedAt`
 - 基本信息：`desc`、`manager`、`status` 等
 
-里程碑任务额外包含：`milestoneSeq`、`roleA`/`roleR`/`roleC`/`roleV`、`deliverables`、`acceptanceCriteria`、`completionEvidence`、`verification`/`feedback`/`leftover`、`depsRisks` 等。
+里程碑任务额外包含：`milestoneSeq`、`roleA`/`roleR`/`roleC`/`roleV`、`deliverables`、`acceptanceCriteria`、`outOfScope`、`completionEvidence`、`verification`/`feedback`/`leftover`、`depsRisks` 等。
 
 ### 计划台账
 

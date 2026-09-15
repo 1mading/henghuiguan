@@ -29,11 +29,10 @@ async function loginWithDingTalkUserId(dingTalkUserId) {
       message: `账号「${user.name}」已停用，请联系总经理在人员档案中恢复或重新同步钉钉名册`,
     };
   }
+  // 历史 contact 已在加载/同步时迁为 member；此处兜底升格，允许登录
   if (user.profileKind === 'contact') {
-    return {
-      success: false,
-      message: `「${user.name}」为通知联系人，仅用于表单提单匹配与完成通知，不可登录恒慧管`,
-    };
+    user.profileKind = 'member';
+    if (!user.role) user.role = 'staff';
   }
   return authResponse(user);
 }

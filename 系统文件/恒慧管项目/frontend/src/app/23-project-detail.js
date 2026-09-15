@@ -45,20 +45,10 @@ function renderProjectFocusPanel(project, canManage) {
     ${readRow('下一步计划', 'fa-arrow-right', nextPlan, '暂无下一步计划')}
     ${readRow('当前卡点', 'fa-exclamation-triangle', blocker, '暂无卡点', blocker ? 'is-blocker' : 'is-blocker')}
   `;
-  const headerAction = canManage
-    ? (editing
-      ? ''
-      : `<div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button type="button" class="btn btn-ghost btn-sm" onclick="syncProjectPhaseFromMilestones('${project.id}')" title="按未完成里程碑同步当前阶段"><i class="fas fa-sync"></i> 同步阶段</button>
-          ${blocker ? `<button type="button" class="btn btn-ghost btn-sm" onclick="upgradeBlockerToIssue('${project.id}')"><i class="fas fa-level-up-alt"></i> 卡点升级</button>` : ''}
-          <button type="button" class="btn btn-ghost btn-sm" onclick="startEditProjectFocus()"><i class="fas fa-edit"></i> 编辑</button>
-        </div>`)
-    : '';
   return `
     <section>
       <h3 class="project-detail-section-title">
         <span>推进情况</span>
-        ${headerAction}
       </h3>
       <div class="project-focus-panel">
         ${editing ? editFields : readFields}
@@ -83,7 +73,7 @@ function renderProjectPlanPanel(project, canManage) {
       <input class="input" id="projectPlanName" style="width:100%;" value="${escapeHtml(project.name || '')}" placeholder="项目名称">
     </div>
     <div class="project-plan-grid">
-      <div class="form-group" style="margin:0;">
+      <div class="form-group" style="margin:0;" id="plan-anchor-manager">
         <label class="form-label">负责人</label>
         <input class="input" id="projectPlanManager" style="width:100%;" value="${escapeHtml(project.manager || '')}" placeholder="项目负责人">
       </div>
@@ -109,12 +99,12 @@ function renderProjectPlanPanel(project, canManage) {
         <label class="form-label">范围（做什么）</label>
         <textarea class="project-focus-textarea" id="projectPlanScope" placeholder="本期范围">${escapeHtml(project.scope || '')}</textarea>
       </div>
-      <div class="form-group" style="margin:0;">
-        <label class="form-label">不做范围</label>
-        <textarea class="project-focus-textarea" id="projectPlanOutOfScope" placeholder="明确本期不做">${escapeHtml(project.outOfScope || '')}</textarea>
+      <div class="form-group" style="margin:0;" id="plan-anchor-outOfScope">
+        <label class="form-label">不做范围 ${!completeness.hasOutOfScope ? '<span class="form-required">*</span>' : ''}</label>
+        <textarea class="project-focus-textarea" id="projectPlanOutOfScope" placeholder="明确本期不做（防范围蔓延，写成可引用的句子）">${escapeHtml(project.outOfScope || '')}</textarea>
       </div>
     </div>
-    <div class="form-group" style="margin:0;">
+    <div class="form-group" style="margin:0;" id="plan-anchor-endDate">
       <label class="form-label">最终完成时间</label>
       <input class="input" type="date" id="projectPlanEndDate" style="width:100%;" value="${escapeHtml(project.endDate || '')}">
       ${project.originalEndDate ? `<div style="font-size:12px;color:#9CA3AF;margin-top:4px;">原定：${escapeHtml(project.originalEndDate)}</div>` : ''}
@@ -142,10 +132,14 @@ function renderProjectPlanPanel(project, canManage) {
   `;
   const badge = completeness.ready
     ? `<span class="project-plan-badge is-ok"><i class="fas fa-check-circle"></i>计划字段已齐</span>`
-    : `<span class="project-plan-badge is-warn"><i class="fas fa-exclamation-circle"></i>里程碑计划 ${completeness.milestoneFilled}/${completeness.milestoneTotal || 0}</span>`;
+    : `<span class="project-plan-badge is-warn"><i class="fas fa-exclamation-circle"></i>${[
+        !completeness.hasOutOfScope ? '缺不做范围' : '',
+        `里程碑 ${completeness.milestoneFilled}/${completeness.milestoneTotal || 0}`,
+        !completeness.hasEscalationHint ? '缺升级规则' : '',
+      ].filter(Boolean).join(' · ')}</span>`;
   const verifiedBadge = project.planVerified
-    ? `<span class="project-plan-badge is-verified"><i class="fas fa-stamp"></i>已校验 · ${escapeHtml(project.planVerifiedBy || '')}</span>`
-    : '';
+    ? `<span class="project-plan-badge is-verified" id="plan-anchor-verified"><i class="fas fa-stamp"></i>已校验 · ${escapeHtml(project.planVerifiedBy || '')}</span>`
+    : `<span class="project-plan-badge is-warn" id="plan-anchor-verified"><i class="fas fa-stamp"></i>待校验确认</span>`;
   return `
     <section>
       <h3 class="project-detail-section-title">
@@ -153,16 +147,6 @@ function renderProjectPlanPanel(project, canManage) {
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
           ${badge}
           ${verifiedBadge}
-          <button type="button" class="btn btn-ghost btn-sm" onclick="copyProjectPlanLedger('${project.id}')" title="复制领导要求的管线格式"><i class="fas fa-copy"></i>复制台账</button>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="exportProjectPlanLedger('${project.id}')"><i class="fas fa-file-excel"></i>导出</button>
-          ${canVerifyProjectPlan(project) ? `
-            <button type="button" class="btn btn-ghost btn-sm" onclick="toggleProjectPlanVerified('${project.id}')">
-              <i class="fas fa-stamp"></i>${project.planVerified ? '取消校验' : '校验'}
-            </button>
-          ` : ''}
-          ${canManage && !editing ? `
-            <button type="button" class="btn btn-ghost btn-sm" onclick="startEditProjectPlan()"><i class="fas fa-edit"></i> 编辑</button>
-          ` : ''}
         </div>
       </h3>
       <div class="project-plan-panel">
@@ -184,7 +168,13 @@ function startEditProjectPlan() {
       teamMembers: [...(project.teamMembers || [])],
     };
   }
+  state.projectDetailTab = 'overview';
   state.editingProjectPlan = true;
+  state.editingProjectFocus = false;
+  state.projectDetailMoreOpen = false;
+  state.inlineDeliveryEditId = null;
+  state.editingDeliveryTaskId = null;
+  state.deliveryForm = null;
   render();
 }
 
@@ -616,7 +606,10 @@ function upgradeBlockerToIssue(projectId) {
 }
 
 function startEditProjectFocus() {
+  state.projectDetailTab = 'overview';
   state.editingProjectFocus = true;
+  state.editingProjectPlan = false;
+  state.projectDetailMoreOpen = false;
   render();
 }
 
@@ -695,24 +688,113 @@ function renderProjectDetailTaskPanel(project) {
 }
 
 function normalizeProjectDetailTab(tab) {
-  if (isProjectWorkTab(tab)) return 'work';
+  if (tab === 'overview') return 'overview';
   if (tab === 'progress' || tab === 'plan') return 'plan';
-  return 'plan';
+  return 'work';
 }
 
 function isProjectDetailEditing() {
-  // 编辑态：仅保留当前页签，避免其它页签干扰（交付检查卡片内填写不锁页签）
-  return !!(
-    state.editingProjectPlan
-    || state.editingProjectFocus
-    || state.taskEditInline
-  );
+  // 任务页内编辑时只留执行页签；计划书/推进已挂在标题区，不锁页签
+  return !!state.taskEditInline;
+}
+
+function renderSevenGridChip(cell, { mini, onclick } = {}) {
+  const kind = cell.status === 'ok' ? 'is-ok' : (cell.status === 'weak' ? 'is-weak' : 'is-empty');
+  const cls = `seven-grid-chip ${kind}${mini ? ' is-mini' : ''}`;
+  const title = `${cell.key ? cell.key + ' ' : ''}${cell.label}：${sevenGridStatusLabel(cell.status)}`;
+  const body = `
+    ${cell.key ? `<span class="seven-grid-chip-k">${escapeHtml(cell.key)}</span>` : ''}
+    <span class="seven-grid-chip-l">${escapeHtml(cell.label)}</span>
+    <span class="seven-grid-chip-s">${sevenGridStatusLabel(cell.status)}</span>
+  `;
+  if (onclick) {
+    return `<button type="button" class="${cls}" title="${escapeHtml(title)}（点击跳转）" onclick="${onclick}">${body}</button>`;
+  }
+  return `<span class="${cls}" title="${escapeHtml(title)}">${body}</span>`;
+}
+
+function pickMilestoneForSevenGridJump(project, gridKey) {
+  const list = getProjectMilestones(project);
+  if (!list.length) return null;
+  if (gridKey) {
+    const need = list.find(m => {
+      const cell = getMilestoneSevenGridHealth(m, project).cells.find(c => c.key === gridKey);
+      return cell && cell.status !== 'ok';
+    });
+    if (need) return need;
+  }
+  const incomplete = list.find(m => !getDeliveryCompleteness(m).complete);
+  return incomplete || list[0];
+}
+
+function jumpToMilestoneSevenGrid(milestoneId, gridKey) {
+  const milestone = tasks.find(t => t.id === milestoneId);
+  if (!milestone) return;
+  const project = projects.find(p => p.id === milestone.projectId);
+  if (!project) return;
+  state.form = { ...(state.form || {}), projectId: project.id };
+  state.currentProjectId = project.id;
+  jumpToSevenGridKey(project, gridKey, milestone);
+}
+
+function jumpToProjectSevenGrid(gridKey) {
+  const pid = (state.form && state.form.projectId) || state.currentProjectId;
+  const project = projects.find(p => p.id === pid);
+  if (!project) return;
+  const m = pickMilestoneForSevenGridJump(project, gridKey);
+  jumpToSevenGridKey(project, gridKey, m);
+}
+
+function jumpToSevenGridKey(project, gridKey, milestone) {
+  if (state.taskEditInline) state.taskEditInline = false;
+
+  if (gridKey === 'R4' || gridKey === 'R5' || gridKey === 'R7') {
+    const m = milestone || pickMilestoneForSevenGridJump(project, gridKey);
+    if (m && canEditTask(m)) {
+      state.inlineDeliveryEditId = null;
+      state.editingDeliveryTaskId = null;
+      state.deliveryForm = null;
+      state.editingProjectPlan = false;
+      editTask(m.id);
+      return;
+    }
+  }
+
+  // R1 / R2 / R3 / R6：进该里程碑清单填写
+  const m = milestone || pickMilestoneForSevenGridJump(project, gridKey);
+  if (m && canEditTask(m)) {
+    if (gridKey === 'R2') state.planScrollAnchor = 'delivery-anchor-outOfScope';
+    openTaskDeliveryEdit(m.id);
+    return;
+  }
+  state.projectDetailTab = 'work';
+  state.projectPlanView = 'list';
+  render();
 }
 
 function setProjectDetailTab(tab) {
   if (isProjectDetailEditing()) return;
+  state.projectDetailMoreOpen = false;
+  if (tab === 'gantt') {
+    state.projectDetailTab = 'work';
+    state.projectPlanView = 'gantt';
+    state.editingProjectPlan = false;
+    state.editingProjectFocus = false;
+    state.inlineDeliveryEditId = null;
+    state.editingDeliveryTaskId = null;
+    state.deliveryForm = null;
+    render();
+    return;
+  }
   const next = normalizeProjectDetailTab(tab);
   state.projectDetailTab = next;
+  if (next === 'work' && normalizeProjectWorkView(state.projectPlanView) === 'gantt') {
+    state.projectPlanView = 'table';
+  }
+  if (next !== 'overview') {
+    state.editingProjectPlan = false;
+    state.editingProjectFocus = false;
+  }
   if (next !== 'work') {
     state.inlineDeliveryEditId = null;
     state.editingDeliveryTaskId = null;
@@ -723,24 +805,109 @@ function setProjectDetailTab(tab) {
 
 function renderProjectDetailTabs() {
   const tab = normalizeProjectDetailTab(state.projectDetailTab);
+  const view = normalizeProjectWorkView(state.projectPlanView);
+  const active = (tab === 'work' && view === 'gantt') ? 'gantt' : tab;
   const items = [
-    { id: 'plan', label: '计划与推进', icon: 'fa-file-alt' },
-    { id: 'work', label: '项目执行', icon: 'fa-flag' },
+    { id: 'overview', label: '概览' },
+    { id: 'work', label: '任务' },
+    { id: 'gantt', label: '甘特' },
+    { id: 'plan', label: '问题与记录' },
   ];
-  const visible = isProjectDetailEditing()
-    ? items.filter(item => item.id === tab)
+  const shown = isProjectDetailEditing()
+    ? (active === 'gantt' ? items.filter(i => i.id === 'gantt') : items.filter(i => i.id === active))
     : items;
   return `
     <div class="project-detail-tabs" role="tablist" aria-label="项目详情页签">
-      ${visible.map(item => `
+      ${shown.map(item => `
         <button type="button"
-          class="project-detail-tab${tab === item.id ? ' active' : ''}"
+          class="project-detail-tab${active === item.id ? ' active' : ''}"
           role="tab"
-          aria-selected="${tab === item.id ? 'true' : 'false'}"
+          aria-selected="${active === item.id ? 'true' : 'false'}"
           ${isProjectDetailEditing() ? 'disabled' : `onclick="setProjectDetailTab('${item.id}')"`}>
-          <i class="fas ${item.icon}"></i>${item.label}
+          ${item.label}
         </button>
       `).join('')}
+    </div>
+  `;
+}
+
+function renderProjectOverviewTab(project, canManage) {
+  return `
+    <div class="project-detail-tab-panel project-overview-grid">
+      <div class="project-overview-main">
+        ${renderProjectPlanPanel(project, canManage)}
+      </div>
+      <div class="project-overview-aside">
+        ${canManage ? `
+        <section>
+          <h3 class="project-detail-section-title"><span>项目状态</span></h3>
+          <div class="project-hero-status">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              ${Object.entries(projectStatusMap).filter(([key]) => key !== 'archived').map(([key, val]) => `
+                <button onclick="updateProjectStatus('${project.id}', '${key}')" style="padding:6px 14px;border-radius:6px;border:1px solid ${project.status === key ? val.color : 'var(--border)'};background:${project.status === key ? val.bg : 'var(--bg-panel)'};color:${project.status === key ? val.color : 'var(--text-muted)'};cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;">
+                  <i class="fas ${val.icon}"></i>${val.label}
+                </button>
+              `).join('')}
+              ${canManageProject(project) || isFullAccess(currentUser.role) ? `
+              <button onclick="archiveProject('${project.id}')" style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--bg-panel);color:#9CA3AF;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;">
+                <i class="fas fa-archive"></i>归档
+              </button>
+              ` : ''}
+            </div>
+          </div>
+        </section>
+        ` : ''}
+        ${renderProjectFocusPanel(project, canManage)}
+      </div>
+    </div>
+  `;
+}
+
+function renderProjectWorkSplit(project) {
+  const view = normalizeProjectWorkView(state.projectPlanView);
+  if (view === 'gantt') {
+    return `
+      <div class="project-detail-tab-panel">
+        <div class="project-work-gantt-wrap">
+          ${renderProjectWorkToolbar(project)}
+          ${renderProjectGanttSection(project)}
+        </div>
+      </div>
+    `;
+  }
+  return `
+    <div class="project-detail-tab-panel">
+      <div class="project-work-split">
+        <aside class="project-work-rail">
+          ${renderWorkMilestoneRail(project)}
+          ${renderProjectFocusMini(project)}
+        </aside>
+        <div class="project-work-main">
+          ${view === 'table'
+            ? renderProjectMilestoneTabsSection(project, { hideTabs: true })
+            : `<div class="project-work-board-wrap">${renderProjectWorkToolbar(project)}${renderProjectDeliveryBoard(project, { hideTabs: true })}</div>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderProjectFocusMini(project) {
+  const { currentPhase, nextPlan, blocker } = getProjectFocusFields(project);
+  const phaseText = currentPhase || '暂无当前阶段';
+  const nextText = nextPlan || '暂无下一步';
+  const blockerText = String(blocker || '').trim();
+  return `
+    <div class="project-focus-mini">
+      <div class="project-focus-mini-head">
+        <span>推进情况</span>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="setProjectDetailTab('overview')">详情</button>
+      </div>
+      <div class="project-focus-mini-row"><span class="k">当前阶段</span><span class="v">${escapeHtml(phaseText)}</span></div>
+      <div class="project-focus-mini-row"><span class="k">下一步</span><span class="v">${escapeHtml(nextText)}</span></div>
+      ${blockerText
+        ? `<span class="project-focus-mini-tag" title="${escapeHtml(blockerText)}">卡点</span>`
+        : `<div class="project-focus-mini-ok">暂无卡点</div>`}
     </div>
   `;
 }
@@ -748,28 +915,114 @@ function renderProjectDetailTabs() {
 function renderProjectDetailTabBody(project, canManage) {
   const tab = normalizeProjectDetailTab(state.projectDetailTab);
   const editingOnly = isProjectDetailEditing();
+  if (tab === 'overview') {
+    return renderProjectOverviewTab(project, canManage);
+  }
   if (tab === 'work') {
     if (editingOnly && state.taskEditInline) {
       return `<div class="project-detail-tab-panel">${renderTaskEditModal()}</div>`;
     }
-    const view = normalizeProjectWorkView(state.projectPlanView);
-    return `
-      <div class="project-detail-tab-panel">
-        ${renderProjectPlanViewToggle()}
-        ${view === 'gantt'
-          ? renderProjectGanttSection(project)
-          : view === 'table'
-            ? `${renderProjectMilestonesTableSection(project)}${renderProjectTasksTableSection(project)}`
-            : renderProjectDeliveryBoard(project)}
-      </div>
-    `;
+    return renderProjectWorkSplit(project);
   }
   return `
     <div class="project-detail-tab-panel project-detail-side">
-      ${renderProjectFocusPanel(project, canManage)}
-      ${renderProjectPlanPanel(project, canManage)}
       ${editingOnly ? '' : renderProjectIssuesPanel(project, canManage)}
       ${editingOnly ? '' : renderProjectChangeLogsSection(project)}
+    </div>
+  `;
+}
+
+function toggleProjectDetailMoreMenu(ev) {
+  if (ev) ev.stopPropagation();
+  state.projectDetailMoreOpen = !state.projectDetailMoreOpen;
+  if (state.projectDetailMoreOpen) {
+    state.settingsOpen = false;
+    setTimeout(() => {
+      document.addEventListener('click', closeProjectDetailMoreOnOutsideClick, { once: true });
+    }, 0);
+  }
+  render();
+}
+
+function closeProjectDetailMoreMenu() {
+  if (!state.projectDetailMoreOpen) return;
+  state.projectDetailMoreOpen = false;
+  render();
+}
+
+function closeProjectDetailMoreOnOutsideClick() {
+  if (state.projectDetailMoreOpen) closeProjectDetailMoreMenu();
+}
+
+function renderProjectDetailMoreMenu(project, canManage) {
+  const blocker = String(getProjectFocusFields(project).blocker || '').trim();
+  const editingFocus = !!(canManage && state.editingProjectFocus);
+  const items = [];
+  if (canManage && !editingFocus) {
+    items.push({ onclick: `startEditProjectFocus()`, icon: 'fa-stream', label: '编辑推进' });
+  }
+  if (canManage) {
+    items.push({ onclick: `syncProjectPhaseFromMilestones('${project.id}')`, icon: 'fa-sync', label: '同步阶段' });
+    if (blocker) {
+      items.push({ onclick: `upgradeBlockerToIssue('${project.id}')`, icon: 'fa-level-up-alt', label: '卡点升级' });
+    }
+  }
+  items.push({ onclick: `copyProjectPlanLedger('${project.id}')`, icon: 'fa-copy', label: '复制台账' });
+  items.push({ onclick: `exportProjectPlanLedger('${project.id}')`, icon: 'fa-file-excel', label: '导出' });
+  if (canVerifyProjectPlan(project)) {
+    items.push({
+      onclick: `toggleProjectPlanVerified('${project.id}')`,
+      icon: 'fa-stamp',
+      label: project.planVerified ? '取消校验' : '校验',
+    });
+  }
+  if (canManage) {
+    items.push({ onclick: `showProjectHandoverModal('${project.id}')`, icon: 'fa-handshake', label: '交接' });
+    if (canManageProjectTemplates()) {
+      items.push({ onclick: `saveProjectAsTemplate('${project.id}')`, icon: 'fa-clone', label: '存为模板' });
+    }
+  }
+  const danger = canDeleteProject()
+    ? `<button type="button" class="settings-dropdown-item" style="color:#DC2626;" onclick="closeProjectDetailMoreMenu();deleteProject('${project.id}')"><i class="fas fa-trash-alt"></i><span>删除项目</span></button>`
+    : '';
+  if (!items.length && !danger) return '';
+  return `
+    <div class="settings-dropdown" onclick="event.stopPropagation()">
+      ${items.map(item => `
+        <button type="button" class="settings-dropdown-item" onclick="closeProjectDetailMoreMenu();${item.onclick}">
+          <i class="fas ${item.icon}"></i>
+          <span>${escapeHtml(item.label)}</span>
+        </button>
+      `).join('')}
+      ${danger ? `<div class="settings-dropdown-divider"></div>${danger}` : ''}
+    </div>
+  `;
+}
+
+function renderProjectDetailToolbar(project, canManage) {
+  const editingPlan = !!(canManage && state.editingProjectPlan);
+  const moreOpen = !!state.projectDetailMoreOpen;
+  return `
+    <div class="project-detail-toolbar">
+      <div class="project-detail-crumb">
+        <button type="button" class="project-detail-crumb-link" onclick="goBack()">返回项目管理</button>
+        <span class="project-detail-crumb-sep">/</span>
+        <span>项目详情</span>
+      </div>
+      <div class="project-detail-toolbar-actions">
+        ${canManage && !editingPlan ? `
+          <button type="button" class="btn btn-ghost btn-sm" onclick="startEditProjectPlan()"><i class="fas fa-file-alt"></i> 编辑计划</button>
+        ` : ''}
+        ${canManage && !isProjectArchived(project) ? `
+          <button type="button" class="btn btn-primary btn-sm" onclick="showNewTaskModal('${project.id}')"><i class="fas fa-plus"></i> 新建任务</button>
+        ` : ''}
+        <div class="project-detail-more-wrap">
+          <button type="button" class="btn btn-ghost btn-sm ${moreOpen ? 'is-open' : ''}" onclick="toggleProjectDetailMoreMenu(event)">
+            <i class="fas fa-ellipsis-h"></i> 更多
+          </button>
+          ${moreOpen ? renderProjectDetailMoreMenu(project, canManage) : ''}
+        </div>
+      </div>
     </div>
   `;
 }
@@ -777,29 +1030,9 @@ function renderProjectDetailTabBody(project, canManage) {
 function renderProjectHeroMembers(project, memberNames) {
   const names = memberNames || [];
   if (!names.length) {
-    return `
-      <div class="project-hero-members">
-        <span class="project-hero-members-label"><i class="fas fa-users"></i>项目成员</span>
-        <span class="project-hero-members-empty">暂无成员</span>
-      </div>
-    `;
+    return `<span class="project-hero-members-empty">暂无成员</span>`;
   }
-  const chips = names.map(name => {
-    const isManager = project.manager && isSamePersonName(project.manager, name);
-    return `
-      <span class="project-hero-member-chip${isManager ? ' is-manager' : ''}" title="${escapeHtml(isManager ? `${name}（项目经理）` : name)}">
-        ${renderPersonAvatar(name)}
-        <span class="project-hero-member-name">${escapeHtml(name)}</span>
-        ${isManager ? '<span class="project-hero-member-tag">经理</span>' : ''}
-      </span>
-    `;
-  }).join('');
-  return `
-    <div class="project-hero-members">
-      <span class="project-hero-members-label"><i class="fas fa-users"></i>项目成员</span>
-      <div class="project-hero-member-list">${chips}</div>
-    </div>
-  `;
+  return renderAvatarStack(names, 4);
 }
 
 function renderProjectDetail() {
@@ -814,7 +1047,7 @@ function renderProjectDetail() {
     state.projectPlanView = 'list';
   }
   if (state.projectDetailTab === 'progress') {
-    state.projectDetailTab = 'plan';
+    state.projectDetailTab = 'work';
   }
   if (state.projectDetailTab === 'milestones' || state.projectDetailTab === 'tasks' || state.projectDetailTab === 'delivery') {
     if (state.projectDetailTab === 'tasks' && state.projectPlanView !== 'gantt') {
@@ -837,71 +1070,42 @@ function renderProjectDetail() {
       ${isProjectArchived(project) ? `<p class="content-intro" style="margin-bottom:16px;"><i class="fas fa-archive" style="margin-right:6px;"></i>该项目已归档，仅可查看。归档操作请在未归档项目的详情页进行。</p>` : ''}
       ${isProjectPaused(project) ? `<p class="content-intro" style="margin-bottom:16px;"><i class="fas fa-pause-circle" style="margin-right:6px;"></i>项目已暂停：下属未完成任务已同步暂停，不计入待办与工时。恢复项目后将自动恢复这些任务状态。</p>` : ''}
 
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-        <button class="btn btn-ghost" onclick="goBack()"><i class="fas fa-arrow-left"></i>返回项目列表</button>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          ${canManage ? `
-            <button class="btn btn-ghost btn-sm" onclick="editProject('${project.id}')" title="编辑项目"><i class="fas fa-edit"></i></button>
-            <button class="btn btn-ghost btn-sm" onclick="showProjectHandoverModal('${project.id}')" title="交接负责人"><i class="fas fa-handshake"></i> 交接</button>
-            ${canManageProjectTemplates() ? `<button class="btn btn-ghost btn-sm" onclick="saveProjectAsTemplate('${project.id}')" title="另存为模板"><i class="fas fa-copy"></i> 存为模板</button>` : ''}
-          ` : ''}
-          ${canDeleteProject() ? `
-            <button class="btn btn-ghost btn-sm" style="color:#DC2626;" onclick="deleteProject('${project.id}')" title="永久删除项目及全部关联任务"><i class="fas fa-trash-alt"></i></button>
-          ` : ''}
-        </div>
-      </div>
+      ${renderProjectDetailToolbar(project, canManage)}
 
-      <div class="project-hero">
-        <div class="project-hero-top">
+      <div class="project-hero project-hero--compact">
+        <div class="project-hero-compact">
           <div class="project-hero-identity">
             ${renderProjectIconTile(project, 'lg')}
             <div style="min-width:0;flex:1;">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <div class="project-hero-title-line">
                 <h2 class="project-hero-title" style="margin:0;">${escapeHtml(project.name || '')}</h2>
-                ${renderProjectStatusDot(project.status)}
+                ${renderProjectStatusBadge(project)}
               </div>
-              <div class="project-hero-desc" style="margin-top:6px;">${escapeHtml(project.objective || project.desc || '暂无目标/描述')}</div>
+              <div class="project-hero-desc">${escapeHtml(project.objective || project.desc || '暂无目标/描述')}</div>
               <div class="project-hero-meta">
-                <span><i class="fas fa-building"></i>${escapeHtml(project.dept || '-')}</span>
-                <span><i class="fas fa-calendar"></i>${escapeHtml((project.startDate || '-') + ' ~ ' + (project.endDate || '-'))}</span>
-                <span style="font-family:monospace;font-size:12px;color:#9CA3AF;">${escapeHtml(project.id || '')}</span>
+                <span>${escapeHtml((project.startDate || '-') + ' — ' + (project.endDate || '-'))}</span>
+                ${renderProjectHeroMembers(project, memberNames)}
               </div>
-              ${renderProjectHeroMembers(project, memberNames)}
             </div>
           </div>
-          <div class="project-hero-stats-row project-hero-stats-row--2">
-            <div>
-              <div class="v">${stats.mainCount}</div>
-              <div class="l">里程碑</div>
+          <div class="project-hero-kpi">
+            <div class="project-hero-kpi-item is-progress">
+              <div class="l">进度 ${stats.progress}%</div>
+              <div class="progress-bar"><div class="progress-fill" style="width:${stats.progress}%;background:${accent};"></div></div>
             </div>
-            <div>
-              <div class="v">${stats.mainDone}</div>
+            <div class="project-hero-kpi-item">
+              <div class="l">总任务</div>
+              <div class="v">${stats.total}</div>
+            </div>
+            <div class="project-hero-kpi-item">
               <div class="l">已完成</div>
+              <div class="v">${stats.done}</div>
+            </div>
+            <div class="project-hero-kpi-item${stats.overdue ? ' is-overdue' : ''}">
+              <div class="l">延期</div>
+              <div class="v">${stats.overdue}</div>
             </div>
           </div>
-          ${stats.overdue ? `<p class="project-hero-overdue-hint"><i class="fas fa-exclamation-circle" style="margin-right:4px;"></i>有 ${stats.overdue} 个延期任务</p>` : ''}
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-            <span style="font-size:12px;color:var(--text-muted);">整体进度</span>
-            <span style="font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;">${stats.mainProgress}%</span>
-          </div>
-          <div class="progress-bar" style="height:8px;"><div class="progress-fill" style="width:${stats.mainProgress}%;background:${accent};"></div></div>
-          ${canManage ? `
-          <div style="margin-top:12px;padding:12px;background:var(--bg-muted);border-radius:8px;">
-            <div style="font-size:12px;color:#9CA3AF;margin-bottom:8px;">项目状态</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              ${Object.entries(projectStatusMap).filter(([key]) => key !== 'archived').map(([key, val]) => `
-                <button onclick="updateProjectStatus('${project.id}', '${key}')" style="padding:6px 14px;border-radius:6px;border:1px solid ${project.status === key ? val.color : '#E5E7EB'};background:${project.status === key ? val.bg : '#fff'};color:${project.status === key ? val.color : '#6B7280'};cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;">
-                  <i class="fas ${val.icon}"></i>${val.label}
-                </button>
-              `).join('')}
-              ${canManageProject(project) || isFullAccess(currentUser.role) ? `
-              <button onclick="archiveProject('${project.id}')" style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--bg-panel);color:#9CA3AF;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;">
-                <i class="fas fa-archive"></i>归档
-              </button>
-              ` : ''}
-            </div>
-          </div>
-          ` : ''}
         </div>
       </div>
 
@@ -979,6 +1183,7 @@ function showNewMilestoneModal(projectId) {
     deliverables: '',
     acceptanceCriteria: '',
     completionEvidence: '',
+    outOfScope: '',
     depsRisks: '',
     escalation: '',
     delayImpact: '',
@@ -991,6 +1196,7 @@ function showNewMilestoneModal(projectId) {
     state.page = 'projectDetail';
   }
   state.projectDetailTab = 'work';
+  state.projectPlanView = 'table';
   state.taskEditInline = true;
   state.showModal = null;
   render();
@@ -1009,8 +1215,8 @@ function showNewTaskModal(projectId) {
     alert('请先添加里程碑，再在里程碑下添加任务');
     return;
   }
-  let parentId = state.detailMilestoneId || '';
-  if (parentId && !milestones.some(m => m.id === parentId)) parentId = '';
+  let parentId = getWorkMilestoneTabId(project);
+  if (parentId === '__unassigned__' || (parentId && !milestones.some(m => m.id === parentId))) parentId = '';
   if (!parentId) parentId = milestones[0].id;
   state.returnToTaskId = null;
   state.form = {

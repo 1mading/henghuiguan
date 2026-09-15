@@ -2427,20 +2427,19 @@ function renderStaffDetailDrawer(user) {
         <div class="staff-drawer-section">
           <h4>身份</h4>
           <div>
-            <span class="staff-chip" style="background:${isContact ? '#FEF3C7' : '#ECFDF5'};color:${isContact ? '#B45309' : '#059669'};">${isContact ? '通知联系人' : '业务成员'}</span>
+            <span class="staff-chip" style="background:#ECFDF5;color:#059669;">人员档案</span>
             <span class="staff-chip role-badge ${roleBadgeClass(user.role)}" style="margin-top:0;">${roleDisplayName(user.role)}</span>
             <span class="staff-chip" style="background:${inactive ? '#FEE2E2' : '#ECFDF5'};color:${inactive ? '#B91C1C' : '#047857'};">${inactive ? '已停用' : '在职'}</span>
             <span class="staff-chip" style="background:${dingBound ? '#ECFDF5' : '#F3F4F6'};color:${dingBound ? '#047857' : '#6B7280'};">钉钉${dingBound ? '已绑定' : '未绑定'}</span>
-            ${!isContact ? (() => {
+            ${(() => {
               const st = getScopedKeyStatus(user.id);
               if (st && st.hasActive) {
                 return `<span class="staff-chip" style="background:#ECFDF5;color:#047857;">作用域Key已签发${st.lastSentAt ? '·已发送' : ''}</span>`;
               }
               return `<span class="staff-chip" style="background:var(--bg-muted);color:#6B7280;">作用域Key未签发</span>`;
-            })() : ''}
+            })()}
           </div>
         </div>
-        ${isContact ? '' : `
         <div class="staff-drawer-section">
           <h4>汇报关系</h4>
           <div class="staff-chain">
@@ -2471,10 +2470,9 @@ function renderStaffDetailDrawer(user) {
             `).join('')}
           </div>` : '<div style="font-size:12px;color:#9CA3AF;">暂无直属下属</div>'}
         </div>
-        `}
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           ${canEdit ? `<button class="btn btn-primary btn-sm" onclick="editStaff('${user.id}')"><i class="fas fa-edit"></i>编辑</button>` : ''}
-          ${isFullAccess(currentUser.role) && !inactive && !isContact ? `
+          ${isFullAccess(currentUser.role) && !inactive ? `
             <button class="btn btn-ghost btn-sm" onclick="issueScopedApiKey('${user.id}')"><i class="fas fa-key"></i>生成作用域Key</button>
             <button class="btn btn-ghost btn-sm" style="color:var(--brand);" onclick="sendScopedApiKeyPackage('${user.id}')"><i class="fas fa-paper-plane"></i>发送接入包</button>
           ` : ''}
@@ -2518,7 +2516,7 @@ function renderStaffTableRows(list, highlightSet, roleClass, roleName, emptyHint
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="width:36px;height:36px;border-radius:50%;background:${avatarBg};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600;flex-shrink:0;">${escapeHtml(u.name.charAt(0))}</div>
             <div style="min-width:0;">
-              <div class="staff-name">${escapeHtml(u.name)}${inactive ? ' <span class="tag" style="background:#FEE2E2;color:#B91C1C;margin-left:4px;">已停用</span>' : ''}${isContact ? ' <span class="tag" style="background:#FEF3C7;color:#B45309;margin-left:4px;">联系人</span>' : ''}${!isContact ? renderScopedKeyBadge(u.id) : ''}</div>
+              <div class="staff-name">${escapeHtml(u.name)}${inactive ? ' <span class="tag" style="background:#FEE2E2;color:#B91C1C;margin-left:4px;">已停用</span>' : ''}${renderScopedKeyBadge(u.id)}</div>
               <div class="staff-pos">${escapeHtml(u.position || '未设职位')}</div>
             </div>
           </div>
@@ -2529,7 +2527,7 @@ function renderStaffTableRows(list, highlightSet, roleClass, roleName, emptyHint
         <td style="padding:12px 16px;font-size:13px;color:#6B7280;">
           ${leader
             ? `<button type="button" class="staff-leader-link" onclick="jumpToStaffLeader('${leader.id}', event)">${escapeHtml(leader.name)}</button>`
-            : (isContact ? '—' : '本部门负责人')}
+            : '本部门负责人'}
         </td>
         <td class="staff-col-ops" style="padding:12px 12px;text-align:center;" onclick="event.stopPropagation()">
           <div class="staff-ops">
@@ -2585,13 +2583,11 @@ function renderStaff() {
   ensureStaffExpandedDefaults();
   const isStaffAdmin = isFullAccess(currentUser.role);
   const showInactive = !!state.staffShowInactive;
-  const kindFilter = state.staffKindFilter || 'all';
+  const kindFilter = 'all';
   let pool = isStaffAdmin
     ? users.slice()
     : getDeptScopeUsers(true, { includeContacts: true });
   if (!showInactive) pool = pool.filter(isStaffActive);
-  if (kindFilter === 'member') pool = pool.filter(u => !isContactProfile(u));
-  if (kindFilter === 'contact') pool = pool.filter(u => isContactProfile(u));
 
   if (state.staffSearch) {
     const q = state.staffSearch.toLowerCase();
@@ -2638,15 +2634,9 @@ function renderStaff() {
   const fb = state.syncFeedback;
   const missingReports = getMissingAssigneeReportsForCurrentUser();
   const kindTabs = [
-    { id: 'all', label: '全部' },
-    { id: 'member', label: '业务成员' },
-    { id: 'contact', label: '通知联系人' },
+    { id: 'all', label: '全部人员' },
   ];
-  const emptyHint = kindFilter === 'contact'
-    ? '该部门暂无通知联系人（在编辑人员中将档案类型设为「通知联系人」）'
-    : kindFilter === 'member'
-      ? '该部门暂无业务成员'
-      : '该部门暂无人员（父级仅含本级挂靠人员；子部门请点左侧子项）';
+  const emptyHint = '该部门暂无人员（父级仅含本级挂靠人员；子部门请点左侧子项）';
   const detailUser = state.staffDetailId ? findStaffUserById(state.staffDetailId) : null;
 
   return `
@@ -2812,10 +2802,11 @@ function showDingTalkSyncModal() {
   }
   const catalogDepts = getStaffDeptOptions();
   const remembered = loadLastSyncDepts();
+  // 默认勾选全部已加载部门（钉钉授权范围）；记忆仅作偏好，不挡住新部门
   let initialChecked = catalogDepts.slice();
   if (remembered && remembered.length) {
     const overlap = remembered.filter(d => catalogDepts.includes(d));
-    if (overlap.length) initialChecked = overlap;
+    if (overlap.length) initialChecked = [...new Set([...overlap, ...catalogDepts.filter(d => !overlap.includes(d))])];
   }
   state.form = {
     syncMode: 'replace',
@@ -2841,20 +2832,13 @@ function showDingTalkSyncModal() {
       const fromDing = (res.departments || []).map(d => d.name || d).filter(Boolean);
       const merged = [...new Set([...getStaffDeptOptions(), ...fromDing])];
       state.form.dingDeptOptions = merged;
-      const hasFinance = merged.some(d => String(d).includes('财务'));
+      // 钉钉部门加载后：默认全选授权范围内全部部门
+      state.form.syncDeptNames = merged.slice();
       if (!fromDing.length) {
         state.form.dingDeptHint = res.message
           || '钉钉未返回部门。请在开放平台扩大通讯录授权，或配置 DINGTALK_SYNC_ROOT_DEPT_IDS。';
-      } else if (!hasFinance) {
-        state.form.dingDeptHint = `已加载 ${fromDing.length} 个部门，但未包含「财务中心」。请在钉钉开放平台把财务中心加入本应用通讯录授权范围，或在 .env 配置 DINGTALK_SYNC_ROOT_DEPT_IDS=财务中心部门ID 后重启服务。`;
       } else {
-        state.form.dingDeptHint = `已从钉钉加载 ${fromDing.length} 个部门，可勾选「财务中心」等。`;
-      }
-      // 若上次记忆的部门中有钉钉新部门，补进勾选
-      const rememberedNow = loadLastSyncDepts();
-      if (rememberedNow && rememberedNow.length) {
-        state.form.syncDeptNames = rememberedNow.filter(d => merged.includes(d));
-        if (!state.form.syncDeptNames.length) state.form.syncDeptNames = getStaffDeptOptions().slice();
+        state.form.dingDeptHint = `已从钉钉加载 ${fromDing.length} 个部门，默认全选；新人入库为执行人员（可登录）。未出现的部门请扩大开放平台通讯录授权。`;
       }
     } else {
       state.form.dingDeptHint = (res && res.message) || '加载钉钉部门失败';
@@ -2921,8 +2905,7 @@ function toggleSyncDeptGroup(depts, checked) {
 
 async function toggleSyncDeptKind(dept, ev) {
   if (ev) { ev.preventDefault(); ev.stopPropagation(); }
-  const next = catalogKindForDept(dept) === 'contact' ? 'member' : 'contact';
-  await setCatalogDeptKind(dept, next);
+  await setCatalogDeptKind(dept, 'member');
   if (state.showModal === 'dingTalkSync') {
     state.form.replacePreview = null;
     render();
@@ -2933,9 +2916,7 @@ function formatReplacePreviewLines(preview) {
   if (!preview) return '';
   const lines = [];
   (preview.create || []).slice(0, 20).forEach(u => {
-    const kind = u.profileKind || catalogKindForDept(u.dept);
-    const tag = kind === 'contact' ? ' · 联系人' : '';
-    lines.push(`＋新增 ${u.name}（${u.dept}${tag}）`);
+    lines.push(`＋新增 ${u.name}（${u.dept} · 执行人员）`);
   });
   if ((preview.create || []).length > 20) lines.push(`＋…共 ${(preview.create || []).length} 人`);
   (preview.rename || []).slice(0, 30).forEach(r => lines.push(`✎改名 ${r.from} → ${r.to}`));
@@ -2986,34 +2967,25 @@ function renderSyncPreviewPanel(preview) {
 
 function renderSyncDeptRow(dept, deptSet, opts = {}) {
   const count = users.filter(u => u.dept === dept && isStaffActive(u)).length;
-  const inCatalog = getStaffDeptOptions().includes(dept);
-  const kind = inCatalog ? catalogKindForDept(dept) : 'contact';
-  const isContact = kind === 'contact';
   const checked = deptSet.has(dept);
   const uncategorized = !!opts.uncategorized;
   return `
-    <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid ${checked ? (isContact ? '#FDE68A' : '#A7F3D0') : '#E5E7EB'};border-radius:10px;background:${checked ? (isContact ? '#FFFBEB' : '#ECFDF5') : '#fff'};">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid ${checked ? '#A7F3D0' : '#E5E7EB'};border-radius:10px;background:${checked ? '#ECFDF5' : '#fff'};">
       <label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer;margin:0;">
         <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleSyncDept('${escapeDeptAttr(dept)}', this.checked)">
         <span style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
           ${escapeHtml(dept)}
           <span style="color:#9CA3AF;margin-left:4px;">(${count})</span>
-          ${uncategorized ? '<span style="font-size:10px;color:#B45309;margin-left:4px;">新部门</span>' : ''}
+          ${uncategorized ? '<span style="font-size:10px;color:#059669;margin-left:4px;">新部门</span>' : ''}
         </span>
       </label>
-      <button type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0;padding:4px 8px;font-size:11px;color:${isContact ? '#B45309' : '#059669'};border:1px solid ${isContact ? '#FDE68A' : '#A7F3D0'};background:${isContact ? '#FFFBEB' : '#ECFDF5'};"
-        onclick="toggleSyncDeptKind('${escapeDeptAttr(dept)}', event)"
-        title="同步时新建人员的默认档案类型（不改已有人员）">
-        ${isContact ? '默认同联系人' : '默认同业务'}
-      </button>
     </div>`;
 }
 
 function renderSyncDeptGroups(deptSet) {
   const allOpts = state.form.dingDeptOptions || getStaffDeptOptions();
   const catalogNames = new Set(getStaffDeptOptions());
-  const memberDepts = allOpts.filter(d => catalogNames.has(d) && catalogKindForDept(d) === 'member');
-  const contactDepts = allOpts.filter(d => catalogNames.has(d) && catalogKindForDept(d) === 'contact');
+  const knownDepts = allOpts.filter(d => catalogNames.has(d));
   const newDepts = allOpts.filter(d => !catalogNames.has(d));
   const section = (title, hint, depts, uncategorized) => {
     if (!depts.length) return '';
@@ -3037,10 +3009,9 @@ function renderSyncDeptGroups(deptSet) {
   };
   return `
     ${state.form.dingDeptLoading ? '<div style="font-size:12px;color:#9CA3AF;margin-bottom:10px;"><i class="fas fa-spinner fa-spin" style="margin-right:6px;"></i>正在加载钉钉部门…</div>' : ''}
-    ${section('默认同业务', '勾选后同步进来的新人默认设为业务成员（可登录）；已有人员类型不变', memberDepts, false)}
-    ${section('默认同联系人', '勾选后同步进来的新人默认设为通知联系人（不可登录）；已有人员类型不变', contactDepts, false)}
-    ${section('钉钉新部门（默认同联系人）', '勾选同步后写入目录；可先点右侧改为「默认同业务」', newDepts, true)}
-    ${!memberDepts.length && !contactDepts.length && !newDepts.length && !state.form.dingDeptLoading
+    ${section('钉钉通讯录部门', '勾选后按名册新建/更新/软停用；新人默认为执行人员（可登录）', knownDepts, false)}
+    ${section('钉钉新部门', '勾选同步后写入目录，人员入库为执行人员', newDepts, true)}
+    ${!knownDepts.length && !newDepts.length && !state.form.dingDeptLoading
       ? '<div style="padding:20px;text-align:center;color:#9CA3AF;font-size:13px;">暂无部门，请检查钉钉授权范围</div>' : ''}
   `;
 }
@@ -3199,7 +3170,7 @@ function renderDingTalkSyncModal() {
         <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
           ${isMainReplace ? `
           <p style="font-size:13px;color:#4B5563;line-height:1.6;margin:0 0 14px;">
-            勾选要同步的部门；右侧可设<strong>同步默认类型</strong>（仅影响新人）。财务中心等需在钉钉授权范围内才会出现。
+            勾选要同步的部门（默认全选钉钉授权范围内部门）。新人一律入库为<strong>执行人员</strong>（可登录）；已有经理/管理员角色保留。勾选范围内本地多出的人会软停用。
           </p>
           ${state.form.dingDeptHint ? `
           <div style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#EFF6FF;border:1px solid #BFDBFE;font-size:12px;color:#1E40AF;line-height:1.55;">
@@ -3257,7 +3228,7 @@ function renderDingTalkSyncModal() {
               ` : ''}
               ${mode === 'all' ? `
               <div style="padding:12px;background:#FEF3C7;border-radius:8px;border:1px solid #FDE68A;font-size:12px;color:#92400E;line-height:1.6;">
-                将拉取全公司钉钉通讯录并尽量绑定已有档案（不新建、不停用）。人数多时可能较慢。
+                将拉取开放平台已授权范围内的钉钉通讯录，并尽量绑定已有档案（不新建、不停用）。人数多时可能较慢。
               </div>
               ` : ''}
             </div>

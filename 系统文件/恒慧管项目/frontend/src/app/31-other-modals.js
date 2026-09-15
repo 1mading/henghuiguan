@@ -88,19 +88,22 @@ function renderTaskEditModal() {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
               <div class="form-group">
                 <label class="form-label">A 唯一交付人</label>
-                <input class="input" style="width:100%;" value="${escapeHtml(task.roleA || state.form.roleA || '')}" onchange="state.form.roleA=this.value" placeholder="请输入姓名" ${!canEdit ? 'disabled' : ''}>
+                ${renderArcvPersonSelect('roleA', task.roleA || state.form.roleA || '', !canEdit)}
               </div>
               <div class="form-group">
                 <label class="form-label">R 直接执行人</label>
-                <input class="input" style="width:100%;" value="${escapeHtml(task.roleR || task.assignee || state.form.roleR || '')}" onchange="state.form.roleR=this.value;state.form.assignee=this.value" placeholder="请输入姓名" ${!canEdit ? 'disabled' : ''}>
+                ${renderArcvPersonSelect('roleR', task.roleR || task.assignee || state.form.roleR || '', !canEdit)}
               </div>
-              <div class="form-group">
+              <div class="form-group" style="grid-column:1 / -1;">
                 <label class="form-label">C 协作人</label>
-                <input class="input" style="width:100%;" value="${escapeHtml(task.roleC || state.form.roleC || '')}" onchange="state.form.roleC=this.value" placeholder="多人用顿号分隔，须本人确认" ${!canEdit ? 'disabled' : ''}>
+                <div data-rolec-ms-host ${!canEdit ? 'data-disabled="1"' : ''}>
+                  ${renderRoleCMultiSelect(getRoleCFormNames(task), !canEdit)}
+                </div>
+                <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">从人员档案多选；须本人确认</div>
               </div>
               <div class="form-group">
                 <label class="form-label">V 业务验收人</label>
-                <input class="input" style="width:100%;" value="${escapeHtml(task.roleV || state.form.roleV || '')}" onchange="state.form.roleV=this.value" placeholder="请输入姓名" ${!canEdit ? 'disabled' : ''}>
+                ${renderArcvPersonSelect('roleV', task.roleV || state.form.roleV || '', !canEdit)}
               </div>
             </div>
             ${isEdit ? `
@@ -112,6 +115,11 @@ function renderTaskEditModal() {
               ${canEdit ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${task.id}')"><i class="fas fa-arrow-right"></i> 去填写</button>` : `<span style="font-size:12px;color:var(--text-muted);">明细在项目执行</span>`}
             </div>
             ` : ''}
+            <div class="form-section-title" style="margin-top:8px;"><i class="fas fa-clipboard-list"></i>本里程碑不交什么</div>
+            <div class="form-group">
+              <label class="form-label">不交什么 / 不做范围</label>
+              <textarea class="textarea" style="width:100%;height:56px;" oninput="state.form.outOfScope=this.value" placeholder="本节点明确不做、不交的内容" ${!canEdit ? 'disabled' : ''}>${escapeHtml(task.outOfScope || state.form.outOfScope || '')}</textarea>
+            </div>
             <div class="form-section-title" style="margin-top:8px;"><i class="fas fa-exclamation-triangle"></i>依赖与风险</div>
             <div class="form-group">
               <label class="form-label">依赖 / 风险 / 卡点</label>
@@ -383,7 +391,7 @@ function editProject(projectId) {
   }
   state.form = { projectId: project.id };
   state.page = 'projectDetail';
-  state.projectDetailTab = 'plan';
+  state.projectDetailTab = 'overview';
   state.editingProjectPlan = true;
   state.taskEditInline = false;
   state.showModal = null;
@@ -692,8 +700,6 @@ function renderStaffEditModal() {
   const canEditRole = isFullAccess(currentUser.role);
   const canEditDept = isFullAccess(currentUser.role);
   const canEditName = isFullAccess(currentUser.role);
-  const formKind = normalizeProfileKind(state.form.profileKind || user.profileKind);
-  const isContact = formKind === 'contact';
   const deptOptions = [...new Set([...getStaffDeptNames(), user.dept].filter(Boolean))];
   const sectionTitle = (t) => `<div style="font-size:12px;font-weight:600;color:#6B7280;margin:4px 0 12px;padding-bottom:6px;border-bottom:1px solid #F3F4F6;">${t}</div>`;
 
@@ -726,31 +732,22 @@ function renderStaffEditModal() {
               ${!canEditDept ? '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">仅总经理/管理员可修改</div>' : ''}
             </div>
             <div class="form-group">
-              <label class="form-label">档案类型 <span style="color:#DC2626;">*</span></label>
-              <select class="select" style="width:100%;" ${!canEditRole ? 'disabled' : ''} onchange="onStaffProfileKindChange(this.value)">
-                <option value="member" ${formKind === 'member' ? 'selected' : ''}>业务成员（可登录）</option>
-                <option value="contact" ${formKind === 'contact' ? 'selected' : ''}>通知联系人（不可登录）</option>
+              <label class="form-label">角色权限</label>
+              <select class="select" style="width:100%;" ${!canEditRole ? 'disabled' : ''} onchange="state.form.role=this.value;render()">
+                <option value="staff" ${(state.form.role || user.role) === 'staff' ? 'selected' : ''}>执行人员</option>
+                <option value="manager" ${(state.form.role || user.role) === 'manager' ? 'selected' : ''}>部门经理</option>
+                <option value="admin" ${(state.form.role || user.role) === 'admin' ? 'selected' : ''}>管理员</option>
+                <option value="gm" ${(state.form.role || user.role) === 'gm' ? 'selected' : ''}>总经理</option>
               </select>
-              <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">按个人设置；与所属部门无关</div>
+              ${!canEditRole ? '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">仅总经理/管理员可修改</div>' : ''}
+              ${canEditRole && (state.form.role || user.role) === 'manager' ? '<div style="font-size:11px;color:#2563EB;margin-top:4px;"><i class="fas fa-info-circle"></i> 保存后将自动把本部门执行人员的上级设为此人；单经理部门原经理将降为执行人员。</div>' : ''}
             </div>
           </div>
 
-          ${sectionTitle('权限与汇报')}
-          <div class="form-group">
-            <label class="form-label">角色权限</label>
-            <select class="select" style="width:100%;" ${!canEditRole || isContact ? 'disabled' : ''} onchange="state.form.role=this.value;render()">
-              <option value="staff" ${(state.form.role || user.role) === 'staff' ? 'selected' : ''}>执行人员</option>
-              <option value="manager" ${(state.form.role || user.role) === 'manager' ? 'selected' : ''}>部门经理</option>
-              <option value="admin" ${(state.form.role || user.role) === 'admin' ? 'selected' : ''}>管理员</option>
-              <option value="gm" ${(state.form.role || user.role) === 'gm' ? 'selected' : ''}>总经理</option>
-            </select>
-            ${isContact ? '<div style="font-size:11px;color:#B45309;margin-top:4px;">通知联系人固定为执行人员角色</div>' : ''}
-            ${!canEditRole ? '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">仅总经理/管理员可修改</div>' : ''}
-            ${canEditRole && !isContact && (state.form.role || user.role) === 'manager' ? '<div style="font-size:11px;color:#2563EB;margin-top:4px;"><i class="fas fa-info-circle"></i> 保存后将自动把本部门执行人员的上级设为此人；单经理部门原经理将降为执行人员。</div>' : ''}
-          </div>
+          ${sectionTitle('汇报关系')}
           <div class="form-group">
             <label class="form-label">上级领导</label>
-            <select class="select" style="width:100%;" onchange="state.form.leaderId=this.value" ${isContact ? 'disabled' : ''}>
+            <select class="select" style="width:100%;" onchange="state.form.leaderId=this.value">
               <option value="">无（部门负责人）</option>
               ${getLeaderCandidatesForStaff({ ...user, id: user.id || state.form.userId }).map(u => {
                 const selected = (state.form.leaderId || user.leaderId) === u.id;
@@ -764,12 +761,10 @@ function renderStaffEditModal() {
             <label class="form-label">账号状态</label>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-muted);">
               <div style="font-size:13px;color:var(--text);">
-                ${isContact
-                  ? '<span style="color:#B45309;font-weight:600;">通知联系人</span>（不可登录）'
-                  : (isStaffActive(state.form) ? '<span style="color:#059669;font-weight:600;">在职</span>（可登录、可分配任务）' : '<span style="color:#DC2626;font-weight:600;">已停用</span>（不可登录）')}
+                ${isStaffActive(state.form) ? '<span style="color:#059669;font-weight:600;">在职</span>（可登录、可分配任务）' : '<span style="color:#DC2626;font-weight:600;">已停用</span>（不可登录）'}
                 ${state.form.userId === currentUser.id ? '<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">不能停用当前登录账号</div>' : ''}
               </div>
-              ${!isContact && canToggleStaffActive({ id: state.form.userId, ...state.form }) ? `
+              ${canToggleStaffActive({ id: state.form.userId, ...state.form }) ? `
               <button type="button" class="btn btn-ghost btn-sm" style="color:${isStaffActive(state.form) ? '#DC2626' : '#059669'};" onclick="closeModal();toggleStaffActive('${state.form.userId}')">
                 <i class="fas ${isStaffActive(state.form) ? 'fa-user-slash' : 'fa-user-check'}"></i>${isStaffActive(state.form) ? '停用' : '恢复'}
               </button>` : ''}
@@ -787,36 +782,29 @@ function renderStaffEditModal() {
 
 function onStaffDeptChange(dept) {
   state.form.dept = dept;
-  // 新建且未手动改过档案类型时，用部门同步默认类型作初值；已有人员不因换部门改个人类型
-  if (isFullAccess(currentUser.role) && !state.form.userId && !state.form.profileKindLocked) {
-    state.form.profileKind = catalogKindForDept(dept);
-    if (state.form.profileKind === 'contact') state.form.role = 'staff';
-  }
+  state.form.profileKind = 'member';
   render();
 }
 
 function onStaffProfileKindChange(kind) {
-  state.form.profileKind = normalizeProfileKind(kind);
-  state.form.profileKindLocked = true;
-  if (state.form.profileKind === 'contact') state.form.role = 'staff';
+  state.form.profileKind = 'member';
   render();
 }
 
 async function setCatalogDeptKind(deptName, kind) {
   if (!isFullAccess(currentUser.role)) return;
   const next = getStaffDeptCatalog().map(d =>
-    d.name === deptName ? { ...d, kind: normalizeProfileKind(kind) } : { ...d }
+    d.name === deptName ? { ...d, kind: 'member' } : { ...d, kind: 'member' }
   );
   if (!next.some(d => d.name === deptName)) {
     next.push({
       name: deptName,
-      kind: normalizeProfileKind(kind),
+      kind: 'member',
       parentName: deptName === INFO_CENTER_DEPT_NAME ? '' : INFO_CENTER_DEPT_NAME,
     });
   }
   applyStaffDeptCatalog(next);
   syncDepartmentsAlias();
-  // 部门 kind 仅作为「同步默认类型」，不再批量改写已有人员的 profileKind
   if (ApiConfig.enabled && authSession.token) {
     try {
       const res = await DingTalkConfig.saveDeptCatalog(getStaffDeptCatalog());
@@ -1101,28 +1089,23 @@ function saveStaff() {
         leaderId: state.form.leaderId ?? existing.leaderId,
       };
     } else {
-      const profileKind = normalizeProfileKind(state.form.profileKind || existing.profileKind);
-      const role = profileKind === 'contact' ? 'staff' : (state.form.role || existing.role || 'staff');
       const { userId, profileKindLocked, ...rest } = state.form;
       users[idx] = {
         ...users[idx],
         ...rest,
-        role,
-        profileKind,
+        role: state.form.role || existing.role || 'staff',
+        profileKind: 'member',
       };
     }
     savedUser = users[idx];
   } else if (isFullAccess(currentUser.role)) {
     if (!state.form.name) { alert('请输入姓名'); return; }
-    const profileKind = normalizeProfileKind(
-      state.form.profileKind || catalogKindForDept(state.form.dept || currentUser.dept)
-    );
     savedUser = {
       id: genId('U'),
       name: state.form.name,
       dept: state.form.dept || currentUser.dept,
-      role: profileKind === 'contact' ? 'staff' : (state.form.role || 'staff'),
-      profileKind,
+      role: state.form.role || 'staff',
+      profileKind: 'member',
       position: state.form.position || '',
       leaderId: state.form.leaderId || '',
       standardWeekHours: state.form.standardWeekHours || 60,
@@ -1139,7 +1122,7 @@ function saveStaff() {
   }
 
   let batchLeaderSyncCount = 0;
-  if (savedUser?.role === 'manager' && savedUser.dept && isFullAccess(currentUser.role) && !isContactProfile(savedUser)) {
+  if (savedUser?.role === 'manager' && savedUser.dept && isFullAccess(currentUser.role)) {
     batchLeaderSyncCount = syncDeptStaffLeadersToManager(savedUser.dept, savedUser.id);
   }
 

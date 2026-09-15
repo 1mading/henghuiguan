@@ -211,6 +211,14 @@ function render() {
       }
     });
   }
+  if (state.page === 'projectDetail' && state.planScrollAnchor) {
+    const anchorId = state.planScrollAnchor;
+    state.planScrollAnchor = null;
+    requestAnimationFrame(() => {
+      const el = document.getElementById(anchorId);
+      if (el) el.scrollIntoView({ block: 'center' });
+    });
+  }
 }
 
 function isLiteMorePage(page) {
@@ -255,6 +263,7 @@ function toggleSettingsMenu(ev) {
   state.settingsOpen = !state.settingsOpen;
   if (state.settingsOpen) {
     state.inboxOpen = false;
+    state.projectDetailMoreOpen = false;
     setTimeout(() => {
       document.addEventListener('click', closeSettingsOnOutsideClick, { once: true });
     }, 0);

@@ -788,7 +788,7 @@ function normalizeProjectRecord(project) {
 
 const MILESTONE_PLAN_FIELDS = [
   'milestoneSeq', 'roleA', 'roleR', 'roleC', 'roleV',
-  'deliverables', 'acceptanceCriteria', 'completionEvidence',
+  'deliverables', 'acceptanceCriteria', 'completionEvidence', 'outOfScope',
   'depsRisks', 'escalation', 'delayImpact', 'reopenConditions',
 ];
 
@@ -821,6 +821,10 @@ function getMilestoneAcceptanceText(m) {
   const direct = String(m?.acceptanceCriteria || '').trim();
   if (direct) return direct;
   return extractMilestonePlanFromDesc(m?.desc).acceptanceCriteria;
+}
+
+function getMilestoneOutOfScopeText(m) {
+  return String(m?.outOfScope || '').trim();
 }
 
 function hydrateMilestonePlanFromDesc(task) {
@@ -919,10 +923,12 @@ function buildProjectPlanLedgerLines(project) {
 
 function getProjectPlanCompleteness(project) {
   const hasObjective = !!(project.objective || '').trim();
-  const hasScope = !!(project.scope || '').trim() || !!(project.outOfScope || '').trim();
+  const hasScope = !!(project.scope || '').trim();
+  const hasOutOfScope = !!(project.outOfScope || '').trim();
   const hasFinalDue = !!(project.endDate || '').trim();
   const milestones = getProjectMilestones(project);
   let filledMs = 0;
+  let escalationFilled = 0;
   milestones.forEach((m) => {
     const roles = getMilestonePlanRoles(m);
     const ok = !!(m.milestoneSeq || '').trim()
@@ -933,15 +939,160 @@ function getProjectPlanCompleteness(project) {
       && !!(normalizeDateStr(getEffectivePlanStart(m) || m.planStartDate))
       && !!(normalizeDateStr(resolveTaskDueDate(m)) || m.dueDate);
     if (ok) filledMs += 1;
+    if (String(m.escalation || '').trim()
+      || String(m.delayImpact || '').trim()
+      || String(m.reopenConditions || '').trim()) {
+      escalationFilled += 1;
+    }
   });
   return {
     hasObjective,
     hasScope,
+    hasOutOfScope,
     hasFinalDue,
+    hasEscalationHint: milestones.length === 0 || escalationFilled > 0,
     milestoneTotal: milestones.length,
     milestoneFilled: filledMs,
-    ready: hasObjective && hasScope && hasFinalDue && milestones.length > 0 && filledMs === milestones.length,
+    ready: hasObjective && hasScope && hasOutOfScope && hasFinalDue
+      && milestones.length > 0 && filledMs === milestones.length,
   };
+}
+
+function sevenGridStatusRank(status) {
+  if (status === 'ok') return 2;
+  if (status === 'weak') return 1;
+  return 0;
+}
+
+function worstSevenGridStatus(a, b) {
+  return sevenGridStatusRank(a) <= sevenGridStatusRank(b) ? a : b;
+}
+
+/**
+ * 里程碑级七格（出口物自检）。R2 读本节点「不交什么」，不跳项目计划书。
+ */
+function getMilestoneSevenGridHealth(milestone, project) {
+  const hasText = (v) => !!String(v || '').trim();
+  const m = milestone || {};
+  const roles = getMilestonePlanRoles(m);
+
+  const r1 = hasText(getMilestoneDeliverablesText(m)) ? 'ok' : 'empty';
+  const r2 = hasText(getMilestoneOutOfScopeText(m)) ? 'ok' : 'empty';
+  const r3 = hasText(getMilestoneAcceptanceText(m)) ? 'ok' : 'empty';
+
+  const hasStart = !!(normalizeDateStr(getEffectivePlanStart(m) || m.planStartDate));
+  const hasDue = !!(normalizeDateStr(resolveTaskDueDate(m)) || m.dueDate);
+  const r4 = hasStart && hasDue ? 'ok' : (hasStart || hasDue ? 'weak' : 'empty');
+
+  const r5 = hasText(roles.roleA) ? 'ok' : (hasText(m.assignee) ? 'weak' : 'empty');
+
+  const hasRecord = typeof hasDeliveryRecord === 'function'
+    ? hasDeliveryRecord(m)
+    : !!(String(m.verification || '').trim()
+      || (Array.isArray(m.attachments) && m.attachments.some(a => a && (a.purpose === 'evidence' || a.source === 'dingtalk_wiki'))));
+  const r6 = hasRecord || hasText(m.feedback) ? 'ok' : 'empty';
+
+  const r7 = hasText(m.escalation) || hasText(m.delayImpact) || hasText(m.reopenConditions)
+    ? 'ok'
+    : 'empty';
+
+  const cells = [
+    { key: 'R1', label: '交什么', status: r1, scope: 'milestone' },
+    { key: 'R2', label: '不交什么', status: r2, scope: 'milestone' },
+    { key: 'R3', label: '怎么算做完', status: r3, scope: 'milestone' },
+    { key: 'R4', label: '什么时候', status: r4, scope: 'milestone' },
+    { key: 'R5', label: '谁负责', status: r5, scope: 'milestone' },
+    { key: 'R6', label: '谁确认过', status: r6, scope: 'milestone' },
+    { key: 'R7', label: '走偏怎么办', status: r7, scope: 'milestone' },
+  ];
+  const filled = cells.filter(c => c.status === 'ok').length;
+  const missing = cells.filter(c => c.status !== 'ok');
+  return { cells, filled, total: cells.length, missing, level: 'milestone', milestoneId: m.id };
+}
+
+/** 任务级：不套满七格，只看执行三项（验收记录 / 业务反馈 / 遗留问题）+ 负责人/日期弱提示 */
+function getTaskExecutionHealth(task) {
+  const hasText = (v) => !!String(v || '').trim();
+  const t = task || {};
+  const hasRecord = typeof hasDeliveryRecord === 'function'
+    ? hasDeliveryRecord(t)
+    : !!(String(t.verification || '').trim()
+      || (Array.isArray(t.attachments) && t.attachments.some(a => a && (a.purpose === 'evidence' || a.source === 'dingtalk_wiki'))));
+  const cells = [
+    { key: 'E1', label: '验收记录', status: hasRecord ? 'ok' : 'empty' },
+    { key: 'E2', label: '业务反馈', status: hasText(t.feedback) ? 'ok' : 'empty' },
+    { key: 'E3', label: '遗留问题', status: hasText(t.leftover) ? 'ok' : 'empty' },
+  ];
+  const hasDue = !!(normalizeDateStr(resolveTaskDueDate(t)) || t.dueDate);
+  const owner = hasText(t.assignee);
+  const hints = [
+    { key: 'E4', label: '截止日期', status: hasDue ? 'ok' : 'weak' },
+    { key: 'E5', label: '负责人', status: owner ? 'ok' : 'weak' },
+  ];
+  const filled = cells.filter(c => c.status === 'ok').length;
+  const missing = cells.filter(c => c.status !== 'ok');
+  return {
+    cells,
+    hints,
+    filled,
+    total: cells.length,
+    missing,
+    level: 'task',
+    taskId: t.id,
+  };
+}
+
+/** 项目级：各里程碑七格取最差汇总；另附计划书校验（R6 计划层） */
+function getProjectSevenGridHealth(project) {
+  const milestones = getProjectMilestones(project);
+  const keys = [
+    { key: 'R1', label: '交什么' },
+    { key: 'R2', label: '不交什么' },
+    { key: 'R3', label: '怎么算做完' },
+    { key: 'R4', label: '什么时候' },
+    { key: 'R5', label: '谁负责' },
+    { key: 'R6', label: '谁确认过' },
+    { key: 'R7', label: '走偏怎么办' },
+  ];
+  if (!milestones.length) {
+    const emptyCells = keys.map(k => ({ ...k, status: 'empty' }));
+    return {
+      cells: emptyCells,
+      filled: emptyCells.filter(c => c.status === 'ok').length,
+      total: emptyCells.length,
+      missing: emptyCells.filter(c => c.status !== 'ok'),
+      level: 'project',
+      milestoneCount: 0,
+      planVerified: !!project.planVerified,
+    };
+  }
+  const perMs = milestones.map(m => getMilestoneSevenGridHealth(m, project));
+  const cells = keys.map(({ key, label }) => {
+    let status = 'ok';
+    perMs.forEach(h => {
+      const cell = h.cells.find(c => c.key === key);
+      if (cell) status = worstSevenGridStatus(status, cell.status);
+    });
+    return { key, label, status };
+  });
+  const filled = cells.filter(c => c.status === 'ok').length;
+  const missing = cells.filter(c => c.status !== 'ok');
+  return {
+    cells,
+    filled,
+    total: cells.length,
+    missing,
+    level: 'project',
+    milestoneCount: milestones.length,
+    planVerified: !!project.planVerified,
+    perMilestone: perMs,
+  };
+}
+
+function sevenGridStatusLabel(status) {
+  if (status === 'ok') return '有';
+  if (status === 'weak') return '弱';
+  return '缺';
 }
 
 function canVerifyProjectPlan(project) {

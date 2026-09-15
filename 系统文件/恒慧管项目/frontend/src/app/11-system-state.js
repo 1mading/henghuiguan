@@ -13,8 +13,15 @@ let state = {
   todoPageSize: 20,
   todoViewMode: 'all', // all | mine | created | handled
   todoViewLayout: 'board', // board | list
-  projectDetailTab: 'plan', // plan（含推进） | work
-  projectPlanView: 'table', // table | gantt | list（项目执行页内，默认表格）
+  projectDetailTab: 'work', // overview | work | plan（问题与记录）
+  projectDetailMoreOpen: false,
+  projectPlanView: 'table', // table | gantt | list（任务页内，默认列表）
+  detailMilestoneId: '', // 任务页：当前里程碑轨 id（__unassigned__=未归属）
+  detailTaskScope: 'all', // all | mine
+  detailTaskStatusFilter: 'all', // all | doing | todo | done
+  detailTaskQuery: '',
+  workViewReturn: null, // 从表格/甘特跳去清单填写时记住来源视图
+  planScrollAnchor: null, // 计划书编辑后滚到的元素 id
   deliveryFilter: 'all', // all | empty | partial | complete
   deliveryExpandedId: null,
   deliveryExpandedField: null,
@@ -378,6 +385,7 @@ const LOG_FIELD_LABELS = {
   verification: '验收记录',
   feedback: '业务反馈',
   leftover: '遗留问题',
+  outOfScope: '不交什么',
   originalPlanStartDate: '原定开始',
   originalDueDate: '原定截止',
   changeReason: '变更原因',
@@ -458,7 +466,7 @@ function buildTaskChangeDiff(beforeTask, afterForm) {
     'title', 'status', 'progress', 'assignee', 'planStartDate', 'estimatedHours', 'dueDate',
     'priority', 'desc', 'informCollaborators', 'assistCollaborators',
     'milestoneSeq', 'roleA', 'roleR', 'roleC', 'roleV',
-    'deliverables', 'acceptanceCriteria', 'completionEvidence',
+    'deliverables', 'acceptanceCriteria', 'completionEvidence', 'outOfScope',
     'verification', 'feedback', 'leftover',
     'depsRisks', 'escalation', 'delayImpact', 'reopenConditions',
   ];

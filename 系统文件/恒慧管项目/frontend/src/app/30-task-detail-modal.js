@@ -56,6 +56,11 @@ function renderTaskDetailActivityLogs(task) {
 function renderTaskDetailModal() {
   const task = tasks.find(t => t.id === state.form.taskId);
   if (!task || !canViewTask(task)) return '';
+  // 里程碑不再使用详情弹窗，改走项目执行页签
+  if (isMilestoneTask(task)) {
+    setTimeout(() => openMilestoneInProjectWork(task), 0);
+    return '';
+  }
   const displayStatus = getTaskDisplayStatus(task);
   const st = statusMap[displayStatus] || statusMap[task.status];
   const pr = priorityMap[task.priority];

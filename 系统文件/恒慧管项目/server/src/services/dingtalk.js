@@ -11,9 +11,6 @@ const {
 } = require('../db/database');
 const {
   PROFILE_KIND_MEMBER,
-  PROFILE_KIND_CONTACT,
-  normalizeProfileKind,
-  resolveProfileKindForUser,
   mergeDeptsIntoCatalog,
   catalogKindForDept,
   mergeOrgTreeIntoCatalog,
@@ -1223,8 +1220,7 @@ async function resolveWikiNodeByUrl(docUrl, operatorUnionId) {
 }
 
 /**
- * 钉钉登录时：按 userid 查库；若无则拉钉钉详情，按姓名/手机号匹配已有档案并绑定，否则新建 staff
- * 通知联系人（profileKind=contact）可绑定 userid，但调用方应拒绝其登录。
+ * 钉钉登录时：按 userid 查库；若无则拉钉钉详情，按姓名/手机号匹配已有档案并绑定，否则新建 staff（可登录执行人员）
  */
 async function ensureUserForDingTalkLogin(dingTalkUserId) {
   if (!dingTalkUserId) return null;
@@ -1260,8 +1256,8 @@ async function ensureUserForDingTalkLogin(dingTalkUserId) {
         ...byName,
         ...profileFieldsFromDetail(detail, dingTalkUserId),
         name: resolveSyncedDisplayName(byName.name, name),
-        // 不因登录尝试把联系人升级为业务成员
-        profileKind: byName.profileKind || PROFILE_KIND_MEMBER,
+        profileKind: PROFILE_KIND_MEMBER,
+        role: isPrivilegedStaffRole(byName.role) ? byName.role : (byName.role || 'staff'),
       };
       if (byName.name && linked.name && byName.name !== linked.name) {
         applyPersonRenames([{ from: byName.name, to: linked.name }]);
@@ -1278,7 +1274,8 @@ async function ensureUserForDingTalkLogin(dingTalkUserId) {
         ...byMobile,
         ...profileFieldsFromDetail(detail, dingTalkUserId),
         name: name || byMobile.name,
-        profileKind: byMobile.profileKind || PROFILE_KIND_MEMBER,
+        profileKind: PROFILE_KIND_MEMBER,
+        role: isPrivilegedStaffRole(byMobile.role) ? byMobile.role : (byMobile.role || 'staff'),
       };
       upsertUser(linked);
       return linked;
@@ -1457,15 +1454,9 @@ function applyDingTalkProfileToLocal(local, dingUserId, detail, basic, deptNameB
   const dept = resolveDeptName(detail.dept_id_list || basic?.dept_id_list, deptNameById);
   const position = detail.title || basic?.title || local.position || '执行人员';
   const profile = profileFieldsFromDetail({ ...basic, ...detail }, dingUserId);
-  const role = isPrivilegedStaffRole(local.role) ? local.role : (local.role || 'staff');
   const resolvedDept = dept === '未分配部门' && local.dept ? local.dept : dept;
-  const profileKind = local.profileKind
-    ? (isPrivilegedStaffRole(role) ? PROFILE_KIND_MEMBER : normalizeProfileKind(local.profileKind))
-    : resolveProfileKindForUser({
-      dept: resolvedDept,
-      role,
-      catalog: catalog || getStaffDeptCatalog(),
-    });
+  // 全员可登录：同步时联系人升为 member；特权角色不降级
+  const syncedRole = isPrivilegedStaffRole(local.role) ? local.role : (local.role || 'staff');
   return {
     ...local,
     name,
@@ -1473,8 +1464,8 @@ function applyDingTalkProfileToLocal(local, dingUserId, detail, basic, deptNameB
     position,
     // 手工停用账号同步时不应被恢复；其余保持在职
     active: local.active === false ? false : true,
-    role,
-    profileKind,
+    role: syncedRole,
+    profileKind: PROFILE_KIND_MEMBER,
     standardWeekHours: local.standardWeekHours || 60,
     ...profile,
   };
@@ -1508,8 +1499,8 @@ async function replaceUsersFromDingTalk(options = {}) {
     };
   }
 
-  // 勾选但未在目录中的部门，默认记为通知联系人部门
-  const nextCatalog = mergeDeptsIntoCatalog(getStaffDeptCatalog(), deptNames, PROFILE_KIND_CONTACT);
+  // 勾选但未在目录中的部门，一律记为可登录人员部门（member）
+  const nextCatalog = mergeDeptsIntoCatalog(getStaffDeptCatalog(), deptNames, PROFILE_KIND_MEMBER);
 
   const dingIds = [...pool.userIdSet];
   const detailsById = {};
@@ -1587,13 +1578,12 @@ async function replaceUsersFromDingTalk(options = {}) {
     }
 
     const dept = resolveDeptName(detail.dept_id_list || basic.dept_id_list, deptNameById);
-    const profileKind = catalogKindForDept(nextCatalog, dept);
     const created = {
       id: nextLocalUserId(nextUsers),
       name: dingName || dingUserId,
       dept,
       role: 'staff',
-      profileKind,
+      profileKind: PROFILE_KIND_MEMBER,
       position: detail.title || basic.title || '执行人员',
       leaderId: '',
       standardWeekHours: 60,

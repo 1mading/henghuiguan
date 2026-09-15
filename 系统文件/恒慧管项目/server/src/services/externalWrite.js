@@ -461,6 +461,7 @@ function createTask(body = {}, opts = {}) {
     deliverables: String(body.deliverables || '').trim(),
     acceptanceCriteria: String(body.acceptanceCriteria || '').trim(),
     completionEvidence: String(body.completionEvidence || '').trim(),
+    outOfScope: String(body.outOfScope || '').trim(),
     verification: String(body.verification || '').trim(),
     feedback: String(body.feedback || '').trim(),
     leftover: String(body.leftover || '').trim(),
@@ -492,7 +493,7 @@ const TASK_PATCHABLE = [
   'planStartDate', 'actualStartDate', 'actualEndDate', 'attachments', 'externalMeta', 'intakeMeta',
   'informCollaborators', 'assistCollaborators', 'collaboratorEntries', 'collaborators',
   'milestoneSeq', 'roleA', 'roleR', 'roleC', 'roleV',
-  'deliverables', 'acceptanceCriteria', 'completionEvidence',
+  'deliverables', 'acceptanceCriteria', 'completionEvidence', 'outOfScope',
   'verification', 'feedback', 'leftover',
   'depsRisks', 'escalation', 'delayImpact', 'reopenConditions',
   'originalPlanStartDate', 'originalDueDate', 'changeReason',
@@ -577,7 +578,7 @@ function updateTask(id, body = {}, opts = {}) {
   }
   const planTextFields = [
     'milestoneSeq', 'roleA', 'roleR', 'roleC', 'roleV',
-    'deliverables', 'acceptanceCriteria', 'completionEvidence',
+    'deliverables', 'acceptanceCriteria', 'completionEvidence', 'outOfScope',
     'verification', 'feedback', 'leftover',
     'depsRisks', 'escalation', 'delayImpact', 'reopenConditions',
   ];
@@ -797,16 +798,19 @@ function upsertExternalUser(body = {}, opts = {}) {
   if (!existing && dingTalkUserId) existing = findUserByDingTalkId(dingTalkUserId);
   if (!existing) existing = findUserByName(name);
 
+  // 人员档案以钉钉通讯录为准；不再使用 contact。角色默认执行人员 staff
+  let role = body.role || existing?.role || 'staff';
+  if (role === 'member') role = 'staff';
   const user = {
     ...(existing || {}),
     id: existing?.id || String(body.id || '').trim() || `U-EXT-${uuidv4().slice(0, 8)}`,
     name,
-    role: body.role || existing?.role || 'member',
+    role,
     dept: body.dept != null ? String(body.dept).trim() : (existing?.dept || ''),
     position: body.position != null ? String(body.position).trim() : (existing?.position || ''),
     dingTalkUserId: dingTalkUserId || existing?.dingTalkUserId || '',
     active: body.active == null ? (existing?.active !== false) : !!body.active,
-    profileKind: body.profileKind || existing?.profileKind || 'staff',
+    profileKind: 'member',
   };
   upsertUser(user);
   emitEntityChange('user.upserted', 'user', user, 'external-api');
@@ -954,6 +958,7 @@ function getCatalog() {
       roleV: 'V 业务验收人',
       deliverables: '交付物',
       acceptanceCriteria: '验收标准',
+      outOfScope: '本里程碑不做范围',
       completionEvidence: '完成证据（页面已不再填写）',
       verification: '验收记录（最终文件：登录态 /api/files/upload uploadPurpose=evidence；钉钉文档 /api/files/link-dingtalk-doc linkPurpose=evidence）',
       feedback: '业务反馈',

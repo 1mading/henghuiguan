@@ -28,6 +28,7 @@ async function goTo(page, opts = {}) {
   }
   state.page = page;
   state.settingsOpen = false;
+  state.projectDetailMoreOpen = false;
   state.uiScrollMain = 0;
   state.uiScrollWindow = 0;
   if (page === 'permissions') {
@@ -389,11 +390,15 @@ function viewTaskFromTeamKanban(taskId) {
   viewTask(taskId);
 }
 
-/** 打开任务详情；节点间跳转时压入浏览栈，供「返回前一步」 */
+/** 打开任务详情；节点间跳转时压入浏览栈，供「返回前一步」；里程碑改走项目执行页签，不再弹详情窗 */
 function viewTask(taskId, opts) {
   const t = tasks.find(x => x.id === taskId);
   if (!t || !canViewTask(t)) {
     alert('无权查看该任务');
+    return;
+  }
+  if (isMilestoneTask(t)) {
+    openMilestoneInProjectWork(t, opts);
     return;
   }
   rememberMainScrollBeforeModal();
@@ -433,6 +438,11 @@ function goBackTaskStep() {
   if (task && task.parentId) {
     const parent = tasks.find(x => x.id === task.parentId);
     if (parent && canViewTask(parent)) {
+      if (isMilestoneTask(parent)) {
+        state.showModal = null;
+        openMilestoneInProjectWork(parent);
+        return;
+      }
       viewTask(parent.id, { skipStack: true });
       return;
     }
@@ -451,7 +461,8 @@ function viewProject(projectId) {
   state.detailMilestoneId = '';
   state.editingProjectFocus = false;
   state.editingProjectPlan = false;
-  state.projectDetailTab = 'plan';
+  state.projectDetailTab = 'work';
+  state.projectDetailMoreOpen = false;
   state.projectPlanView = 'table';
   state.projectChangePage = 1;
   state.deliveryFilter = 'all';
@@ -461,6 +472,8 @@ function viewProject(projectId) {
   state.inlineDeliveryEditId = null;
   state.editingDeliveryTaskId = null;
   state.deliveryForm = null;
+  state.workViewReturn = null;
+  state.planScrollAnchor = null;
   if (!state.detailTaskScope) state.detailTaskScope = 'all';
   state.page = 'projectDetail';
   render();
@@ -1064,6 +1077,7 @@ function createMilestonesFromTemplate(project, templateId) {
       verification: '',
       feedback: '',
       leftover: '',
+      outOfScope: '',
       depsRisks: '',
       escalation: '',
       delayImpact: '',
@@ -1599,6 +1613,11 @@ function showArchiveModal(taskId) {
 
 function saveTask() {
   if (!state.form.title) { alert(state.form.isMilestone ? '请输入里程碑名称' : '请输入任务标题'); return; }
+  if (Array.isArray(state.form.roleCNames)) {
+    state.form.roleC = state.form.roleCNames.join('、');
+  }
+  delete state.form.roleCNames;
+  delete state.form.roleCSearch;
   state.form.dailyHours = resolveDailyHours(state.form.dailyHours);
   if (state.form.planStartDate && Number(state.form.estimatedHours) > 0) {
     const autoDue = calcEndDate(state.form.planStartDate, state.form.estimatedHours, state.form.dailyHours);
@@ -1783,6 +1802,10 @@ function saveTask() {
       notifyTaskAssigned(task);
     }
     if (task.parentId) updateParentProgress(task.parentId);
+    if (isMilestoneTask(task) || formIsMilestone) {
+      state.detailMilestoneId = task.id;
+      state.projectDetailTab = 'work';
+    }
   } else {
     const creatingMilestone = !!state.form.isMilestone;
     const parentTask = state.form.parentId ? tasks.find(t => t.id === state.form.parentId) : null;
@@ -1844,6 +1867,18 @@ function saveTask() {
     if (newTask.parentId) updateParentProgress(newTask.parentId);
     const returnTo = state.returnToTaskId;
     save();
+    if (creatingMilestone) {
+      state.returnToTaskId = null;
+      state.taskEditInline = false;
+      state.showModal = null;
+      state.detailMilestoneId = newTask.id;
+      state.projectDetailTab = 'work';
+      state.projectPlanView = normalizeProjectWorkView(state.projectPlanView) || 'table';
+      state.form = { projectId: newTask.projectId };
+      state.page = 'projectDetail';
+      render();
+      return;
+    }
     if (returnTo) {
       state.returnToTaskId = null;
       state.taskEditInline = false;

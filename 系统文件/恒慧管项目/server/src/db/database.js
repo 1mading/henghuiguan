@@ -132,9 +132,14 @@ function normalizeUserProfileKinds(users) {
   let changed = false;
   (users || []).forEach(u => {
     if (!u) return;
+    // 取消通知联系人：存量 contact 升为可登录执行人员（特权角色保留）
     const kind = normalizeProfileKind(u.profileKind);
     if (u.profileKind !== kind) {
       u.profileKind = kind;
+      changed = true;
+    }
+    if (u.profileKind === 'member' && !u.role) {
+      u.role = 'staff';
       changed = true;
     }
   });

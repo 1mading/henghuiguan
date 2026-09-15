@@ -124,19 +124,68 @@ function setProjectPlanView(view) {
 function renderProjectPlanViewToggle() {
   const view = normalizeProjectWorkView(state.projectPlanView);
   const items = [
-    { id: 'table', icon: 'fa-table', label: '表格' },
-    { id: 'gantt', icon: 'fa-chart-gantt', label: '甘特图' },
-    { id: 'list', icon: 'fa-clipboard-check', label: '清单' },
+    { id: 'table', label: '列表' },
+    { id: 'list', label: '板' },
+    { id: 'gantt', label: '甘特' },
   ];
   return `
-    <div class="project-plan-view-toggle" role="tablist" aria-label="项目执行视图">
+    <div class="project-plan-view-toggle" role="tablist" aria-label="任务视图">
       ${items.map(item => `
-        <button type="button" class="${view === item.id ? 'active' : ''}" onclick="setProjectPlanView('${item.id}')">
-          <i class="fas ${item.icon}"></i>${item.label}
-        </button>
+        <button type="button" class="${view === item.id ? 'active' : ''}" onclick="setProjectPlanView('${item.id}')">${item.label}</button>
       `).join('')}
     </div>
   `;
+}
+
+function renderProjectWorkToolbar(project) {
+  const scope = state.detailTaskScope === 'mine' ? 'mine' : 'all';
+  const status = state.detailTaskStatusFilter || 'all';
+  const q = state.detailTaskQuery || '';
+  const chip = (id, label, active) => `
+    <button type="button" class="project-work-filter-chip${active ? ' is-active' : ''}"
+      onclick="state.detailTaskStatusFilter='${id}';render()">${label}</button>
+  `;
+  return `
+    <div class="project-work-toolbar">
+      <div class="project-work-toolbar-left">
+        <label class="project-work-search">
+          <i class="fas fa-search"></i>
+          <input type="search" placeholder="搜索任务"
+            value="${escapeHtml(q)}"
+            onchange="state.detailTaskQuery=this.value;render()"
+            onkeydown="if(event.key==='Enter'){state.detailTaskQuery=this.value;render();}" />
+        </label>
+        ${chip('all', '全部', status === 'all')}
+        ${chip('doing', '进行中', status === 'doing')}
+        <button type="button" class="project-work-filter-chip${scope === 'mine' ? ' is-active' : ''}"
+          onclick="state.detailTaskScope=state.detailTaskScope==='mine'?'all':'mine';render()">我的</button>
+      </div>
+      ${renderProjectPlanViewToggle()}
+    </div>
+  `;
+}
+
+function filterProjectWorkTaskList(taskList) {
+  let list = taskList || [];
+  const q = String(state.detailTaskQuery || '').trim().toLowerCase();
+  const status = state.detailTaskStatusFilter || 'all';
+  const scope = state.detailTaskScope === 'mine' ? 'mine' : 'all';
+  if (q) {
+    list = list.filter(t => String(t.title || '').toLowerCase().includes(q)
+      || String(t.assignee || '').toLowerCase().includes(q));
+  }
+  if (status === 'doing') {
+    list = list.filter(t => getTaskDisplayStatus(t) === 'doing' || t.status === 'doing');
+  } else if (status === 'todo') {
+    list = list.filter(t => getTaskDisplayStatus(t) === 'todo' || t.status === 'todo');
+  } else if (status === 'done') {
+    list = list.filter(t => t.status === 'done' || getTaskDisplayStatus(t) === 'done');
+  }
+  if (scope === 'mine') {
+    list = list.filter(t => isSamePersonName(t.assignee, currentUser.name)
+      || (Array.isArray(t.assistCollaborators) && t.assistCollaborators.some(n => isSamePersonName(n, currentUser.name))));
+  }
+  return list;
 }
 
 function normalizeDeliveryFilter(filter) {
@@ -255,6 +304,11 @@ function renderDeliveryNodeFields(task, depth) {
       depth,
       splitDeliveryLines(getMilestoneDeliverablesText(task)).map(t => ({ html: escapeHtml(t) }))
     );
+    html += renderDeliveryOlRows(
+      '不交什么',
+      depth,
+      splitDeliveryLines(getMilestoneOutOfScopeText(task)).map(t => ({ html: escapeHtml(t) }))
+    );
     const acc = String(getMilestoneAcceptanceText(task) || '').trim();
     html += renderDeliveryOlRows('验收标准', depth, acc ? [{ html: escapeHtml(acc) }] : []);
   }
@@ -303,12 +357,7 @@ function countDeliveryBuckets(list) {
 function renderDeliveryFillActions(task, editing) {
   if (!canEditTask(task)) return '';
   if (editing) {
-    return `
-      <div class="delivery-form-actions">
-        <button type="button" class="btn btn-ghost btn-sm" onclick="cancelEditTaskDelivery()">取消</button>
-        <button type="button" class="btn btn-primary btn-sm" onclick="saveTaskDeliveryFields('${task.id}')"><i class="fas fa-save"></i> 保存</button>
-      </div>
-    `;
+    return '';
   }
   return `<button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${task.id}')">填写</button>`;
 }
@@ -401,9 +450,9 @@ async function handleDeliveryEvidencePaste(event, taskId) {
 
 function renderDeliveryEditField(label, body, extraClass) {
   return `
-    <div class="delivery-edit-field${extraClass ? ` ${extraClass}` : ''}">
-      <div class="delivery-edit-k">${escapeHtml(label)}</div>
-      ${body}
+    <div class="delivery-ol-row is-edit${extraClass ? ` ${extraClass}` : ''}" style="--d:0">
+      <div class="delivery-ol-k">${escapeHtml(label)}</div>
+      <div class="delivery-ol-v is-edit">${body}</div>
     </div>
   `;
 }
@@ -411,16 +460,51 @@ function renderDeliveryEditField(label, body, extraClass) {
 function renderDeliveryInlineForm(task) {
   const isMs = isMilestoneTask(task);
   const f = state.deliveryForm || {};
+  const project = projects.find(p => p.id === task.projectId);
+  const health = isMs
+    ? getMilestoneSevenGridHealth(task, project)
+    : getTaskExecutionHealth(task);
+  const missingChips = (health.missing || []).map(cell => {
+    if (isMs) {
+      return renderSevenGridChip(cell, {
+        mini: true,
+        onclick: `jumpToMilestoneSevenGrid('${task.id}','${cell.key}')`,
+      });
+    }
+    return renderSevenGridChip(cell, { mini: true });
+  }).join('');
+  const returnBtn = state.workViewReturn
+    ? `<button type="button" class="btn btn-ghost btn-sm" onclick="returnFromDeliveryEdit()"><i class="fas fa-arrow-left"></i> 返回${state.workViewReturn === 'gantt' ? '甘特图' : '表格'}</button>`
+    : '';
   return `
     <div class="project-inline-delivery-editor" id="delivery-edit-anchor" onclick="event.stopPropagation();">
-      <div class="delivery-edit-grid">
+      <div class="delivery-edit-crumb">
+        <div class="delivery-edit-crumb-path">
+          <span>项目执行</span><span class="sep">·</span>
+          <span>清单</span><span class="sep">·</span>
+          <strong>${escapeHtml(task.title || task.id)}</strong>
+          <span class="sep">·</span>
+          <span>${isMs ? '里程碑填写' : '任务填写'}</span>
+        </div>
+        <div class="delivery-form-actions">
+          ${returnBtn}
+          <button type="button" class="btn btn-ghost btn-sm" onclick="cancelEditTaskDelivery()">取消</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="saveTaskDeliveryFields('${task.id}')"><i class="fas fa-save"></i> 保存</button>
+        </div>
+      </div>
+      ${missingChips ? `<div class="delivery-edit-missing"><span class="delivery-edit-missing-k">${isMs ? '七格缺项' : '执行缺项'}</span>${missingChips}</div>` : ''}
+      <div class="delivery-ol-edit-form">
         ${isMs ? renderDeliveryEditField(
           '交付物',
-          `<textarea class="textarea delivery-edit-input is-lg" rows="5" oninput="state.deliveryForm.deliverables=this.value" placeholder="每行一项，保存后分行展示">${escapeHtml(f.deliverables || '')}</textarea>`
+          `<textarea class="textarea delivery-edit-input" rows="4" oninput="state.deliveryForm.deliverables=this.value" placeholder="每行一项（名词清单，如：集成蓝图、验收报告）">${escapeHtml(f.deliverables || '')}</textarea>`
+        ) : ''}
+        ${isMs ? renderDeliveryEditField(
+          '不交什么',
+          `<textarea id="delivery-anchor-outOfScope" class="textarea delivery-edit-input" rows="3" oninput="state.deliveryForm.outOfScope=this.value" placeholder="本里程碑明确不做/不交（可引用的句子）">${escapeHtml(f.outOfScope || '')}</textarea>`
         ) : ''}
         ${isMs ? renderDeliveryEditField(
           '验收标准',
-          `<textarea class="textarea delivery-edit-input" rows="3" oninput="state.deliveryForm.acceptanceCriteria=this.value" placeholder="文字描述">${escapeHtml(f.acceptanceCriteria || '')}</textarea>`
+          `<textarea class="textarea delivery-edit-input" rows="3" oninput="state.deliveryForm.acceptanceCriteria=this.value" placeholder="能回答「是/否」的判法；可含回退条件">${escapeHtml(f.acceptanceCriteria || '')}</textarea>`
         ) : ''}
         ${renderDeliveryEditField('验收记录', renderDeliveryEvidenceList(task, { canUpload: true }))}
         ${renderDeliveryEditField(
@@ -429,8 +513,7 @@ function renderDeliveryInlineForm(task) {
         )}
         ${renderDeliveryEditField(
           '遗留问题',
-          `<textarea class="textarea delivery-edit-input is-lg" rows="4" oninput="state.deliveryForm.leftover=this.value" placeholder="每行一项，保存后分行展示">${escapeHtml(f.leftover || '')}</textarea>`,
-          'is-wide'
+          `<textarea class="textarea delivery-edit-input" rows="3" oninput="state.deliveryForm.leftover=this.value" placeholder="每行一项，保存后分行展示">${escapeHtml(f.leftover || '')}</textarea>`
         )}
       </div>
     </div>
@@ -484,7 +567,8 @@ function renderDeliveryMilestoneCard(milestone, workTasks) {
   `;
 }
 
-function renderProjectDeliveryBoard(project) {
+function renderProjectDeliveryBoard(project, opts) {
+  const hideTabs = !!(opts && opts.hideTabs);
   const canManage = canManageProject(project) && !isProjectArchived(project);
   const { milestones, unassigned, workTasks } = buildDeliveryGroups(project);
   const scored = [...milestones, ...workTasks];
@@ -496,6 +580,7 @@ function renderProjectDeliveryBoard(project) {
     </button>
   `;
 
+  const activeId = getWorkMilestoneTabId(project);
   const cards = [];
   const editingId = state.inlineDeliveryEditId;
   const containsEdit = (milestone, descendants) => {
@@ -503,14 +588,19 @@ function renderProjectDeliveryBoard(project) {
     if (milestone && milestone.id === editingId) return true;
     return (descendants || []).some(t => t.id === editingId);
   };
-  milestones.forEach(m => {
-    const descendants = getDeliveryDescendants(m.id, workTasks);
-    if (groupMatchesDeliveryFilter(m, descendants, filter) || containsEdit(m, descendants)) {
-      cards.push(renderDeliveryMilestoneCard(m, workTasks));
+
+  if (activeId === '__unassigned__') {
+    if (unassigned.length && (groupMatchesDeliveryFilter(null, unassigned, filter) || containsEdit(null, unassigned))) {
+      cards.push(renderDeliveryMilestoneCard(null, unassigned));
     }
-  });
-  if (unassigned.length && (groupMatchesDeliveryFilter(null, unassigned, filter) || containsEdit(null, unassigned))) {
-    cards.push(renderDeliveryMilestoneCard(null, unassigned));
+  } else if (activeId) {
+    const m = milestones.find(x => x.id === activeId);
+    if (m) {
+      const descendants = getDeliveryDescendants(m.id, workTasks);
+      if (groupMatchesDeliveryFilter(m, descendants, filter) || containsEdit(m, descendants)) {
+        cards.push(renderDeliveryMilestoneCard(m, workTasks));
+      }
+    }
   }
 
   const hasSource = milestones.length || workTasks.length;
@@ -525,7 +615,7 @@ function renderProjectDeliveryBoard(project) {
     body = renderEmptyState({
       icon: 'fa-filter',
       title: '没有符合筛选的项',
-      hint: '试试切换「全部」或其它齐备状态',
+      hint: '试试切换「全部」或其它齐备状态，或换一个里程碑页签',
     });
   } else {
     body = `<div class="delivery-outline">${cards.join('')}</div>`;
@@ -533,15 +623,15 @@ function renderProjectDeliveryBoard(project) {
 
   return `
     <section class="delivery-board">
+      ${hideTabs ? '' : renderWorkMilestoneTabBar(project)}
       <div class="delivery-board-head">
         <div>
-          <div class="project-detail-section-title" style="margin:0;">里程碑 · 任务 · 交付</div>
-          <p class="delivery-board-hint">里程碑下错位列出任务；交付物、遗留问题按行展开，验收记录显示最终文件。</p>
+          <div class="project-detail-section-title" style="margin:0;">交付清单</div>
+          <p class="delivery-board-hint">当前页签下的里程碑与任务；交付物、遗留问题按行展开，验收记录显示最终文件。</p>
         </div>
         <div class="delivery-board-tools">
-          ${canManage ? `
-            <button type="button" class="btn btn-ghost btn-sm" onclick="showNewMilestoneModal('${project.id}')"><i class="fas fa-flag"></i>添加里程碑</button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="showNewTaskModal('${project.id}')"><i class="fas fa-plus"></i>添加任务</button>
+          ${canManage && activeId && activeId !== '__unassigned__' ? `
+            <button type="button" class="btn btn-ghost btn-sm" onclick="showNewSubTaskModal('${activeId}')"><i class="fas fa-plus"></i>添加任务</button>
           ` : ''}
           <div class="delivery-filter" role="tablist" aria-label="齐备筛选">
           ${filterBtn('all', '全部', counts.total)}
@@ -639,34 +729,32 @@ async function mountProjectGantt() {
 }
 
 function getDeliveryCompleteness(task) {
-  const isMs = isMilestoneTask(task);
-  const recordFilled = hasDeliveryRecord(task);
-  const fields = isMs
-    ? [
-        { key: 'deliverables', label: '交付物', filled: !!String(getMilestoneDeliverablesText(task) || '').trim() },
-        { key: 'acceptance', label: '验收标准', filled: !!String(getMilestoneAcceptanceText(task) || '').trim() },
-        { key: 'verification', label: '验收记录', filled: recordFilled },
-        { key: 'feedback', label: '业务反馈', filled: !!String(task.feedback || '').trim() },
-        { key: 'leftover', label: '遗留问题', filled: !!String(task.leftover || '').trim() },
-      ]
-    : [
-        { key: 'verification', label: '验收记录', filled: recordFilled },
-        { key: 'feedback', label: '业务反馈', filled: !!String(task.feedback || '').trim() },
-        { key: 'leftover', label: '遗留问题', filled: !!String(task.leftover || '').trim() },
-      ];
-  const filled = fields.filter(f => f.filled).length;
+  if (isMilestoneTask(task)) {
+    const project = projects.find(p => p.id === task.projectId);
+    const health = getMilestoneSevenGridHealth(task, project);
+    return {
+      filled: health.filled,
+      total: health.total,
+      complete: health.total > 0 && health.missing.length === 0,
+      missing: health.missing.map(c => `${c.key} ${c.label}`),
+    };
+  }
+  const health = getTaskExecutionHealth(task);
   return {
-    filled,
-    total: fields.length,
-    complete: filled === fields.length && filled > 0,
-    missing: fields.filter(f => !f.filled).map(f => f.label),
+    filled: health.filled,
+    total: health.total,
+    complete: health.total > 0 && health.missing.length === 0,
+    missing: health.missing.map(c => c.label),
   };
 }
 
 function renderDeliveryCompletenessBadge(task) {
   const c = getDeliveryCompleteness(task);
   if (!c.total) return '';
-  const tip = c.complete ? '交付信息已齐备' : `缺：${c.missing.join('、') || '待填'}（请在项目执行中填写）`;
+  const isMs = isMilestoneTask(task);
+  const tip = c.complete
+    ? (isMs ? '七格已齐' : '执行项已齐')
+    : `缺：${c.missing.join('、') || '待填'}`;
   const kind = c.complete ? 'is-complete' : (c.filled === 0 ? 'is-empty' : 'is-partial');
   return `<span title="${escapeHtml(tip)}" class="delivery-badge ${kind}">齐备 ${c.filled}/${c.total}</span>`;
 }
@@ -682,7 +770,7 @@ function renderTaskDeliveryCompletenessSection(task, canEdit) {
     <div class="detail-section">
       <div class="detail-section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <i class="fas fa-clipboard-check"></i> 交付齐备
+          <i class="fas fa-clipboard-check"></i> ${isMilestoneTask(task) ? '七格齐备' : '交付齐备'}
           ${renderDeliveryCompletenessBadge(task)}
         </span>
         ${goDelivery}
@@ -702,10 +790,16 @@ function openTaskDeliveryEdit(taskId) {
     alert('无权编辑');
     return;
   }
+  const curView = normalizeProjectWorkView(state.projectPlanView);
+  if (state.page === 'projectDetail' && curView !== 'list') {
+    state.workViewReturn = curView;
+  }
   state.inlineDeliveryEditId = taskId;
   state.editingDeliveryTaskId = taskId;
+  state.editingProjectPlan = false;
   state.deliveryForm = {
     deliverables: getMilestoneDeliverablesText(task) || '',
+    outOfScope: getMilestoneOutOfScopeText(task) || '',
     acceptanceCriteria: getMilestoneAcceptanceText(task) || '',
     feedback: task.feedback || '',
     leftover: task.leftover || '',
@@ -720,14 +814,33 @@ function openTaskDeliveryEdit(taskId) {
   state.projectDetailTab = 'work';
   state.projectPlanView = 'list';
   state.deliveryFilter = 'all';
+  if (isMilestoneTask(task)) state.detailMilestoneId = taskId;
+  else {
+    const owner = getOwningMilestone(task);
+    if (owner) state.detailMilestoneId = owner.id;
+  }
   ensureDeliveryOpenMap()[taskId] = true;
   render();
 }
 
-function cancelEditTaskDelivery() {
+function returnFromDeliveryEdit() {
+  const back = state.workViewReturn;
   state.editingDeliveryTaskId = null;
   state.inlineDeliveryEditId = null;
   state.deliveryForm = null;
+  state.workViewReturn = null;
+  if (back) state.projectPlanView = back;
+  state.projectDetailTab = 'work';
+  render();
+}
+
+function cancelEditTaskDelivery() {
+  const back = state.workViewReturn;
+  state.editingDeliveryTaskId = null;
+  state.inlineDeliveryEditId = null;
+  state.deliveryForm = null;
+  state.workViewReturn = null;
+  if (back) state.projectPlanView = back;
   render();
 }
 
@@ -740,12 +853,14 @@ function saveTaskDeliveryFields(taskId) {
   const f = state.deliveryForm || {};
   const before = {
     deliverables: task.deliverables || '',
+    outOfScope: task.outOfScope || '',
     acceptanceCriteria: task.acceptanceCriteria || '',
     feedback: task.feedback || '',
     leftover: task.leftover || '',
   };
   if (isMilestoneTask(task)) {
     task.deliverables = String(f.deliverables || '').trim();
+    task.outOfScope = String(f.outOfScope || '').trim();
     task.acceptanceCriteria = String(f.acceptanceCriteria || '').trim();
   }
   task.feedback = String(f.feedback || '').trim();
@@ -756,12 +871,14 @@ function saveTaskDeliveryFields(taskId) {
     operateTime: new Date().toLocaleString(),
     before: [
       before.deliverables && `交付物:${before.deliverables}`,
+      before.outOfScope && `不交:${before.outOfScope}`,
       before.acceptanceCriteria && `验收:${before.acceptanceCriteria}`,
       before.feedback && `反馈:${before.feedback}`,
       before.leftover && `遗留:${before.leftover}`,
     ].filter(Boolean).join('；') || '（空）',
     after: [
       task.deliverables && `交付物:${task.deliverables}`,
+      task.outOfScope && `不交:${task.outOfScope}`,
       task.acceptanceCriteria && `验收:${task.acceptanceCriteria}`,
       task.feedback && `反馈:${task.feedback}`,
       task.leftover && `遗留:${task.leftover}`,
@@ -772,109 +889,173 @@ function saveTaskDeliveryFields(taskId) {
   state.editingDeliveryTaskId = null;
   state.inlineDeliveryEditId = null;
   state.deliveryForm = null;
+  const back = state.workViewReturn;
+  state.workViewReturn = null;
+  if (back) state.projectPlanView = back;
   save({ immediateSync: true });
   render();
 }
 
-function renderProjectMilestonesTableSection(project) {
-  const list = getProjectMilestones(project);
-  const canManage = canManageProject(project) && !isProjectArchived(project);
-  const rows = list.map((m, idx) => {
-    const displayStatus = getTaskDisplayStatus(m);
-    const st = statusMap[displayStatus] || statusMap[m.status] || statusMap.todo;
-    const start = normalizeDateStr(getEffectivePlanStart(m) || m.planStartDate) || '-';
-    const due = normalizeDateStr(resolveTaskDueDate(m)) || m.dueDate || '-';
-    const workCount = getMilestoneDescendantTasks(m.id).length;
-    const progress = calcProgress(m.id);
-    const roles = getMilestonePlanRoles(m);
-    const seq = String(m.milestoneSeq || `M${idx + 1}`).trim();
-    const overdueCls = isOverdue(m) ? ' todo-row--overdue' : '';
-    return `
-      <tr class="${overdueCls.trim()}" onclick="viewTask('${m.id}')">
-        <td style="font-variant-numeric:tabular-nums;font-weight:600;color:#4B5563;">${escapeHtml(seq)}</td>
-        <td>
-          <div style="display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;">
-            <i class="fas fa-flag" style="color:var(--brand);flex-shrink:0;"></i>
-            <span style="font-weight:600;color:var(--text);">${escapeHtml(m.title || m.id)}</span>
-            ${renderDeliveryCompletenessBadge(m)}
-          </div>
-        </td>
-        <td><span class="status-tag status-${displayStatus}" style="font-size:10px;"><i class="fas ${st.icon}"></i>${st.label}</span></td>
-        <td>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;">
-            ${roles.roleA ? `<span class="arcv-chip"><b>A</b>${escapeHtml(roles.roleA)}</span>` : ''}
-            ${roles.roleR ? `<span class="arcv-chip"><b>R</b>${escapeHtml(roles.roleR)}</span>` : `<span class="arcv-chip"><b>R</b>${escapeHtml(m.assignee || '-')}</span>`}
-            ${roles.roleC ? `<span class="arcv-chip"><b>C</b>${escapeHtml(roles.roleC)}</span>` : ''}
-            ${roles.roleV ? `<span class="arcv-chip"><b>V</b>${escapeHtml(roles.roleV)}</span>` : ''}
-          </div>
-        </td>
-        <td>${escapeHtml(start)}</td>
-        <td>${escapeHtml(due)}</td>
-        <td style="font-variant-numeric:tabular-nums;">${workCount}</td>
-        <td style="min-width:110px;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <div class="progress-bar" style="flex:1;height:6px;"><div class="progress-fill" style="width:${progress}%;"></div></div>
-            <span style="font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;">${progress}%</span>
-          </div>
-        </td>
-        <td class="col-actions" onclick="event.stopPropagation();">
-          ${canManage ? `
-            <button type="button" class="btn btn-ghost btn-sm" onclick="editTask('${m.id}')" title="编辑"><i class="fas fa-edit"></i></button>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="showNewSubTaskModal('${m.id}')" title="添加任务"><i class="fas fa-plus"></i></button>
-          ` : ''}
-          ${canCompleteMilestone(m) && canOperateTask(m) ? `
-            <button type="button" class="btn btn-success btn-sm" onclick="updateTaskStatus('${m.id}', 'done')"><i class="fas fa-check"></i></button>
-          ` : ''}
-        </td>
-      </tr>`;
-  }).join('');
+function setWorkMilestoneTab(milestoneId) {
+  state.detailMilestoneId = milestoneId || '';
+  render();
+}
 
+function getWorkMilestoneTabId(project) {
+  if (!project) return '';
+  const milestones = getProjectMilestones(project);
+  const workTasks = getProjectWorkTasksFlat(project);
+  const unassigned = workTasks.filter(t => !getOwningMilestone(t));
+  const id = state.detailMilestoneId || '';
+  if (id === '__unassigned__' && unassigned.length) return id;
+  if (id && milestones.some(m => m.id === id)) return id;
+  if (milestones.length) return milestones[0].id;
+  if (unassigned.length) return '__unassigned__';
+  return '';
+}
+
+function openMilestoneInProjectWork(milestone, opts) {
+  if (!milestone || !isMilestoneTask(milestone) || !milestone.projectId) return;
+  if (!canViewTask(milestone)) {
+    alert('无权查看该里程碑');
+    return;
+  }
+  if (state.page !== 'projectDetail') {
+    state.prevPage = state.page;
+  }
+  state.page = 'projectDetail';
+  state.form = { projectId: milestone.projectId };
+  state.currentProjectId = milestone.projectId;
+  state.projectDetailTab = 'work';
+  const preferView = opts && opts.view;
+  if (preferView) state.projectPlanView = normalizeProjectWorkView(preferView);
+  else if (normalizeProjectWorkView(state.projectPlanView) === 'gantt') {
+    state.projectPlanView = 'table';
+  } else {
+    state.projectPlanView = normalizeProjectWorkView(state.projectPlanView) || 'table';
+  }
+  state.detailMilestoneId = milestone.id;
+  state.showModal = null;
+  state.taskEditInline = false;
+  state.inlineDeliveryEditId = null;
+  state.editingDeliveryTaskId = null;
+  state.deliveryForm = null;
+  state.taskViewStack = [];
+  render();
+}
+
+function renderWorkMilestoneRail(project) {
+  const milestones = getProjectMilestones(project);
+  const canManage = canManageProject(project) && !isProjectArchived(project);
+  const active = getWorkMilestoneTabId(project);
+  const workTasks = getProjectWorkTasksFlat(project);
+  const unassigned = workTasks.filter(t => !getOwningMilestone(t));
+  const items = milestones.map((m, idx) => {
+    const seq = String(m.milestoneSeq || `M${idx + 1}`).trim();
+    const descendants = getMilestoneDescendantTasks(m.id).filter(t => !isMilestoneTask(t));
+    const done = descendants.filter(t => t.status === 'done').length;
+    const health = getMilestoneSevenGridHealth(m, project);
+    const hasEmpty = health.missing.some(c => c.status === 'empty');
+    const hasWeak = health.missing.some(c => c.status === 'weak');
+    const dot = (hasEmpty || hasWeak)
+      ? `<span class="ms-work-tab-dot ${hasEmpty ? 'is-empty' : 'is-weak'}" title="七格有缺口"></span>`
+      : '';
+    return `
+      <button type="button" class="ms-work-rail-item${active === m.id ? ' is-active' : ''}"
+        onclick="setWorkMilestoneTab('${m.id}')" title="${escapeHtml(m.title || m.id)}">
+        ${dot}
+        <span class="ms-work-rail-name">${escapeHtml(seq)} ${escapeHtml(m.title || m.id)}</span>
+        <span class="ms-work-rail-count">${done}/${descendants.length}</span>
+      </button>
+    `;
+  });
+  if (unassigned.length) {
+    items.push(`
+      <button type="button" class="ms-work-rail-item${active === '__unassigned__' ? ' is-active' : ''}"
+        onclick="setWorkMilestoneTab('__unassigned__')">
+        <span class="ms-work-rail-name">未归属</span>
+        <span class="ms-work-rail-count">${unassigned.length}</span>
+      </button>
+    `);
+  }
   return `
-    <section style="margin-top:16px;">
-      <div class="project-detail-section-title">
+    <div class="ms-work-rail-card">
+      <div class="ms-work-rail-head">
         <span>里程碑</span>
         ${canManage ? `
-          <button type="button" class="btn btn-ghost btn-sm" onclick="showNewMilestoneModal('${project.id}')"><i class="fas fa-flag"></i>添加里程碑</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="showNewMilestoneModal('${project.id}')">
+            <i class="fas fa-plus"></i>
+          </button>
         ` : ''}
       </div>
-      <div class="todo-table-card">
-        <div class="todo-table-wrap">
-          <table class="todo-table todo-table--slim">
-            <thead>
-              <tr>
-                <th>M序号</th>
-                <th>里程碑</th>
-                <th>状态</th>
-                <th>A/R/C/V</th>
-                <th>开始日期</th>
-                <th>截止日期</th>
-                <th>任务数</th>
-                <th>进度</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${list.length
-                ? rows
-                : `<tr><td colspan="9">${renderEmptyState({ icon: 'fa-flag', title: '暂无里程碑', hint: canManage ? '点击右上角添加里程碑' : '负责人可添加里程碑' })}</td></tr>`}
-            </tbody>
-          </table>
-        </div>
-        <div class="todo-pager"><div class="todo-pager-info">共 ${list.length} 个里程碑</div></div>
+      <div class="ms-work-rail-list">
+        ${items.length ? items.join('') : `<div class="ms-work-tabs-empty">暂无里程碑</div>`}
       </div>
-    </section>
+    </div>
   `;
 }
 
-function renderProjectTasksTableSection(project) {
-  const list = getProjectWorkTasksFlat(project);
+function renderWorkMilestoneTabBar(project) {
+  const milestones = getProjectMilestones(project);
+  const active = getWorkMilestoneTabId(project);
   const canManage = canManageProject(project) && !isProjectArchived(project);
-  const rows = list.map(t => {
+  const workTasks = getProjectWorkTasksFlat(project);
+  const unassigned = workTasks.filter(t => !getOwningMilestone(t));
+  const tabs = milestones.map((m, idx) => {
+    const seq = String(m.milestoneSeq || `M${idx}`).trim();
+    const health = getMilestoneSevenGridHealth(m, project);
+    const hasEmpty = health.missing.some(c => c.status === 'empty');
+    const hasWeak = health.missing.some(c => c.status === 'weak');
+    const dot = (hasEmpty || hasWeak)
+      ? `<span class="ms-work-tab-dot ${hasEmpty ? 'is-empty' : 'is-weak'}" title="七格有缺口"></span>`
+      : '';
+    return `
+      <button type="button" class="ms-work-tab${active === m.id ? ' active' : ''}"
+        onclick="setWorkMilestoneTab('${m.id}')" title="${escapeHtml(m.title || m.id)}">
+        ${dot}
+        <span class="ms-work-tab-seq">${escapeHtml(seq)}</span>
+        <span class="ms-work-tab-name">${escapeHtml(m.title || m.id)}</span>
+      </button>
+    `;
+  });
+  if (unassigned.length) {
+    tabs.push(`
+      <button type="button" class="ms-work-tab${active === '__unassigned__' ? ' active' : ''}"
+        onclick="setWorkMilestoneTab('__unassigned__')">
+        <span class="ms-work-tab-name">未归属</span>
+        <span class="ms-work-tab-count">${unassigned.length}</span>
+      </button>
+    `);
+  }
+  return `
+    <div class="ms-work-tabs-wrap">
+      <div class="ms-work-tabs" role="tablist" aria-label="里程碑页签">
+        ${tabs.length ? tabs.join('') : `<span class="ms-work-tabs-empty">暂无里程碑</span>`}
+      </div>
+      ${canManage ? `
+        <button type="button" class="btn btn-ghost btn-sm ms-work-tabs-add" onclick="showNewMilestoneModal('${project.id}')">
+          <i class="fas fa-plus"></i>里程碑
+        </button>
+      ` : ''}
+    </div>
+  `;
+}
+
+function renderMilestoneTasksTableRows(project, milestone, taskList) {
+  const canManage = canManageProject(project) && !isProjectArchived(project);
+  const list = taskList || [];
+  if (!list.length) {
+    return `<tr><td colspan="6">${renderEmptyState({
+      icon: 'fa-check-square',
+      title: milestone ? '该里程碑下暂无任务' : '暂无未归属任务',
+      hint: canManage
+        ? (milestone ? '点击「添加任务」在此里程碑下拆解' : '可将任务挂到某个里程碑下')
+        : '暂无任务',
+    })}</td></tr>`;
+  }
+  return list.map(t => {
     const displayStatus = getTaskDisplayStatus(t);
     const st = statusMap[displayStatus] || statusMap[t.status] || statusMap.todo;
-    const pr = priorityMap[t.priority] || priorityMap.normal;
-    const milestone = getOwningMilestone(t);
-    const start = normalizeDateStr(getEffectivePlanStart(t) || t.planStartDate) || '-';
     const due = normalizeDateStr(resolveTaskDueDate(t)) || t.dueDate || '-';
     const progress = getDisplayProgress(t);
     const chain = getTaskBreadcrumb(t.id).filter(x => !isMilestoneTask(x));
@@ -884,16 +1065,12 @@ function renderProjectTasksTableSection(project) {
     return `
       <tr class="${overdueCls.trim()}" onclick="viewTask('${t.id}')">
         <td>
-          <div style="min-width:0;">
-            <div style="font-weight:500;color:var(--text);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${prefix}${escapeHtml(t.title || t.id)} ${renderDeliveryCompletenessBadge(t)}</div>
-            ${t.type === 'temp' ? '<span class="tag tag-temp" style="font-size:10px;margin-top:2px;display:inline-block;"><i class="fas fa-bolt"></i>临时</span>' : ''}
+          <div style="font-weight:500;color:var(--text);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            ${prefix}${escapeHtml(t.title || t.id)} ${renderDeliveryCompletenessBadge(t)}
           </div>
         </td>
-        <td>${escapeHtml((milestone && milestone.title) || '-')}</td>
         <td>${escapeHtml(t.assignee || '-')}</td>
         <td><span class="status-tag status-${displayStatus}" style="font-size:10px;">${st.label}</span></td>
-        <td><span style="color:${pr.color};font-size:12px;">${pr.label}</span></td>
-        <td>${escapeHtml(start)}</td>
         <td>${escapeHtml(due)}</td>
         <td style="min-width:100px;">
           <div style="display:flex;align-items:center;gap:8px;">
@@ -902,46 +1079,161 @@ function renderProjectTasksTableSection(project) {
           </div>
         </td>
         <td class="col-actions" onclick="event.stopPropagation();">
-          ${canEditTask(t) ? `<button type="button" class="btn btn-ghost btn-sm" onclick="editTask('${t.id}')" title="编辑"><i class="fas fa-edit"></i></button>` : ''}
+          ${canEditTask(t) ? `
+            <button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${t.id}')" title="填写"><i class="fas fa-clipboard-check"></i></button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="editTask('${t.id}')" title="编辑"><i class="fas fa-edit"></i></button>
+          ` : ''}
         </td>
       </tr>`;
   }).join('');
+}
+
+function renderProjectMilestoneTabsSection(project, opts) {
+  const hideTabs = !!(opts && opts.hideTabs);
+  const milestones = getProjectMilestones(project);
+  const canManage = canManageProject(project) && !isProjectArchived(project);
+  const activeId = getWorkMilestoneTabId(project);
+  const workTasks = getProjectWorkTasksFlat(project);
+  const milestone = activeId && activeId !== '__unassigned__'
+    ? milestones.find(m => m.id === activeId)
+    : null;
+
+  if (!milestones.length && !workTasks.length) {
+    return `
+      <section class="ms-work-section">
+        ${hideTabs ? '' : renderWorkMilestoneTabBar(project)}
+        ${renderEmptyState({
+          icon: 'fa-flag',
+          title: '暂无里程碑',
+          hint: canManage ? '点击左侧「+」新增里程碑' : '负责人可添加里程碑',
+        })}
+      </section>
+    `;
+  }
+
+  let taskList = [];
+  let panelHead = '';
+  if (milestone) {
+    taskList = getMilestoneDescendantTasks(milestone.id)
+      .filter(t => !isMilestoneTask(t))
+      .sort((a, b) => {
+        const ba = getTaskBreadcrumb(a.id).map(x => x.id).join('\0');
+        const bb = getTaskBreadcrumb(b.id).map(x => x.id).join('\0');
+        return ba.localeCompare(bb, 'zh');
+      });
+    const displayStatus = getTaskDisplayStatus(milestone);
+    const st = statusMap[displayStatus] || statusMap[milestone.status] || statusMap.todo;
+    const start = normalizeDateStr(getEffectivePlanStart(milestone) || milestone.planStartDate) || '-';
+    const due = normalizeDateStr(resolveTaskDueDate(milestone)) || milestone.dueDate || '-';
+    const progress = calcProgress(milestone.id);
+    const roles = getMilestonePlanRoles(milestone);
+    const health = getMilestoneSevenGridHealth(milestone, project);
+    const hint = getMilestoneIncompleteHint(milestone.id);
+    if (hideTabs) {
+      panelHead = `
+        <div class="ms-work-panel-head ms-work-panel-head--slim">
+          <div class="ms-work-panel-title">
+            <strong>${escapeHtml(milestone.title || milestone.id)}</strong>
+            <span class="status-tag status-${displayStatus}" style="font-size:10px;">${escapeHtml(st.label)}</span>
+          </div>
+          <div class="ms-work-panel-actions">
+            ${canManage ? `
+              <button type="button" class="btn btn-primary btn-sm" onclick="showNewSubTaskModal('${milestone.id}')"><i class="fas fa-plus"></i> 添加任务</button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    } else {
+      panelHead = `
+        <div class="ms-work-panel-head">
+          <div class="ms-work-panel-title">
+            <i class="fas fa-flag"></i>
+            <strong>${escapeHtml(milestone.title || milestone.id)}</strong>
+            <span class="status-tag status-${displayStatus}" style="font-size:10px;"><i class="fas ${st.icon}"></i>${escapeHtml(st.label)}</span>
+            ${renderDeliveryCompletenessBadge(milestone)}
+          </div>
+          <div class="ms-work-panel-actions">
+            ${canEditTask(milestone) ? `
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${milestone.id}')"><i class="fas fa-clipboard-check"></i> 填写</button>
+            ` : ''}
+            ${canManage ? `
+              <button type="button" class="btn btn-ghost btn-sm" onclick="editTask('${milestone.id}')"><i class="fas fa-edit"></i> 编辑</button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="showNewSubTaskModal('${milestone.id}')"><i class="fas fa-plus"></i> 添加任务</button>
+            ` : ''}
+            ${canCompleteMilestone(milestone) && canOperateTask(milestone) ? `
+              <button type="button" class="btn btn-success btn-sm" onclick="updateTaskStatus('${milestone.id}', 'done')"><i class="fas fa-check"></i> 完成</button>
+            ` : ''}
+          </div>
+        </div>
+        <div class="ms-work-panel-meta">
+          <span>排期 ${escapeHtml(start)} ~ ${escapeHtml(due)}</span>
+          <span>进度 ${progress}%</span>
+          <span>任务 ${taskList.length}</span>
+          ${roles.roleA ? `<span class="arcv-chip"><b>A</b>${escapeHtml(roles.roleA)}</span>` : ''}
+          ${roles.roleR || milestone.assignee ? `<span class="arcv-chip"><b>R</b>${escapeHtml(roles.roleR || milestone.assignee)}</span>` : ''}
+          ${roles.roleC ? `<span class="arcv-chip"><b>C</b>${escapeHtml(roles.roleC)}</span>` : ''}
+          ${roles.roleV ? `<span class="arcv-chip"><b>V</b>${escapeHtml(roles.roleV)}</span>` : ''}
+        </div>
+        <div class="ms-work-panel-seven">
+          <div class="seven-grid-chips is-inline">
+            ${health.cells.map(cell => renderSevenGridChip(cell, {
+              mini: true,
+              onclick: `jumpToMilestoneSevenGrid('${milestone.id}','${cell.key}')`,
+            })).join('')}
+            <span class="seven-grid-inline-tip">本里程碑 ${health.filled}/${health.total}</span>
+          </div>
+        </div>
+        ${milestone.status !== 'done' ? `<div class="ms-work-panel-hint"><i class="fas fa-info-circle"></i>${escapeHtml(hint)}</div>` : ''}
+      `;
+    }
+  } else {
+    taskList = workTasks.filter(t => !getOwningMilestone(t));
+    panelHead = `
+      <div class="ms-work-panel-head ms-work-panel-head--slim">
+        <div class="ms-work-panel-title"><strong>未归属任务</strong></div>
+      </div>
+    `;
+  }
+
+  const filtered = typeof filterProjectWorkTaskList === 'function' ? filterProjectWorkTaskList(taskList) : taskList;
 
   return `
-    <section style="margin-top:16px;">
-      <div class="project-detail-section-title">
-        <span>项目任务</span>
-        ${canManage ? `
-          <button type="button" class="btn btn-primary btn-sm" onclick="showNewTaskModal('${project.id}')"><i class="fas fa-plus"></i>添加任务</button>
-        ` : ''}
-      </div>
-      <div class="todo-table-card">
-        <div class="todo-table-wrap">
-          <table class="todo-table">
-            <thead>
-              <tr>
-                <th>任务</th>
-                <th>所属里程碑</th>
-                <th>负责人</th>
-                <th>状态</th>
-                <th>优先级</th>
-                <th>开始日期</th>
-                <th>截止日期</th>
-                <th>进度</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${list.length
-                ? rows
-                : `<tr><td colspan="9">${renderEmptyState({ icon: 'fa-check-square', title: '暂无项目任务', hint: canManage ? '可先添加里程碑，再在里程碑下拆解任务' : '暂无任务' })}</td></tr>`}
-            </tbody>
-          </table>
+    <section class="ms-work-section">
+      ${hideTabs ? '' : renderWorkMilestoneTabBar(project)}
+      <div class="ms-work-panel">
+        ${hideTabs ? renderProjectWorkToolbar(project) : ''}
+        ${panelHead}
+        <div class="todo-table-card" style="box-shadow:none;border:none;">
+          <div class="todo-table-wrap">
+            <table class="todo-table todo-table--slim">
+              <thead>
+                <tr>
+                  <th>任务</th>
+                  <th>负责人</th>
+                  <th>状态</th>
+                  <th>截止</th>
+                  <th>进度</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${renderMilestoneTasksTableRows(project, milestone, filtered)}
+              </tbody>
+            </table>
+          </div>
+          <div class="todo-pager"><div class="todo-pager-info">共 ${filtered.length} 条任务</div></div>
         </div>
-        <div class="todo-pager"><div class="todo-pager-info">共 ${list.length} 条任务</div></div>
       </div>
     </section>
   `;
+}
+
+function renderProjectMilestonesTableSection(project) {
+  return renderProjectMilestoneTabsSection(project);
+}
+
+function renderProjectTasksTableSection(project) {
+  return '';
 }
 
 function renderMilestonePlanSection(milestone, allTasks, mineIds = null) {

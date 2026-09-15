@@ -7,24 +7,18 @@ function canAccessStaffPage() {
   return capOn(currentUser, 'nav.staff');
 }
 
-/** 人员档案 / 团队管理的数据范围：部门经理仅本部门；默认排除通知联系人 */
+/** 人员档案 / 团队管理的数据范围：部门经理仅本部门 */
 function getDeptScopeUsers(includeInactive = false, opts = {}) {
-  const includeContacts = !!opts.includeContacts;
   let pool = includeInactive ? users : activeUsers();
-  if (!includeContacts) pool = pool.filter(u => !isContactProfile(u));
   if (isFullAccess(currentUser.role)) return pool;
   if (currentUser.role === 'manager') return pool.filter(u => u.dept === currentUser.dept);
   return [];
 }
 
 function getDeptFilterTabs(opts = {}) {
-  const memberOnly = !!opts.memberOnly;
   const showInactive = !!state.staffShowInactive;
   let pool = showInactive ? users : activeUsers();
-  if (memberOnly) pool = pool.filter(u => !isContactProfile(u));
-  const deptNames = memberOnly
-    ? getMemberDeptNames()
-    : getStaffDeptOptions();
+  const deptNames = getStaffDeptOptions();
   if (isFullAccess(currentUser.role)) {
     return [
       { id: 'all', label: '全部', count: pool.length, icon: 'fa-globe' },
@@ -32,8 +26,8 @@ function getDeptFilterTabs(opts = {}) {
         id: dept,
         label: dept,
         count: pool.filter(u => u.dept === dept).length,
-        icon: catalogKindForDept(dept) === 'contact' ? 'fa-address-book' : '',
-        kind: catalogKindForDept(dept),
+        icon: '',
+        kind: 'member',
       })),
     ];
   }

@@ -340,6 +340,46 @@ html[data-theme="dark"] .delivery-check.is-filled {
   border-color: rgba(16, 185, 129, 0.35);
 }
 
+html[data-theme="dark"] .ms-work-panel {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .ms-work-panel-hint {
+  background: rgba(37, 99, 235, 0.16);
+  color: #93C5FD;
+}
+
+html[data-theme="dark"] .seven-grid-bar {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .seven-grid-chip {
+  background: var(--bg-muted);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .seven-grid-chip.is-ok {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+html[data-theme="dark"] .seven-grid-chip.is-weak {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+html[data-theme="dark"] .seven-grid-chip.is-empty {
+  background: rgba(220, 38, 38, 0.14);
+  border-color: rgba(220, 38, 38, 0.35);
+}
+
+html[data-theme="dark"] .delivery-edit-crumb-path strong {
+  color: var(--text);
+}
+
 html[data-theme="dark"] .delivery-check-body {
   background: var(--bg-muted);
   color: var(--text);
@@ -469,6 +509,47 @@ html[data-theme="dark"] .wb-chip--soon {
 
 html[data-theme="dark"] .wb-more-link {
   color: var(--brand) !important;
+}
+
+html[data-theme="dark"] .project-hero-kpi {
+  background: transparent;
+  border-color: transparent;
+}
+html[data-theme="dark"] .project-hero-kpi-item { border-color: transparent; }
+html[data-theme="dark"] .project-work-search {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+}
+html[data-theme="dark"] .project-work-filter-chip {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+html[data-theme="dark"] .project-work-filter-chip.is-active {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: var(--brand);
+}
+html[data-theme="dark"] .project-focus-mini-tag {
+  background: rgba(194, 65, 12, 0.2);
+  color: #FDBA74;
+}
+html[data-theme="dark"] .ms-work-rail-card,
+html[data-theme="dark"] .project-focus-mini,
+html[data-theme="dark"] .project-work-board-wrap,
+html[data-theme="dark"] .project-work-gantt-wrap {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+html[data-theme="dark"] .ms-work-rail-item:hover { background: var(--bg-muted); }
+html[data-theme="dark"] .ms-work-rail-item.is-active {
+  background: rgba(154, 166, 232, 0.12);
+  color: var(--brand);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+html[data-theme="dark"] .project-focus-mini-blocker {
+  background: var(--danger-soft);
+  color: #F07A7A;
 }
 
 html[data-theme="dark"] .project-focus-panel,

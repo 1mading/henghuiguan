@@ -1,6 +1,7 @@
-/** 人员档案：业务成员 vs 通知联系人 */
+/** 人员档案：以钉钉通讯录为准；全员可登录（默认执行人员） */
 
 const PROFILE_KIND_MEMBER = 'member';
+/** @deprecated 存量兼容；新部门/新人一律 member，加载时会迁成 member */
 const PROFILE_KIND_CONTACT = 'contact';
 const INFO_CENTER_DEPT = '信息中心';
 
@@ -24,15 +25,16 @@ function defaultStaffDeptCatalog() {
 }
 
 function normalizeProfileKind(kind) {
-  return kind === PROFILE_KIND_CONTACT ? PROFILE_KIND_CONTACT : PROFILE_KIND_MEMBER;
+  // 取消通知联系人：历史 contact 一律视为 member
+  return PROFILE_KIND_MEMBER;
 }
 
 function isContactProfile(user) {
-  return !!(user && normalizeProfileKind(user.profileKind) === PROFILE_KIND_CONTACT);
+  return false;
 }
 
 function isBusinessMember(user) {
-  return !!(user && user.active !== false && !isContactProfile(user));
+  return !!(user && user.active !== false);
 }
 
 function normalizeCatalogEntry(entry) {
@@ -42,9 +44,7 @@ function normalizeCatalogEntry(entry) {
     if (!name) return null;
     return {
       name,
-      kind: name === INFO_CENTER_DEPT || DEFAULT_MEMBER_DEPT_NAMES.includes(name)
-        ? PROFILE_KIND_MEMBER
-        : PROFILE_KIND_CONTACT,
+      kind: PROFILE_KIND_MEMBER,
       parentName: name === INFO_CENTER_DEPT
         ? ''
         : (DEFAULT_MEMBER_DEPT_NAMES.includes(name) && name !== INFO_CENTER_DEPT ? INFO_CENTER_DEPT : ''),
@@ -58,7 +58,7 @@ function normalizeCatalogEntry(entry) {
   }
   return {
     name,
-    kind: normalizeProfileKind(entry.kind),
+    kind: PROFILE_KIND_MEMBER,
     parentName,
     dingTalkDeptId: entry.dingTalkDeptId || entry.deptId || '',
   };
@@ -96,35 +96,25 @@ function normalizeStaffDeptCatalog(list) {
 }
 
 function catalogKindForDept(catalog, deptName) {
-  const list = normalizeStaffDeptCatalog(catalog);
-  const name = String(deptName || '').trim();
-  if (!name) return PROFILE_KIND_CONTACT;
-  const exact = list.find(d => d.name === name);
-  if (exact) return exact.kind;
-  const fuzzy = list.find(d =>
-    name.includes(d.name) || d.name.includes(name)
-  );
-  if (fuzzy) return fuzzy.kind;
-  return PROFILE_KIND_CONTACT;
+  return PROFILE_KIND_MEMBER;
 }
 
 function resolveProfileKindForUser({ dept, role, catalog }) {
-  if (role === 'gm' || role === 'admin' || role === 'manager') {
-    return PROFILE_KIND_MEMBER;
-  }
-  return catalogKindForDept(catalog, dept);
+  return PROFILE_KIND_MEMBER;
 }
 
-function mergeDeptsIntoCatalog(catalog, deptNames, defaultKind = PROFILE_KIND_CONTACT) {
+function mergeDeptsIntoCatalog(catalog, deptNames, defaultKind = PROFILE_KIND_MEMBER) {
   const next = normalizeStaffDeptCatalog(catalog).map(d => ({ ...d }));
   const byName = new Map(next.map(d => [d.name, d]));
   for (const raw of deptNames || []) {
     const name = String(raw || '').trim();
     if (!name || byName.has(name)) continue;
-    const entry = normalizeCatalogEntry({ name, kind: defaultKind });
+    const entry = normalizeCatalogEntry({ name, kind: PROFILE_KIND_MEMBER });
     next.push(entry);
     byName.set(name, entry);
   }
+  // 存量 contact 部门一并升为 member
+  for (const d of next) d.kind = PROFILE_KIND_MEMBER;
   return next;
 }
 
@@ -136,7 +126,7 @@ function upsertCatalogDept(catalog, name, kind, parentName) {
   const prev = idx >= 0 ? next[idx] : null;
   const entry = {
     name: n,
-    kind: normalizeProfileKind(kind != null ? kind : (prev?.kind || PROFILE_KIND_CONTACT)),
+    kind: PROFILE_KIND_MEMBER,
     parentName: parentName != null
       ? String(parentName).trim()
       : (prev?.parentName || (n === INFO_CENTER_DEPT ? '' : (DEFAULT_MEMBER_DEPT_NAMES.includes(n) ? INFO_CENTER_DEPT : ''))),
@@ -148,7 +138,7 @@ function upsertCatalogDept(catalog, name, kind, parentName) {
 }
 
 /**
- * 从钉钉部门图合并进 catalog（保留已有 kind）
+ * 从钉钉部门图合并进 catalog（新部门一律 member）
  */
 function mergeOrgTreeIntoCatalog(catalog, nodes) {
   let next = normalizeStaffDeptCatalog(catalog).map(d => ({ ...d }));
@@ -158,14 +148,9 @@ function mergeOrgTreeIntoCatalog(catalog, nodes) {
     if (!name) continue;
     const parentName = String(raw.parentName || '').trim();
     const existing = byName.get(name);
-    const kind = existing
-      ? existing.kind
-      : (name === INFO_CENTER_DEPT || DEFAULT_MEMBER_DEPT_NAMES.includes(name)
-        ? PROFILE_KIND_MEMBER
-        : PROFILE_KIND_CONTACT);
     const entry = {
       name,
-      kind,
+      kind: PROFILE_KIND_MEMBER,
       parentName: parentName || existing?.parentName || (
         name === INFO_CENTER_DEPT ? '' : (DEFAULT_MEMBER_DEPT_NAMES.includes(name) ? INFO_CENTER_DEPT : '')
       ),
@@ -173,7 +158,7 @@ function mergeOrgTreeIntoCatalog(catalog, nodes) {
     };
     if (existing) {
       const idx = next.findIndex(d => d.name === name);
-      next[idx] = { ...existing, ...entry, kind: existing.kind };
+      next[idx] = { ...existing, ...entry, kind: PROFILE_KIND_MEMBER };
       byName.set(name, next[idx]);
     } else {
       next.push(entry);

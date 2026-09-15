@@ -9,13 +9,13 @@ let staffDeptCatalog = DEFAULT_MEMBER_DEPT_NAMES.map(name => ({
 }));
 
 function normalizeProfileKind(kind) {
-  return kind === 'contact' ? 'contact' : 'member';
+  return 'member';
 }
 function isContactProfile(u) {
-  return !!(u && normalizeProfileKind(u.profileKind) === 'contact');
+  return false;
 }
 function isBusinessMember(u) {
-  return !!(u && isStaffActive(u) && !isContactProfile(u));
+  return !!(u && isStaffActive(u));
 }
 function getStaffDeptCatalog() {
   return (staffDeptCatalog || []).length
@@ -35,12 +35,7 @@ function getMemberDeptNames() {
   return members.length ? members : DEFAULT_MEMBER_DEPT_NAMES.slice();
 }
 function catalogKindForDept(deptName) {
-  const name = String(deptName || '').trim();
-  const list = getStaffDeptCatalog();
-  const exact = list.find(d => d.name === name);
-  if (exact) return exact.kind;
-  const fuzzy = list.find(d => name.includes(d.name) || d.name.includes(name));
-  return fuzzy ? fuzzy.kind : 'contact';
+  return 'member';
 }
 function applyStaffDeptCatalog(list) {
   if (!Array.isArray(list) || !list.length) return;
@@ -54,7 +49,7 @@ function applyStaffDeptCatalog(list) {
     }
     byName.set(name, {
       name,
-      kind: normalizeProfileKind(raw?.kind),
+      kind: 'member',
       parentName,
       dingTalkDeptId: raw?.dingTalkDeptId || '',
     });
@@ -110,10 +105,10 @@ function isSpareAccount(u) {
 function activeUsers() {
   return users.filter(u => isStaffActive(u) && !isSpareAccount(u));
 }
-/** 可登录、可分派任务的业务成员（排除通知联系人） */
+/** 可登录、可分派任务的在职人员（钉钉通讯录全员） */
 function businessUsers(includeInactive = false) {
   const pool = includeInactive ? users : activeUsers();
-  return pool.filter(u => !isContactProfile(u));
+  return pool;
 }
 /** 与钉钉长名/短名兼容：王元斌 ≈ 王元斌 Martin */
 function personNameCore(name) {
@@ -356,10 +351,10 @@ function sortUsersForSelect(list) {
     a.dept.localeCompare(b.dept, 'zh-CN') || a.name.localeCompare(b.name, 'zh-CN'));
 }
 
-/** 任务负责人：可选业务成员（不含通知联系人） */
+/** 任务负责人：全量在职档案（钉钉通讯录） */
 function getTaskAssigneeCandidates() {
   return sortUsersForSelect(
-    uniqueUsersById(getStaffDirectoryUsers().filter(u => isStaffActive(u) && !isContactProfile(u)))
+    uniqueUsersById(getStaffDirectoryUsers().filter(u => isStaffActive(u) && !isSpareAccount(u)))
   );
 }
 
@@ -367,12 +362,155 @@ function getStaffDirectoryUsers() {
   return allStaffUsers.length ? allStaffUsers : users;
 }
 
-/** 任务协办人：可选业务成员 */
+/** 任务协办人：同负责人池 */
 function getTaskCollaboratorCandidates() {
   return getTaskAssigneeCandidates();
 }
 
-/** 项目负责人：信息中心全员 + 本部门全员（含执行人员）+ 各部门经理/总经理/管理员（不含联系人） */
+/** A/R/C/V：全量在职人员档案 */
+function getArcvArchiveCandidates() {
+  return getTaskAssigneeCandidates();
+}
+
+/** @deprecated 与 getArcvArchiveCandidates 相同（已无联系人二分） */
+function getArcvMemberCandidates() {
+  return getArcvArchiveCandidates();
+}
+
+function renderArcvPersonSelect(fieldKey, currentValue, disabled) {
+  const candidates = getArcvArchiveCandidates();
+  const cur = String(currentValue || '').trim();
+  const inList = candidates.some(u => u.name === cur);
+  const syncR = fieldKey === 'roleR'
+    ? `state.form.roleR=this.value;state.form.assignee=this.value`
+    : `state.form.${fieldKey}=this.value`;
+  return `
+    <select class="select" style="width:100%;" onchange="${syncR}" ${disabled ? 'disabled' : ''}>
+      <option value="">请选择</option>
+      ${cur && !inList ? `<option value="${escapeHtml(cur)}" selected>${escapeHtml(cur)}（档案外）</option>` : ''}
+      ${candidates.map(u => `<option value="${escapeHtml(u.name)}" ${u.name === cur ? 'selected' : ''}>${formatUserOptionLabel(u)}</option>`).join('')}
+    </select>`;
+}
+
+function parseRoleCNames(raw) {
+  return [...new Set(String(raw || '').split(/[,，、;；|/\s]+/).map(s => s.trim()).filter(Boolean))];
+}
+
+function getRoleCFormNames(task) {
+  if (Array.isArray(state.form.roleCNames)) return state.form.roleCNames;
+  const names = parseRoleCNames(state.form.roleC != null ? state.form.roleC : (task?.roleC || ''));
+  state.form.roleCNames = names;
+  state.form.roleC = names.join('、');
+  return names;
+}
+
+function syncRoleCFormFromNames() {
+  const names = Array.isArray(state.form.roleCNames) ? state.form.roleCNames : [];
+  state.form.roleC = names.join('、');
+}
+
+function toggleRoleCDropdown() {
+  if (state.collabDropdownOpen === 'roleC') state.collabDropdownOpen = null;
+  else state.collabDropdownOpen = 'roleC';
+  refreshRoleCMultiSelect();
+}
+
+function toggleRoleCName(name) {
+  const list = getRoleCFormNames();
+  const idx = list.indexOf(name);
+  if (idx >= 0) list.splice(idx, 1);
+  else list.push(name);
+  state.form.roleCNames = list;
+  syncRoleCFormFromNames();
+  state.collabDropdownOpen = 'roleC';
+  refreshRoleCMultiSelect();
+}
+
+function removeRoleCName(name) {
+  state.form.roleCNames = getRoleCFormNames().filter(n => n !== name);
+  syncRoleCFormFromNames();
+  refreshRoleCMultiSelect();
+}
+
+function setRoleCSearch(q) {
+  state.form.roleCSearch = q;
+  refreshRoleCMultiSelect();
+}
+
+function refreshRoleCMultiSelect() {
+  const host = document.querySelector('[data-rolec-ms-host]');
+  if (!host) {
+    render();
+    return;
+  }
+  const scrollPos = captureUiScrollPositions();
+  const task = tasks.find(t => t.id === state.form.taskId) || {};
+  host.innerHTML = renderRoleCMultiSelect(getRoleCFormNames(task), !!host.getAttribute('data-disabled'));
+  restoreUiScrollPositions(scrollPos);
+}
+
+function renderRoleCMultiSelect(selectedNames, disabled) {
+  const selected = selectedNames || [];
+  const selectedSet = new Set(selected);
+  const isOpen = state.collabDropdownOpen === 'roleC';
+  const q = String(state.form.roleCSearch || '').trim().toLowerCase();
+  let candidates = getArcvArchiveCandidates();
+  if (q) {
+    candidates = candidates.filter(u =>
+      u.name.toLowerCase().includes(q) ||
+      (u.dept || '').toLowerCase().includes(q) ||
+      (u.position || '').toLowerCase().includes(q)
+    );
+  }
+  const orphan = selected.filter(n => !candidates.some(u => u.name === n) && (!q || n.toLowerCase().includes(q)));
+
+  const triggerLabel = selected.length === 0
+    ? '请选择协作人（可多选）'
+    : (selected.length <= 2 ? selected.join('、') : `已选 ${selected.length} 人`);
+
+  return `
+    <div class="collab-ms" data-rolec-ms-host ${disabled ? 'data-disabled="1"' : ''}>
+      ${isOpen ? '<div class="collab-ms-backdrop" onclick="closeCollabDropdown()"></div>' : ''}
+      <button type="button" class="collab-ms-trigger${isOpen ? ' open' : ''}" ${disabled ? 'disabled' : ''}
+        onclick="event.stopPropagation();toggleRoleCDropdown()">
+        <span style="color:${selected.length ? '#374151' : '#9CA3AF'};">${escapeHtml(triggerLabel)}</span>
+        <i class="fas fa-chevron-down chevron"></i>
+      </button>
+      ${isOpen ? `
+        <div class="collab-ms-panel" onclick="event.stopPropagation()">
+          <input class="input" style="width:100%;margin-bottom:8px;font-size:12px;" placeholder="搜索姓名、部门..."
+            value="${escapeHtml(state.form.roleCSearch || '')}"
+            oninput="setRoleCSearch(this.value)" onclick="event.stopPropagation()">
+          ${orphan.map(name => `
+            <label class="collab-ms-option selected">
+              <input type="checkbox" checked onchange='toggleRoleCName(${JSON.stringify(name)})'>
+              <span>${escapeHtml(name)}（档案外）</span>
+            </label>
+          `).join('')}
+          ${candidates.length ? candidates.map(u => `
+            <label class="collab-ms-option${selectedSet.has(u.name) ? ' selected' : ''}">
+              <input type="checkbox" ${selectedSet.has(u.name) ? 'checked' : ''}
+                onchange='toggleRoleCName(${JSON.stringify(u.name)})'>
+              <span>${formatUserOptionLabel(u)}</span>
+            </label>
+          `).join('') : '<div style="padding:10px;color:#9CA3AF;font-size:12px;">无匹配人员</div>'}
+        </div>
+      ` : ''}
+      ${selected.length ? `
+        <div class="collab-ms-tags">
+          ${selected.map(name => `
+            <span class="collab-ms-tag">
+              ${escapeHtml(name)}
+              ${disabled ? '' : `<button type="button" title="移除" onclick='removeRoleCName(${JSON.stringify(name)})'>&times;</button>`}
+            </span>
+          `).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+/** 项目负责人：信息中心全员 + 本部门全员（含执行人员）+ 各部门经理/总经理/管理员 */
 function getProjectManagerCandidates() {
   const pool = businessUsers();
   if (currentUser.role === 'staff') {
@@ -754,8 +892,10 @@ function toggleCollabDropdown(formKey) {
 
 function closeCollabDropdown() {
   if (!state.collabDropdownOpen) return;
+  const wasRoleC = state.collabDropdownOpen === 'roleC';
   state.collabDropdownOpen = null;
-  refreshCollaboratorMultiSelects();
+  if (wasRoleC) refreshRoleCMultiSelect();
+  else refreshCollaboratorMultiSelects();
 }
 
 function toggleFormCollaborator(formKey, name) {

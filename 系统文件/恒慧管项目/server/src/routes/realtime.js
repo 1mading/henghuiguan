@@ -41,7 +41,7 @@ function requireRealtimeAccess(req, res, next) {
   const headerId = config.allowHeaderAuth ? callerUserId(req) : '';
   if (headerId) {
     const user = resolveUserByHeaderId(headerId);
-    if (user && user.profileKind !== 'contact' && user.active !== false) {
+    if (user && user.active !== false) {
       req.user = user;
       return next();
     }
@@ -58,7 +58,8 @@ function requireRealtimeAccess(req, res, next) {
       return res.status(401).json({ success: false, message: '用户不存在' });
     }
     if (user.profileKind === 'contact') {
-      return res.status(403).json({ success: false, message: '通知联系人不可登录恒慧管' });
+      user.profileKind = 'member';
+      if (!user.role) user.role = 'staff';
     }
     if (user.active === false) {
       return res.status(403).json({ success: false, message: '账号已停用' });
