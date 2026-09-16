@@ -13,9 +13,10 @@ let state = {
   todoPageSize: 20,
   todoViewMode: 'all', // all | mine | created | handled
   todoViewLayout: 'board', // board | list
-  projectDetailTab: 'work', // overview | work | plan（问题与记录）
+  projectDetailTab: 'work', // overview | work | registers | plan（问题与记录）
   projectDetailMoreOpen: false,
   projectPlanView: 'table', // table | gantt | list（任务页内，默认列表）
+  detailPhaseKey: '', // 阶段执行：当前 M0–M7
   detailMilestoneId: '', // 任务页：当前里程碑轨 id（__unassigned__=未归属）
   detailTaskScope: 'all', // all | mine
   detailTaskStatusFilter: 'all', // all | doing | todo | done

@@ -36,10 +36,69 @@ const DEP_BLOCK_SOFT = 'soft';
 const DEP_STATUS_ACTIVE = 'active';
 const DEP_STATUS_INACTIVE = 'inactive';
 
+/** 项目结构化登记册字段（与前端 HHG_REGISTER_DEFS 对齐） */
+const PROJECT_REGISTER_KEYS = ['stakeholders', 'commPlans', 'qualityChecks', 'risks', 'budgetLines'];
+
 function httpError(status, message) {
   const err = new Error(message);
   err.status = status;
   return err;
+}
+
+function normalizeRegisterRows(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((r, i) => {
+    if (!r || typeof r !== 'object') return null;
+    const row = { ...r };
+    if (!row.id) row.id = `REG-${Date.now().toString(36)}-${i}-${Math.random().toString(36).slice(2, 6)}`;
+    return row;
+  }).filter(Boolean);
+}
+
+function normalizeProjectDocuments(docs) {
+  if (!Array.isArray(docs)) return [];
+  return docs.map((d, i) => {
+    if (!d || typeof d !== 'object') return null;
+    const doc = { ...d };
+    if (!doc.id && !doc.fileId) doc.id = `DOC-${Date.now().toString(36)}-${i}`;
+    if (doc.phaseKey != null) doc.phaseKey = String(doc.phaseKey || '').trim();
+    if (doc.slotKey != null) doc.slotKey = String(doc.slotKey || '').trim();
+    return doc;
+  }).filter(Boolean);
+}
+
+function applyProjectRegisterFields(target, body) {
+  for (const key of PROJECT_REGISTER_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(body, key) && Array.isArray(body[key])) {
+      target[key] = normalizeRegisterRows(body[key]);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'documents') && Array.isArray(body.documents)) {
+    target.documents = normalizeProjectDocuments(body.documents);
+  }
+}
+
+function getProjectRegistersPayload(project) {
+  const p = normalizeProjectRecord({ ...project });
+  return {
+    projectId: p.id,
+    stakeholders: Array.isArray(p.stakeholders) ? p.stakeholders : [],
+    commPlans: Array.isArray(p.commPlans) ? p.commPlans : [],
+    qualityChecks: Array.isArray(p.qualityChecks) ? p.qualityChecks : [],
+    risks: Array.isArray(p.risks) ? p.risks : [],
+    budgetLines: Array.isArray(p.budgetLines) ? p.budgetLines : [],
+    documents: (Array.isArray(p.documents) ? p.documents : []).map(d => ({
+      id: d.id || '',
+      fileId: d.fileId || '',
+      name: d.name || '',
+      phaseKey: d.phaseKey || '',
+      slotKey: d.slotKey || '',
+      source: d.source || '',
+      url: d.url || '',
+      uploadedAt: d.uploadedAt || '',
+      uploadedBy: d.uploadedBy || '',
+    })),
+  };
 }
 
 function denyScoped(actor, action) {
@@ -267,14 +326,20 @@ function createProject(body = {}, opts = {}) {
     archived: status === 'archived' || body.archived === true,
     creator,
     createdAt: String(body.createdAt || nowCreatedAt()),
-    documents: Array.isArray(body.documents) ? body.documents : [],
     planVerified: body.planVerified === true,
     planVerifiedBy: String(body.planVerifiedBy || '').trim(),
     planVerifiedAt: String(body.planVerifiedAt || '').trim(),
     stageTemplateId: String(body.stageTemplateId || body.templateId || '').trim(),
     externalMeta: body.externalMeta && typeof body.externalMeta === 'object' ? body.externalMeta : undefined,
+    stakeholders: [],
+    commPlans: [],
+    qualityChecks: [],
+    risks: [],
+    budgetLines: [],
+    documents: [],
   };
   if (!project.externalMeta) delete project.externalMeta;
+  applyProjectRegisterFields(project, body);
 
   const store = getDb();
   store.projects.push(normalizeProjectRecord(project));
@@ -345,12 +410,77 @@ function updateProject(id, body = {}, opts = {}) {
   if (body.externalMeta && typeof body.externalMeta === 'object') {
     next.externalMeta = { ...(prev.externalMeta || {}), ...body.externalMeta };
   }
+  applyProjectRegisterFields(next, body);
 
   next.teamMembers = sanitizeTeamMembers(next.manager, next.teamMembers);
   store.projects[idx] = normalizeProjectRecord(next);
   persistOrThrow();
   emitEntityChange('project.updated', 'project', next, resolvePersonName(body.operator) || 'external-api');
   return { project: next };
+}
+
+function getProjectRegisters(id, opts = {}) {
+  const project = findProject(id);
+  if (!project) throw httpError(404, `项目不存在: ${id}`);
+  if (opts.actor) assertScopedCanReadProject(opts.actor, project);
+  return getProjectRegistersPayload(project);
+}
+
+function putProjectRegister(id, registerKey, body = {}, opts = {}) {
+  const key = String(registerKey || '').trim();
+  if (!PROJECT_REGISTER_KEYS.includes(key)) {
+    throw httpError(400, `无效登记册类型: ${key}，允许: ${PROJECT_REGISTER_KEYS.join(', ')}`);
+  }
+  const store = getDb();
+  const idx = store.projects.findIndex(p => String(p.id) === String(id));
+  if (idx < 0) throw httpError(404, `项目不存在: ${id}`);
+  const prev = store.projects[idx];
+  if (opts.actor) assertScopedCanWriteProject(opts.actor, prev);
+  const rows = Array.isArray(body.rows)
+    ? body.rows
+    : (Array.isArray(body.items) ? body.items : (Array.isArray(body[key]) ? body[key] : null));
+  if (!Array.isArray(rows)) throw httpError(400, '请传数组字段 rows（或 items / 与登记册同名）');
+  const next = { ...prev };
+  next[key] = normalizeRegisterRows(rows);
+  store.projects[idx] = normalizeProjectRecord(next);
+  persistOrThrow();
+  emitEntityChange('project.updated', 'project', next, resolvePersonName(body.operator) || scopedActorName(opts.actor, 'external-api'));
+  return {
+    projectId: next.id,
+    registerKey: key,
+    rows: next[key],
+    count: next[key].length,
+  };
+}
+
+function patchProjectDocumentSlots(id, body = {}, opts = {}) {
+  const store = getDb();
+  const idx = store.projects.findIndex(p => String(p.id) === String(id));
+  if (idx < 0) throw httpError(404, `项目不存在: ${id}`);
+  const prev = store.projects[idx];
+  if (opts.actor) assertScopedCanWriteProject(opts.actor, prev);
+  const updates = Array.isArray(body.updates) ? body.updates : (Array.isArray(body.slots) ? body.slots : null);
+  if (!Array.isArray(updates) || !updates.length) {
+    throw httpError(400, '请传 updates 数组：[{ fileId|id|nodeId, phaseKey, slotKey }]');
+  }
+  const next = { ...prev, documents: [...(prev.documents || [])] };
+  for (const u of updates) {
+    if (!u || typeof u !== 'object') continue;
+    const phaseKey = u.phaseKey != null ? String(u.phaseKey).trim() : undefined;
+    const slotKey = u.slotKey != null ? String(u.slotKey).trim() : undefined;
+    const doc = next.documents.find(d =>
+      (u.fileId && d.fileId === u.fileId) ||
+      (u.id && d.id === u.id) ||
+      (u.nodeId && d.nodeId === u.nodeId)
+    );
+    if (!doc) continue;
+    if (phaseKey !== undefined) doc.phaseKey = phaseKey;
+    if (slotKey !== undefined) doc.slotKey = slotKey;
+  }
+  store.projects[idx] = normalizeProjectRecord(next);
+  persistOrThrow();
+  emitEntityChange('project.updated', 'project', next, resolvePersonName(body.operator) || scopedActorName(opts.actor, 'external-api'));
+  return { projectId: next.id, documents: getProjectRegistersPayload(next).documents };
 }
 
 function deleteProject(id, { cascadeTasks = true, actor = null } = {}) {
@@ -949,7 +1079,14 @@ function getCatalog() {
       planVerifiedAt: '校验时间',
       handoverRecords: '交接记录数组',
       stageTemplateId: '绑定的模板 ID',
+      stakeholders: '干系人登记册数组',
+      commPlans: '沟通计划数组',
+      qualityChecks: '质量检查点数组',
+      risks: '风险登记册数组',
+      budgetLines: '预算明细数组（内部）',
+      documents: '项目文档（可含 phaseKey/slotKey 阶段文档槽）',
     },
+    registerKeys: PROJECT_REGISTER_KEYS,
     milestoneFields: {
       milestoneSeq: 'M序号',
       roleA: 'A 唯一交付人',
@@ -977,7 +1114,10 @@ function getCatalog() {
       { method: 'POST', path: '/external/projects', desc: '创建项目（默认套用 WMS 模板；可用 stageTemplateId / withTemplate）' },
       { method: 'GET', path: '/external/project-templates', desc: '模板库列表' },
       { method: 'POST', path: '/external/project-templates/from-project/:id', desc: '从项目另存为模板' },
-      { method: 'PATCH', path: '/external/projects/:id', desc: '更新项目（含计划书字段）' },
+      { method: 'PATCH', path: '/external/projects/:id', desc: '更新项目（含计划书/推进/登记册字段）' },
+      { method: 'GET', path: '/external/projects/:id/registers', desc: '读取项目登记册与文档槽摘要' },
+      { method: 'PUT', path: '/external/projects/:id/registers/:registerKey', desc: '整表替换某一登记册（stakeholders/commPlans/qualityChecks/risks/budgetLines）' },
+      { method: 'PATCH', path: '/external/projects/:id/document-slots', desc: '批量为项目文档标注 phaseKey/slotKey' },
       { method: 'POST', path: '/external/projects/:id/sync-phase', desc: '按里程碑同步 currentPhase' },
       { method: 'POST', path: '/external/projects/:id/handover', desc: '项目负责人交接' },
       { method: 'GET', path: '/external/projects/:id/plan-ledger', desc: '导出项目计划台账（管线格式）' },
@@ -1119,6 +1259,9 @@ module.exports = {
   getCatalog,
   createProject,
   updateProject,
+  getProjectRegisters,
+  putProjectRegister,
+  patchProjectDocumentSlots,
   deleteProject,
   createTask,
   updateTask,

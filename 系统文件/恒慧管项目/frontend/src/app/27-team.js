@@ -49,17 +49,17 @@ function renderTeam() {
   return `
     <div class="team-page">
       <div class="team-page-toolbar">
-        <div class="team-filter-tabs">
-          ${deptTabs.map(tab => {
-            const isActive = selectedDept === tab.id;
-            return `
-              <button type="button" class="team-filter-tab${isActive ? ' is-active' : ''}" onclick="state.teamDept='${tab.id}';render()">
-                ${tab.icon ? `<i class="fas ${tab.icon}" style="margin-right:4px;font-size:11px;"></i>` : ''}${tab.label}
-                <span class="tab-count">${tab.count}</span>
-              </button>
-            `;
-          }).join('')}
-          ${!isTeamAdmin ? `<span style="font-size:12px;color:var(--text-light);margin-left:4px;">仅本部门数据</span>` : ''}
+        <div class="team-dept-filter">
+          ${isTeamAdmin ? `
+            <label class="form-label" style="margin:0 8px 0 0;white-space:nowrap;">部门</label>
+            <select class="input team-dept-select" style="min-width:200px;max-width:280px;" onchange="state.teamDept=this.value;render()">
+              ${deptTabs.map(tab => `
+                <option value="${escapeHtml(tab.id)}" ${selectedDept === tab.id ? 'selected' : ''}>
+                  ${escapeHtml(tab.label)}${tab.count != null ? `（${tab.count}）` : ''}
+                </option>
+              `).join('')}
+            </select>
+          ` : `<span style="font-size:12px;color:var(--text-light);">仅本部门数据 · ${escapeHtml(currentUser.dept || '')}</span>`}
         </div>
         <div style="position:relative;">
           <i class="fas fa-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-light);font-size:13px;"></i>

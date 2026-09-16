@@ -11,6 +11,7 @@ function renderModal() {
     case 'scopedKeyResult': return renderScopedKeyResultModal();
     case 'scopedKeyIssue': return renderScopedKeyIssueModal();
     case 'issueEdit': return renderIssueEditModal();
+    case 'projectRegister': return renderProjectRegisterModal();
     case 'dateBaselineConfirm': return renderDateBaselineConfirmModal();
     case 'projectDetail': return renderProjectDetailModal();
     case 'projectCreate': return renderProjectCreateModal();

@@ -23,6 +23,7 @@
     "21-gantt.js",
     "22-task-center.js",
     "23-project-detail.js",
+    "23-project-phases.js",
     "24-archive.js",
     "25-staff.js",
     "26-api-dingtalk.js",

@@ -2593,6 +2593,56 @@
     .todo-board-wrap { margin-top: 4px; }
 
     .task-status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+
+    /* 移动端看板：须在桌面 grid 之后，避免被覆盖导致列重叠 */
+    @media (max-width: 768px) {
+      .todo-page-toolbar {
+        display: flex; flex-direction: column; align-items: stretch;
+        gap: 10px; margin-bottom: 12px;
+      }
+      .todo-page-toolbar-main,
+      .todo-page-toolbar-aside { min-width: 0; width: 100%; }
+      .todo-page-toolbar-aside {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      }
+      .todo-tabs {
+        display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 2px;
+        -webkit-overflow-scrolling: touch; scrollbar-width: none; margin-top: 8px;
+      }
+      .todo-tabs::-webkit-scrollbar { display: none; }
+      .todo-tab {
+        flex: 0 0 auto; padding: 8px 10px; font-size: 13px; white-space: nowrap;
+      }
+      .todo-board-wrap {
+        margin-left: -14px; margin-right: -14px;
+        padding-left: 14px; padding-right: 14px;
+        overflow-x: auto; -webkit-overflow-scrolling: touch;
+      }
+      .todo-status-kanban,
+      .task-status-grid {
+        display: flex !important;
+        grid-template-columns: none !important;
+        gap: 12px; align-items: stretch;
+        width: max-content; min-width: 100%;
+        overflow: visible; padding-bottom: 8px;
+        scroll-snap-type: x mandatory;
+      }
+      .todo-kanban-col,
+      .task-status-grid > div,
+      .task-status-col {
+        flex: 0 0 auto;
+        width: min(78vw, 300px);
+        min-width: min(78vw, 300px);
+        max-width: min(78vw, 300px);
+        scroll-snap-align: start;
+        box-sizing: border-box;
+      }
+      .todo-board-card { overflow: hidden; }
+      .todo-board-card-title-main {
+        white-space: normal; overflow: hidden;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      }
+    }
   </style>
 </head>
 <body>

@@ -1007,14 +1007,54 @@ function getBuiltinProjectTemplatesFallback() {
           milestoneSeq: 'M0',
           tasks: ['M0a 选型定型', 'M0b 商务谈判', 'M0c 合同签订'],
           gates: [],
+          registers: [],
+          slots: [
+            { key: 'vendor_minutes', title: '厂商交流纪要', ext: 'docx', required: false },
+            { key: 'vendor_proposal', title: '厂商方案', ext: 'pdf', required: false },
+            { key: 'meeting_md', title: '会议纪要', ext: 'md', required: false },
+          ],
         },
-        { key: 'M1', label: 'M1 项目启动', milestoneSeq: 'M1', tasks: [], gates: [] },
-        { key: 'M2', label: 'M2 蓝图确认', milestoneSeq: 'M2', tasks: [], gates: [] },
-        { key: 'M3', label: 'M3 配置开发完成', milestoneSeq: 'M3', tasks: [], gates: [] },
-        { key: 'M4', label: 'M4 测试通过', milestoneSeq: 'M4', tasks: [], gates: [] },
-        { key: 'M5', label: 'M5 上线准备', milestoneSeq: 'M5', tasks: [], gates: [] },
-        { key: 'M6', label: 'M6 系统上线', milestoneSeq: 'M6', tasks: [], gates: [] },
-        { key: 'M7', label: 'M7 项目验收', milestoneSeq: 'M7', tasks: [], gates: [] },
+        {
+          key: 'M1', label: 'M1 项目启动', milestoneSeq: 'M1', tasks: [], gates: [],
+          registers: ['stakeholders'],
+          slots: [{ key: 'charter', title: '项目章程', ext: 'docx', required: true }],
+        },
+        {
+          key: 'M2', label: 'M2 蓝图确认', milestoneSeq: 'M2', tasks: [], gates: [],
+          registers: ['commPlans', 'qualityChecks', 'risks', 'budgetLines'],
+          slots: [
+            { key: 'blueprint', title: '功能蓝图', ext: 'docx', required: true },
+            { key: 'blueprint_sign', title: '蓝图评审签字扫描件', ext: 'pdf', required: false },
+          ],
+        },
+        {
+          key: 'M3', label: 'M3 配置开发完成', milestoneSeq: 'M3', tasks: [], gates: [],
+          registers: [], slots: [{ key: 'phase_accept', title: '阶段验收材料', ext: 'docx', required: false }],
+        },
+        {
+          key: 'M4', label: 'M4 测试通过', milestoneSeq: 'M4', tasks: [], gates: [],
+          registers: [], slots: [{ key: 'test_report', title: '测试报告', ext: 'docx', required: false }],
+        },
+        {
+          key: 'M5', label: 'M5 上线准备', milestoneSeq: 'M5', tasks: [], gates: [],
+          registers: [],
+          slots: [
+            { key: 'go_live_plan', title: '上线切换方案', ext: 'docx', required: true },
+            { key: 'training', title: '培训材料', ext: 'docx', required: false },
+          ],
+        },
+        {
+          key: 'M6', label: 'M6 系统上线', milestoneSeq: 'M6', tasks: [], gates: [],
+          registers: [], slots: [{ key: 'go_live_record', title: '上线记录', ext: 'docx', required: true }],
+        },
+        {
+          key: 'M7', label: 'M7 项目验收', milestoneSeq: 'M7', tasks: [], gates: [],
+          registers: [],
+          slots: [
+            { key: 'accept_report', title: '验收报告', ext: 'docx', required: true },
+            { key: 'accept_sign', title: '验收签字扫描件', ext: 'pdf', required: false },
+          ],
+        },
       ],
     },
     {

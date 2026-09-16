@@ -13,12 +13,19 @@ initTheme();
 exposeThemeGlobals();
 exposeFeedbackGlobals();
 
-/** Vite 静态分析：按序号分片载入（排除 legacy-all 等非分片文件） */
-const rawModules = import.meta.glob('./app/[0-9][0-9]-*.js', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-});
+/** Vite 静态分析：按序号分片载入（含 23a- 这类字母后缀分片） */
+const rawModules = {
+  ...import.meta.glob('./app/[0-9][0-9]-*.js', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  }),
+  ...import.meta.glob('./app/[0-9][0-9][a-z]-*.js', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  }),
+};
 
 function loadAppParts() {
   const chunks = [];

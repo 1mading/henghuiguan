@@ -455,8 +455,8 @@ function renderTasks() {
 
   return `
     <div>
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-        <div>
+      <div class="todo-page-toolbar">
+        <div class="todo-page-toolbar-main">
           <div class="scope-seg" style="margin-bottom:12px;">
             <button type="button" class="${viewMode === 'all' ? 'active' : ''}" onclick="goToTodoView('all')">全部</button>
             <button type="button" class="${viewMode === 'mine' ? 'active' : ''}" onclick="goToTodoView('mine')">与我相关</button>
@@ -472,7 +472,7 @@ function renderTasks() {
             ${viewLayout === 'board' ? `<button type="button" class="todo-tab${listTab === 'done' ? ' active' : ''}" onclick="setTodoListTab('done')">已完成 <span class="count">(${countDone})</span></button>` : ''}
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div class="todo-page-toolbar-aside">
           ${canViewDeptTaskScope() && (viewMode === 'all' || viewMode === 'mine') ? `
           <div class="scope-seg">
             <button type="button" class="${scopeTab === 'mine' ? 'active' : ''}" onclick="setTaskScopeTab('mine')"><i class="fas fa-globe" style="margin-right:6px;"></i>${viewMode === 'all' ? '全量' : '本人'} ${viewMode === 'all' ? allScopeCount : mineCount}</button>

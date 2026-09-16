@@ -27,7 +27,8 @@ Base：`{PUBLIC_BASE_URL}/api`
 |------|------|------|
 | GET | `/workbuddy/health` | 连通性 |
 | GET | `/workbuddy/query` | 统一查询 |
-| GET | `/workbuddy/projects/:id` | 项目详情 + 下属任务 |
+| GET | `/workbuddy/projects/:id` | 项目详情 + 下属任务（含登记册字段摘要） |
+| GET | `/workbuddy/projects/:id/registers` | 项目登记册与文档槽 |
 | GET | `/workbuddy/projects/:id/plan-ledger` | 项目计划台账（管线格式） |
 | GET | `/workbuddy/tasks/:id` | 任务详情 |
 | GET | `/workbuddy/issues` | 问题列表（可筛 `projectId` / `status`） |
@@ -77,9 +78,16 @@ Base：`{PUBLIC_BASE_URL}/api`
 
 - 推进字段：`currentPhase`、`nextPlan`、`blocker`
 - 计划书字段：`objective`、`value`、`scope`、`outOfScope`、`endDate`、`planVerified` / `planVerifiedBy` / `planVerifiedAt`
+- 登记册：`stakeholders`、`commPlans`、`qualityChecks`、`risks`、`budgetLines`；文档槽摘要 `documentSlots`（含 `phaseKey`/`slotKey`）
 - 基本信息：`desc`、`manager`、`status` 等
 
 里程碑任务额外包含：`milestoneSeq`、`roleA`/`roleR`/`roleC`/`roleV`、`deliverables`、`acceptanceCriteria`、`outOfScope`、`completionEvidence`、`verification`/`feedback`/`leftover`、`depsRisks` 等。
+
+### 登记册
+
+```bash
+curl -s -H "X-Api-Key: $KEY" "$BASE/api/workbuddy/projects/PRJ-xxx/registers"
+```
 
 ### 计划台账
 
@@ -108,6 +116,10 @@ curl -s -H "X-Api-Key: $KEY" \
 # 项目计划台账
 curl -s -H "X-Api-Key: $KEY" \
   "$BASE/api/workbuddy/projects/PRJ-xxx/plan-ledger"
+
+# 项目登记册
+curl -s -H "X-Api-Key: $KEY" \
+  "$BASE/api/workbuddy/projects/PRJ-xxx/registers"
 
 # 问题列表
 curl -s -H "X-Api-Key: $KEY" \

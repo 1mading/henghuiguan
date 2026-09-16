@@ -950,6 +950,16 @@ async function submitWikiDocLink(entityType, entityId, payload, opts) {
     if (p) {
       if (!p.documents) p.documents = [];
       upsertLocalAttachment(p.documents, data.item);
+      const purpose = payload && (payload.linkPurpose || payload.purpose);
+      if (typeof applyPhaseSlotMetaFromPurpose === 'function') {
+        applyPhaseSlotMetaFromPurpose(data.item, purpose);
+        const doc = (p.documents || []).find(d =>
+          (data.item.fileId && d.fileId === data.item.fileId) ||
+          (data.item.id && d.id === data.item.id) ||
+          (data.item.nodeId && d.nodeId === data.item.nodeId)
+        ) || data.item;
+        applyPhaseSlotMetaFromPurpose(doc, purpose);
+      }
     }
   } else {
     const t = tasks.find(x => x.id === entityId);

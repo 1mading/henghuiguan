@@ -268,8 +268,10 @@
     .wb-todo-actions .btn-icon.is-danger { color: #DC2626; border-color: #FECACA; background: #FEF2F2; }
     .wb-todo-actions .btn-icon.is-danger:hover { background: #FEE2E2; color: #B91C1C; }
     @media (max-width: 720px) {
-      .wb-todo-bar { align-items: flex-start; flex-wrap: wrap; }
-      .wb-todo-actions { margin-left: auto; }
+      .wb-todo-bar { align-items: stretch; flex-direction: column; gap: 8px; }
+      .wb-todo-actions { margin-left: 0; align-self: flex-end; }
+      .wb-todo-title { min-width: 0; max-width: 100%; word-break: break-word; }
+      .wb-todo-title-main { white-space: normal; }
     }
     .wb-activity-panel {
       background: var(--bg-panel); border: 1px solid var(--border); border-radius: 16px;

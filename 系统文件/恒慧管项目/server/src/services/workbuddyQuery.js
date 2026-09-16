@@ -70,6 +70,22 @@ function toProjectItem(p, tasks) {
     planVerified: p.planVerified === true,
     planVerifiedBy: String(p.planVerifiedBy || '').trim(),
     planVerifiedAt: String(p.planVerifiedAt || '').trim(),
+    stakeholders: Array.isArray(p.stakeholders) ? p.stakeholders : [],
+    commPlans: Array.isArray(p.commPlans) ? p.commPlans : [],
+    qualityChecks: Array.isArray(p.qualityChecks) ? p.qualityChecks : [],
+    risks: Array.isArray(p.risks) ? p.risks : [],
+    budgetLines: Array.isArray(p.budgetLines) ? p.budgetLines : [],
+    documentSlots: (Array.isArray(p.documents) ? p.documents : [])
+      .filter(d => d && (d.phaseKey || d.slotKey))
+      .map(d => ({
+        id: d.id || '',
+        fileId: d.fileId || '',
+        name: d.name || '',
+        phaseKey: d.phaseKey || '',
+        slotKey: d.slotKey || '',
+        source: d.source || '',
+        url: d.url || '',
+      })),
     progress,
     taskCount: active.length,
     doneTaskCount: done,
@@ -309,9 +325,47 @@ function getProjectPlanLedger(id, opts = {}) {
   return buildProjectPlanLedger(project, getAllTasks());
 }
 
+function getProjectRegisters(id, opts = {}) {
+  reloadStoreFromDisk();
+  const project = getAllProjects().find(p => p.id === id);
+  if (!project) {
+    const err = new Error('项目不存在');
+    err.status = 404;
+    throw err;
+  }
+  const actor = opts.actor || null;
+  if (actor && !canViewProject(actor, project, getAllTasks(), getAllProjects())) {
+    const err = new Error('无权查看该项目');
+    err.status = 403;
+    throw err;
+  }
+  return {
+    projectId: project.id,
+    stakeholders: Array.isArray(project.stakeholders) ? project.stakeholders : [],
+    commPlans: Array.isArray(project.commPlans) ? project.commPlans : [],
+    qualityChecks: Array.isArray(project.qualityChecks) ? project.qualityChecks : [],
+    risks: Array.isArray(project.risks) ? project.risks : [],
+    budgetLines: Array.isArray(project.budgetLines) ? project.budgetLines : [],
+    documentSlots: (Array.isArray(project.documents) ? project.documents : [])
+      .filter(d => d && (d.phaseKey || d.slotKey))
+      .map(d => ({
+        id: d.id || '',
+        fileId: d.fileId || '',
+        name: d.name || '',
+        phaseKey: d.phaseKey || '',
+        slotKey: d.slotKey || '',
+        source: d.source || '',
+        url: d.url || '',
+        uploadedAt: d.uploadedAt || '',
+        uploadedBy: d.uploadedBy || '',
+      })),
+  };
+}
+
 module.exports = {
   queryWorkbuddy,
   getProjectDetail,
   getTaskDetail,
   getProjectPlanLedger,
+  getProjectRegisters,
 };

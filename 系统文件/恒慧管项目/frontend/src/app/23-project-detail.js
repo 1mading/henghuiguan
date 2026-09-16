@@ -689,6 +689,7 @@ function renderProjectDetailTaskPanel(project) {
 
 function normalizeProjectDetailTab(tab) {
   if (tab === 'overview') return 'overview';
+  if (tab === 'registers') return 'registers';
   if (tab === 'progress' || tab === 'plan') return 'plan';
   return 'work';
 }
@@ -809,7 +810,8 @@ function renderProjectDetailTabs() {
   const active = (tab === 'work' && view === 'gantt') ? 'gantt' : tab;
   const items = [
     { id: 'overview', label: '概览' },
-    { id: 'work', label: '任务' },
+    { id: 'work', label: '阶段执行' },
+    { id: 'registers', label: '登记册' },
     { id: 'gantt', label: '甘特' },
     { id: 'plan', label: '问题与记录' },
   ];
@@ -918,11 +920,18 @@ function renderProjectDetailTabBody(project, canManage) {
   if (tab === 'overview') {
     return renderProjectOverviewTab(project, canManage);
   }
+  if (tab === 'registers') {
+    return typeof renderProjectRegistersTab === 'function'
+      ? renderProjectRegistersTab(project)
+      : '<div class="project-detail-tab-panel">登记册模块未加载</div>';
+  }
   if (tab === 'work') {
     if (editingOnly && state.taskEditInline) {
       return `<div class="project-detail-tab-panel">${renderTaskEditModal()}</div>`;
     }
-    return renderProjectWorkSplit(project);
+    return typeof renderProjectPhaseWorkSplit === 'function'
+      ? renderProjectPhaseWorkSplit(project, canManage)
+      : renderProjectWorkSplit(project);
   }
   return `
     <div class="project-detail-tab-panel project-detail-side">
@@ -1059,6 +1068,8 @@ function renderProjectDetail() {
   }
   state.projectDetailTab = normalizeProjectDetailTab(state.projectDetailTab);
   state.projectPlanView = normalizeProjectWorkView(state.projectPlanView);
+  if (typeof ensureProjectRegisterArrays === 'function') ensureProjectRegisterArrays(project);
+  if (typeof ensureDetailPhaseKey === 'function') ensureDetailPhaseKey(project);
 
   const stats = getProjectListStats(project);
   const accent = getProjectAccentColor(project);

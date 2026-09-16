@@ -65,6 +65,18 @@ router.patch('/external/projects/:id', requireExternalApiKey, (req, res) => {
   handle(res, () => external.updateProject(req.params.id, req.body || {}, actorOpts(req)));
 });
 
+router.get('/external/projects/:id/registers', requireExternalApiKey, (req, res) => {
+  handle(res, () => external.getProjectRegisters(req.params.id, actorOpts(req)));
+});
+
+router.put('/external/projects/:id/registers/:registerKey', requireExternalApiKey, (req, res) => {
+  handle(res, () => external.putProjectRegister(req.params.id, req.params.registerKey, req.body || {}, actorOpts(req)));
+});
+
+router.patch('/external/projects/:id/document-slots', requireExternalApiKey, (req, res) => {
+  handle(res, () => external.patchProjectDocumentSlots(req.params.id, req.body || {}, actorOpts(req)));
+});
+
 router.post('/external/projects/:id/sync-phase', requireExternalApiKey, (req, res) => {
   handle(res, () => external.syncProjectPhase(req.params.id, req.body || {}, actorOpts(req)));
 });

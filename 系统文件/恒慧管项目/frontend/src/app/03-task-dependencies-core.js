@@ -783,6 +783,12 @@ function normalizeProjectRecord(project) {
   project.planVerified = project.planVerified === true;
   project.planVerifiedBy = String(project.planVerifiedBy || '').trim();
   project.planVerifiedAt = String(project.planVerifiedAt || '').trim();
+  if (!Array.isArray(project.stakeholders)) project.stakeholders = [];
+  if (!Array.isArray(project.commPlans)) project.commPlans = [];
+  if (!Array.isArray(project.qualityChecks)) project.qualityChecks = [];
+  if (!Array.isArray(project.risks)) project.risks = [];
+  if (!Array.isArray(project.budgetLines)) project.budgetLines = [];
+  if (!Array.isArray(project.documents)) project.documents = [];
   return project;
 }
 

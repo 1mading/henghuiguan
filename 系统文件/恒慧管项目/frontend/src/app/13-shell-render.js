@@ -222,11 +222,15 @@ function render() {
 }
 
 function isLiteMorePage(page) {
-  return ['more', 'staff', 'permissions', 'dataSecurity', 'archive', 'import', 'systemUpdates', 'kpiPlans', 'projectTemplates'].includes(page);
+  return ['more', 'staff', 'permissions', 'dataSecurity', 'archive', 'import', 'systemUpdates', 'kpiPlans'].includes(page);
 }
 
 function isProjectNavPage(page) {
-  return page === 'projects' || page === 'projectDetail' || page === 'projectTemplates';
+  return page === 'projects' || page === 'projectDetail';
+}
+
+function isTeamNavPage(page) {
+  return page === 'team';
 }
 
 function isTodoNavPage(page) {
@@ -388,7 +392,7 @@ function renderMobileNav() {
         if (item.key === 'dashboard') active = isWorkbenchNavPage(state.page);
         else if (item.key === 'tasks') active = isTodoNavPage(state.page);
         else if (item.key === 'projects') active = isProjectNavPage(state.page);
-        else if (item.key === 'team') active = state.page === 'team';
+        else if (item.key === 'team') active = isTeamNavPage(state.page);
         return `<button type="button" onclick="goTo('${item.key}')" class="mobile-nav-item ${active ? 'active' : ''}">
           <i class="fas ${item.icon}"></i><span>${item.label}</span>
         </button>`;
@@ -426,11 +430,6 @@ function renderSidebar() {
       onclick: "goTo('dashboard')",
     },
     {
-      key: 'projects', label: '项目管理', icon: 'fa-folder',
-      active: isProjectNavPage(state.page),
-      onclick: "goTo('projects')",
-    },
-    {
       key: 'tasks', label: '任务管理', icon: 'fa-check-square',
       active: isTodoNavPage(state.page),
       onclick: "goTo('tasks')",
@@ -443,13 +442,8 @@ function renderSidebar() {
       onclick: "goTo('kpiPlans')",
     });
   }
-  if (showTeam) {
-    primary.push({
-      key: 'team', label: '团队管理', icon: 'fa-users',
-      active: state.page === 'team',
-      onclick: "goTo('team')",
-    });
-  }
+
+  const showTemplates = canCreateProject();
 
   return `
     <aside class="sidebar">
@@ -461,15 +455,29 @@ function renderSidebar() {
         </div>
       </div>
       <nav style="padding:12px 0;flex:1;overflow-y:auto;">
-        ${primary.map(item => `
+        <button type="button" class="nav-item nav-item--flat ${isWorkbenchNavPage(state.page) ? 'active' : ''}" onclick="goTo('dashboard')">
+          <i class="fas fa-th-large"></i><span>工作台</span>
+        </button>
+        <button type="button" class="nav-item nav-item--flat ${isProjectNavPage(state.page) ? 'active' : ''}" onclick="goTo('projects')">
+          <i class="fas fa-folder"></i><span>项目管理</span>
+        </button>
+        <button type="button" class="nav-item nav-item--flat ${isTodoNavPage(state.page) ? 'active' : ''}" onclick="goTo('tasks')">
+          <i class="fas fa-check-square"></i><span>任务管理</span>
+        </button>
+        ${primary.filter(item => item.key !== 'dashboard' && item.key !== 'tasks' && item.key !== 'team').map(item => `
           <button type="button" class="nav-item nav-item--flat ${item.active ? 'active' : ''}" onclick="${item.onclick}">
             <i class="fas ${item.icon}"></i><span>${item.label}</span>
           </button>
         `).join('')}
-        ${canCreateProject() ? `
-          <button type="button" class="nav-item nav-item--flat ${state.page === 'projectTemplates' ? 'active' : ''}" onclick="goTo('projectTemplates')">
-            <i class="fas fa-layer-group"></i><span>模版库管理</span>
-          </button>
+        ${showTeam ? `
+        <button type="button" class="nav-item nav-item--flat ${state.page === 'team' ? 'active' : ''}" onclick="goTo('team')">
+          <i class="fas fa-users"></i><span>团队管理</span>
+        </button>
+        ` : ''}
+        ${showTemplates ? `
+        <button type="button" class="nav-item nav-item--flat ${state.page === 'projectTemplates' ? 'active' : ''}" onclick="goTo('projectTemplates')">
+          <i class="fas fa-layer-group"></i><span>模版库</span>
+        </button>
         ` : ''}
         ${(showNcc || showSqlTools || showTextPolish || isFullAccess(currentUser.role)) ? `
           <div class="nav-divider" role="separator"></div>
@@ -770,17 +778,18 @@ function renderHeader() {
             <button class="btn btn-ghost hide-mobile" onclick="copyProjectPlanLedger('${state.form.projectId}')"><i class="fas fa-copy"></i><span class="btn-text">复制计划台账</span></button>
           ` : ''}
           ${canCreateProject() ? `<button class="btn btn-primary" onclick="showProjectModal()"><i class="fas fa-plus"></i><span class="btn-text">新建项目</span></button>` : ''}
-          ${canCreateProject() ? `<button class="btn btn-ghost hide-mobile" onclick="goTo('projectTemplates')"><i class="fas fa-layer-group"></i><span class="btn-text">模版库管理</span></button>` : ''}
         ` : ''}
         ${state.page === 'projectTemplates' ? `
-          <button class="btn btn-ghost" onclick="goTo('projects')"><i class="fas fa-folder"></i><span class="btn-text">返回项目管理</span></button>
+          <button class="btn btn-ghost" onclick="goTo('projects')"><i class="fas fa-arrow-left"></i><span class="btn-text">返回</span></button>
           ${canManageProjectTemplates() ? `<button class="btn btn-primary" onclick="showProjectTemplateCreateModal()"><i class="fas fa-plus"></i><span class="btn-text">新建模板</span></button>` : ''}
         ` : ''}
         ${isTodoPage ? `
           <button class="btn btn-ghost hide-mobile" onclick="exportTasks()"><i class="fas fa-file-export"></i><span class="btn-text">导出</span></button>
           <button class="btn btn-primary" onclick="showQuickTempTaskModal()"><i class="fas fa-plus"></i><span class="btn-text">新建事项</span></button>
         ` : ''}
-        ${state.page === 'team' ? `<button class="btn btn-ghost hide-mobile" onclick="exportTeam()"><i class="fas fa-file-export"></i><span class="btn-text">导出</span></button>` : ''}
+        ${state.page === 'team' ? `
+          <button class="btn btn-ghost hide-mobile" onclick="exportTeam()"><i class="fas fa-file-export"></i><span class="btn-text">导出</span></button>
+        ` : ''}
         ${state.page === 'staff' ? `
           ${capOn(currentUser, 'staff.dingSync') ? `<button class="btn btn-ghost" onclick="showDingTalkSyncModal()"><i class="fas fa-sync-alt"></i><span class="btn-text">同步钉钉</span></button>` : ''}
           ${resolveCap(currentUser, 'staff.edit') === 'all' ? `<button class="btn btn-primary" onclick="showAddStaffModal()"><i class="fas fa-plus"></i><span class="btn-text">添加人员</span></button>` : ''}

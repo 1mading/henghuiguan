@@ -2749,7 +2749,7 @@ function renderStaff() {
           </p>
           ` : `
           <p style="font-size:12px;color:#6B7280;line-height:1.6;margin-bottom:12px;">
-            点选部门查看本级人员；业务/联系人在「编辑人员 → 档案类型」设置。日常同步：勾选部门 → 设同步默认类型 → 预览 → 确认。手工停用的账号同步时不会更新或恢复。
+            点选部门查看本级人员。日常同步：勾选部门 → 预览 → 确认；新人入库为执行人员（可登录）。手工停用的账号同步时不会更新或恢复。
           </p>
           `}
           ${NotificationService.getRecentLogs(5).length ? `

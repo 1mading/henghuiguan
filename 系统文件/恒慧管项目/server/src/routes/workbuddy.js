@@ -5,6 +5,7 @@ const {
   getProjectDetail,
   getTaskDetail,
   getProjectPlanLedger,
+  getProjectRegisters,
 } = require('../services/workbuddyQuery');
 const { requireWorkbuddyApiKey } = require('../middleware/apiKeyAuth');
 
@@ -41,6 +42,14 @@ router.get('/workbuddy/query', requireWorkbuddyApiKey, (req, res) => {
 router.get('/workbuddy/projects/:id', requireWorkbuddyApiKey, (req, res) => {
   try {
     writeOk(res, getProjectDetail(String(req.params.id || '').trim(), { actor: req.scopedActor || null }));
+  } catch (e) {
+    writeErr(res, e.status || 500, e.message || '查询失败');
+  }
+});
+
+router.get('/workbuddy/projects/:id/registers', requireWorkbuddyApiKey, (req, res) => {
+  try {
+    writeOk(res, getProjectRegisters(String(req.params.id || '').trim(), { actor: req.scopedActor || null }));
   } catch (e) {
     writeErr(res, e.status || 500, e.message || '查询失败');
   }

@@ -76,6 +76,125 @@
 
       .task-card { padding: 10px 12px; }
       .task-card-meta { flex-wrap: wrap; gap: 6px; }
+      .task-card-header {
+        flex-wrap: wrap; align-items: flex-start; gap: 6px 8px;
+      }
+      .task-card-title {
+        flex: 1 1 100%; min-width: 0;
+        white-space: normal; word-break: break-word;
+      }
+      .task-card-header .status-tag,
+      .task-card-header .tag { flex-shrink: 0; }
+
+      /* 任务中心：顶栏/页签/筛选避免挤在一行叠字 */
+      .todo-page-toolbar {
+        display: flex; flex-direction: column; align-items: stretch;
+        gap: 10px; margin-bottom: 12px;
+      }
+      .todo-page-toolbar-main,
+      .todo-page-toolbar-aside { min-width: 0; width: 100%; }
+      .todo-page-toolbar-aside {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      }
+      .todo-tabs {
+        display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 2px;
+        -webkit-overflow-scrolling: touch; scrollbar-width: none;
+        margin-top: 8px; padding-bottom: 0;
+      }
+      .todo-tabs::-webkit-scrollbar { display: none; }
+      .todo-tab {
+        flex: 0 0 auto; padding: 8px 10px; font-size: 13px; white-space: nowrap;
+      }
+      .scope-seg {
+        display: flex; flex-wrap: nowrap; overflow-x: auto; max-width: 100%;
+        -webkit-overflow-scrolling: touch; scrollbar-width: none;
+      }
+      .scope-seg::-webkit-scrollbar { display: none; }
+      .scope-seg button { flex: 0 0 auto; white-space: nowrap; }
+      .todo-view-toggle { flex-shrink: 0; }
+      .todo-status-summary {
+        gap: 10px 14px; margin-bottom: 10px;
+        overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch;
+        padding-bottom: 2px;
+      }
+      .todo-status-summary-item { flex: 0 0 auto; white-space: nowrap; font-size: 12px; }
+
+      .todo-filter-bar {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+        padding: 10px 12px; align-items: stretch;
+      }
+      .todo-filter-bar .todo-field {
+        min-width: 0; width: 100%; max-width: none; height: 36px;
+      }
+      .todo-filter-bar .todo-field-grow {
+        grid-column: 1 / -1; min-width: 0; max-width: none;
+      }
+      .todo-filter-bar .btn {
+        grid-column: 1 / -1; width: 100%; justify-content: center;
+      }
+
+      /* 待办卡：标题与操作上下分开，避免横排挤叠 */
+      .wb-todo-card { padding: 12px 14px; position: relative; }
+      .wb-todo-list { gap: 10px; }
+      .todo-list-card .wb-todo-list { padding: 12px; }
+      .wb-todo-bar {
+        flex-direction: column; align-items: stretch; gap: 8px;
+      }
+      .wb-todo-bar-main { width: 100%; min-width: 0; }
+      .wb-todo-title {
+        flex: 1 1 auto; min-width: 0; max-width: 100%;
+        word-break: break-word;
+      }
+      .wb-todo-title-main {
+        white-space: normal; overflow: visible; text-overflow: unset;
+        display: block; line-height: 1.4;
+      }
+      .wb-todo-top { align-items: flex-start; gap: 6px; }
+      .wb-todo-actions,
+      .todo-action-menu {
+        align-self: flex-end; margin-left: 0;
+      }
+      .wb-todo-card:has(.todo-action-menu-panel) { z-index: 5; }
+      .todo-list-card,
+      .todo-table-card {
+        overflow: visible;
+      }
+      .todo-action-menu-panel {
+        z-index: 220;
+        right: 0; left: auto;
+      }
+
+      /* 紧凑列表行：改纵排 */
+      .task-list-row {
+        flex-direction: column; align-items: stretch;
+        padding: 12px; gap: 8px;
+      }
+      .task-list-row-title {
+        white-space: normal; word-break: break-word;
+      }
+      .task-list-row-meta {
+        flex-wrap: wrap; justify-content: flex-start; gap: 6px 10px;
+      }
+
+      /* 看板卡 */
+      .todo-board-card { padding: 12px; }
+      .todo-board-card-top {
+        align-items: flex-start; gap: 6px;
+      }
+      .todo-board-card-title-main {
+        white-space: normal; overflow: visible; text-overflow: unset;
+      }
+      .todo-board-card-footer {
+        flex-wrap: wrap; gap: 6px 8px;
+      }
+      .todo-board-submitter { margin-left: 0; max-width: 100%; }
+
+      .todo-pager {
+        flex-direction: column; align-items: stretch; gap: 8px;
+      }
+      .todo-pager-controls {
+        flex-wrap: wrap; justify-content: flex-start;
+      }
 
       .search-input-wide { width: 100% !important; max-width: 100%; }
       .filter-row { flex-direction: column; align-items: stretch !important; }
@@ -190,23 +309,11 @@
       display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
     }
-    .team-filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .team-filter-tab {
-      padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 500;
-      border: 1px solid var(--border); background: var(--bg-panel); color: var(--text-muted);
-      cursor: pointer; transition: border-color 0.15s, background 0.15s, color 0.15s;
-      font-family: inherit;
+    .team-dept-filter {
+      display: flex; align-items: center; gap: 0; min-width: 0;
     }
-    .team-filter-tab:hover { border-color: var(--brand); color: var(--brand); }
-    .team-filter-tab.is-active {
-      border-color: var(--brand); background: var(--brand-soft); color: var(--brand);
-    }
-    .team-filter-tab .tab-count {
-      margin-left: 4px; padding: 2px 6px; border-radius: 10px; font-size: 10px;
-      background: var(--border); color: var(--text-muted);
-    }
-    .team-filter-tab.is-active .tab-count {
-      background: var(--brand); color: #fff;
+    .team-dept-select {
+      height: 36px; padding: 0 12px; border-radius: 8px;
     }
     .team-sort-btn {
       padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 500;
@@ -1753,6 +1860,13 @@
     .todo-kanban-empty {
       font-size: 12px; color: #D1D5DB; text-align: center; padding: 24px 8px;
     }
+    .todo-page-toolbar {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+    }
+    .todo-page-toolbar-aside {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
     .todo-view-toggle {
       display: inline-flex; gap: 0; background: var(--border-light); padding: 3px; border-radius: 10px;
     }
@@ -1803,7 +1917,7 @@
       font-size: 12px; padding: 4px 10px; white-space: nowrap;
     }
     .todo-action-menu-panel {
-      position: absolute; right: 0; top: calc(100% + 4px); z-index: 40;
+      position: absolute; right: 0; top: calc(100% + 4px); z-index: 220;
       min-width: 132px; background: var(--bg-panel); border: 1px solid var(--border);
       border-radius: 10px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
       padding: 4px; display: flex; flex-direction: column; gap: 2px;
@@ -1880,6 +1994,91 @@
 
     .task-status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 
+/* 看板/状态列：必须放在基础 grid 规则之后，否则移动端横滑会被覆盖 */
+@media (max-width: 768px) {
+  .todo-page-toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .todo-page-toolbar-main,
+  .todo-page-toolbar-aside {
+    min-width: 0;
+    width: 100%;
+  }
+  .todo-page-toolbar-aside {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .todo-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-top: 8px;
+  }
+  .todo-tabs::-webkit-scrollbar { display: none; }
+  .todo-tab {
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .scope-seg {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .scope-seg::-webkit-scrollbar { display: none; }
+  .scope-seg button { flex: 0 0 auto; white-space: nowrap; }
+
+  .todo-board-wrap {
+    margin-left: -14px; margin-right: -14px;
+    padding-left: 14px; padding-right: 14px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .todo-status-kanban,
+  .task-status-grid {
+    display: flex !important;
+    grid-template-columns: none !important;
+    gap: 12px;
+    align-items: stretch;
+    width: max-content;
+    min-width: 100%;
+    overflow: visible;
+    padding-bottom: 8px;
+    scroll-snap-type: x mandatory;
+  }
+  .todo-kanban-col,
+  .task-status-grid > div,
+  .task-status-col {
+    flex: 0 0 auto;
+    width: min(78vw, 300px);
+    min-width: min(78vw, 300px);
+    max-width: min(78vw, 300px);
+    scroll-snap-align: start;
+    box-sizing: border-box;
+  }
+  .todo-board-card {
+    overflow: hidden;
+  }
+  .todo-board-card-title-main {
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+}
+
 
 /* 平板（768–960）：侧栏可收、内容区加宽 */
 @media (min-width: 769px) and (max-width: 960px) {
@@ -1891,4 +2090,137 @@
 /* 统一过渡，减少主题切换闪烁 */
 body, .sidebar, .main-area, .card, .modal, .settings-dropdown, .mobile-nav {
   transition: var(--hhg-transition);
+}
+
+/* M0–M7 阶段执行 / 登记册 */
+.hhg-phase-rail { display: flex; flex-direction: column; gap: 4px; }
+.hhg-phase-rail-title {
+  font-size: 11px; color: var(--text-light); letter-spacing: .04em;
+  font-weight: 600; padding: 4px 8px 8px;
+}
+.hhg-phase-item {
+  display: flex; align-items: flex-start; gap: 10px; width: 100%;
+  padding: 10px; border: none; background: transparent; border-radius: 10px;
+  cursor: pointer; text-align: left; font-family: inherit; color: var(--text);
+}
+.hhg-phase-item:hover { background: var(--border-light); }
+.hhg-phase-item.active {
+  background: var(--brand-soft); box-shadow: inset 3px 0 0 var(--brand);
+}
+.hhg-phase-dot {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; margin-top: 1px;
+}
+.hhg-phase-dot.is-done { background: var(--success); color: #fff; }
+.hhg-phase-dot.is-current { background: var(--brand); color: #fff; }
+.hhg-phase-dot.is-todo { background: var(--bg-muted); color: var(--text-muted); border: 1px solid var(--border); }
+.hhg-phase-text { display: flex; flex-direction: column; min-width: 0; }
+.hhg-phase-label { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.hhg-phase-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.hhg-phase-panel { margin-bottom: 12px; }
+.hhg-phase-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 10px; flex-wrap: wrap;
+}
+.hhg-phase-panel-head h3 {
+  margin: 0; font-size: 15px; font-weight: 650;
+  display: flex; align-items: center; gap: 8px;
+}
+.hhg-phase-panel-head h3 i { color: var(--brand); }
+.hhg-reg-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;
+}
+.hhg-reg-card {
+  border: 1px solid var(--border); border-radius: 10px; padding: 14px;
+  background: var(--bg-muted); cursor: pointer; text-align: left;
+  font-family: inherit; width: 100%; transition: border-color .15s, background .15s;
+}
+.hhg-reg-card:hover { border-color: var(--brand); background: var(--brand-soft); }
+.hhg-reg-card .k { font-size: 12px; color: var(--text-muted); }
+.hhg-reg-card .v { font-size: 15px; font-weight: 650; margin-top: 4px; }
+.hhg-reg-card .a { font-size: 12px; color: var(--brand); margin-top: 8px; font-weight: 600; }
+.hhg-slot-list { display: flex; flex-direction: column; gap: 8px; }
+.hhg-slot {
+  display: flex; align-items: center; gap: 12px; padding: 12px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--bg-panel);
+}
+.hhg-slot--multi {
+  flex-direction: column; align-items: stretch; gap: 8px;
+}
+.hhg-slot-head {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+}
+.hhg-slot-ico {
+  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--brand-soft); color: var(--brand); font-size: 16px;
+}
+.hhg-slot-body { flex: 1; min-width: 0; }
+.hhg-slot-title { font-weight: 600; font-size: 13px; }
+.hhg-slot-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.hhg-slot-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
+.hhg-slot-files {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 10px; margin-left: 52px;
+  background: var(--bg-muted); border-radius: 8px;
+}
+.hhg-slot-file {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  flex-wrap: wrap;
+}
+.hhg-slot-file-main {
+  display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;
+  font-size: 12px;
+}
+.hhg-slot-file-name {
+  font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px;
+}
+.hhg-slot-file-meta { color: var(--text-muted); white-space: nowrap; }
+.hhg-slot-file-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.hhg-query-page .hhg-query-filters {
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 12px;
+}
+.hhg-query-type-tabs {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;
+}
+.hhg-query-type-tab {
+  border: 1px solid var(--border); background: var(--bg-panel); color: var(--text-muted);
+  border-radius: 8px; padding: 7px 12px; cursor: pointer; font-family: inherit; font-size: 13px;
+}
+.hhg-query-type-tab:hover { background: var(--border-light); color: var(--text); }
+.hhg-query-type-tab.active {
+  background: var(--brand-soft); color: var(--brand); border-color: var(--brand); font-weight: 600;
+}
+.hhg-query-count {
+  display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 4px;
+  border-radius: 999px; background: rgba(0,0,0,.06); font-size: 11px;
+}
+.hhg-query-type-tab.active .hhg-query-count { background: rgba(61,74,140,.15); }
+.hhg-wbs-summary { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+.hhg-wbs-tree { display: flex; flex-direction: column; gap: 10px; }
+.hhg-wbs-block {
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg-panel);
+}
+.hhg-wbs-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap;
+}
+.hhg-wbs-row.is-ms .hhg-wbs-title { font-weight: 650; }
+.hhg-wbs-ico { color: var(--brand); width: 16px; text-align: center; font-size: 11px; }
+.hhg-wbs-row:not(.is-ms) .hhg-wbs-ico { color: var(--text-light); font-size: 7px; }
+.hhg-wbs-title { flex: 1; min-width: 120px; font-size: 13px; }
+.hhg-wbs-meta { font-size: 12px; color: var(--text-muted); min-width: 64px; }
+.hhg-wbs-empty-kids { font-size: 12px; color: var(--text-light); padding: 4px 0 4px 24px; }
+.hhg-register-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.hhg-register-table th, .hhg-register-table td {
+  padding: 8px 8px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: middle;
+}
+.hhg-register-table th {
+  font-size: 11px; color: var(--text-muted); font-weight: 600; background: var(--bg-muted);
+}
+@media (max-width: 768px) {
+  .hhg-phase-split .project-work-rail { max-height: none; }
+  .hhg-slot { flex-wrap: wrap; }
+  .hhg-slot-files { margin-left: 0; }
+  .hhg-slot-file-name { max-width: 140px; }
 }

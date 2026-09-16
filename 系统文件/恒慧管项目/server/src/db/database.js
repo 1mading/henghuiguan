@@ -115,6 +115,12 @@ function normalizeProjectRecord(project) {
   project.changeReason = String(project.changeReason || '').trim();
   project.phaseSyncedAt = String(project.phaseSyncedAt || '').trim();
   project.phaseDriverMilestoneId = String(project.phaseDriverMilestoneId || '').trim();
+  if (!Array.isArray(project.stakeholders)) project.stakeholders = [];
+  if (!Array.isArray(project.commPlans)) project.commPlans = [];
+  if (!Array.isArray(project.qualityChecks)) project.qualityChecks = [];
+  if (!Array.isArray(project.risks)) project.risks = [];
+  if (!Array.isArray(project.budgetLines)) project.budgetLines = [];
+  if (!Array.isArray(project.documents)) project.documents = [];
   return project;
 }
 
