@@ -70,7 +70,7 @@ router.post('/scoped-keys/users/:userId/issue', requireAuth, requireIssuer, (req
   }
 });
 
-/** 重新签发并钉钉发送：文档说明 + Key + 接口地址 */
+/** 重新签发并按对方 userid 发钉钉工作通知（无需选会话） */
 router.post('/scoped-keys/users/:userId/send', requireAuth, requireIssuer, async (req, res) => {
   try {
     const capability = req.body?.capability === CAP_READ ? CAP_READ : CAP_READ_WRITE;
@@ -83,7 +83,9 @@ router.post('/scoped-keys/users/:userId/send', requireAuth, requireIssuer, async
     });
     writeOk(res, {
       ...result,
-      message: '已生成作用域 Key，并通过钉钉/站内信发送接入说明',
+      message: result.sent
+        ? '已生成作用域 Key，并通过钉钉工作通知发送接入说明'
+        : `已生成作用域 Key，但工作通知未发出：${result.sendWarning || '未知原因'}。请复制明文手动发给对方。`,
     });
   } catch (e) {
     writeErr(res, e.status || 500, e.message || '发送失败');

@@ -193,6 +193,7 @@ function render() {
   `;
   ensureMainScrollTracking();
   restoreUiScrollPositions(scrollPos);
+  requestAnimationFrame(() => syncPersonSsUi());
   if (state.showModal === 'taskDetail' && state.form.taskId) {
     requestAnimationFrame(() => {
       hydrateAuthedImages(document.getElementById('app'));

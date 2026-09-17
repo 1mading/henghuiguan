@@ -157,10 +157,11 @@ function finalizeLoadedStore(dirtyHint = false) {
   let dirty = ensureStaffDeptCatalog(store) || dirtyHint;
   dirty = normalizeUserProfileKinds(store.users) || dirty;
   try {
-    const { ensureProjectTemplates } = require('../services/projectTemplates');
+    const { ensureProjectTemplates, repairWmsM0FalseMilestones } = require('../services/projectTemplates');
     const before = JSON.stringify(store.projectTemplates || []);
     ensureProjectTemplates(store);
     if (JSON.stringify(store.projectTemplates || []) !== before) dirty = true;
+    if (repairWmsM0FalseMilestones(store) > 0) dirty = true;
   } catch (e) {
     console.warn('[db] ensureProjectTemplates', e.message);
   }
@@ -409,6 +410,13 @@ function replaceAllData(payload) {
   }
   ensureStaffDeptCatalog(s);
   normalizeUserProfileKinds(s.users);
+  try {
+    const { ensureProjectTemplates, repairWmsM0FalseMilestones } = require('../services/projectTemplates');
+    ensureProjectTemplates(s);
+    repairWmsM0FalseMilestones(s);
+  } catch (e) {
+    console.warn('[db] replaceAllData templates/repair', e.message);
+  }
   persistStore();
 }
 

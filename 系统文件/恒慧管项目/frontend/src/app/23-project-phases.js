@@ -4,10 +4,9 @@
 const HHG_DEFAULT_PHASE_META = {
   M0: {
     label: 'M0 选型确认',
-    hint: '厂商交流材料走文档槽（纪要 / 方案 / md）',
+    hint: '厂商方案与会议纪要走文档槽',
     registers: [],
     slots: [
-      { key: 'vendor_minutes', title: '厂商交流纪要', ext: 'docx', required: false },
       { key: 'vendor_proposal', title: '厂商方案', ext: 'pdf', required: false },
       { key: 'meeting_md', title: '会议纪要', ext: 'md', required: false },
     ],
@@ -102,7 +101,7 @@ const HHG_REGISTER_DEFS = {
       { key: 'channel', label: '方式', type: 'select', options: ['会议', '钉钉', '邮件', '电话'] },
       { key: 'freq', label: '频率' },
       { key: 'owner', label: '负责人' },
-      { key: 'nextDate', label: '下次日期' },
+      { key: 'nextDate', label: '下次日期', type: 'date' },
       { key: 'status', label: '状态' },
     ],
     emptyRow: () => ({ id: '', target: '', topic: '', channel: '会议', freq: '', owner: '', nextDate: '', status: '未开始' }),
@@ -116,7 +115,7 @@ const HHG_REGISTER_DEFS = {
       { key: 'point', label: '检查点' },
       { key: 'standard', label: '标准' },
       { key: 'owner', label: '责任人' },
-      { key: 'planDate', label: '计划日期' },
+      { key: 'planDate', label: '计划日期', type: 'date' },
       { key: 'result', label: '结果' },
       { key: 'status', label: '状态' },
     ],
@@ -195,7 +194,7 @@ function getProjectPhaseStages(project) {
         title: String(slot.title || slot.key || '文档').trim(),
         ext: String(slot.ext || 'docx').trim(),
         required: !!slot.required,
-      })).filter(slot => slot.key),
+      })).filter(slot => slot.key && slot.key !== 'vendor_minutes'),
     };
   });
 }
@@ -219,24 +218,107 @@ function getPhaseStatus(project, stage) {
 function milestoneMatchesPhase(m, stage) {
   if (!m || !stage) return false;
   const seq = String(m.milestoneSeq || '').trim().toUpperCase();
+  const phaseKey = String(m.phaseKey || '').trim().toUpperCase();
   const key = String(stage.key || '').trim().toUpperCase();
   const mseq = String(stage.milestoneSeq || '').trim().toUpperCase();
+  if (phaseKey && (phaseKey === key || phaseKey === mseq)) return true;
   if (seq && (seq === key || seq === mseq)) return true;
   const title = String(m.title || '').trim().toUpperCase();
   if (key && (title === key || title.startsWith(key + ' ') || title.startsWith(key))) return true;
   if (mseq && (title === mseq || title.startsWith(mseq + ' ') || title.startsWith(mseq))) return true;
+  const label = String(stage.label || '').trim().toUpperCase();
+  if (label && title && (title === label || title.startsWith(label) || label.startsWith(title))) return true;
   return false;
 }
 
-function ensureDetailPhaseKey(project) {
+/** 里程碑对应的模板阶段（登记册/文档槽）；无匹配时返回 null */
+function resolveStageForMilestone(project, milestone) {
+  if (!milestone) return null;
   const stages = getProjectPhaseStages(project);
+  const byKey = stages.find(s => String(s.key || '') === String(milestone.phaseKey || '').trim());
+  if (byKey) return byKey;
+  return stages.find(s => milestoneMatchesPhase(milestone, s)) || null;
+}
+
+function getMilestoneRailStatus(milestone, current, allDone) {
+  if (!milestone) return 'todo';
+  if (allDone || milestone.status === 'done' || milestone.status === 'archived') return 'done';
+  const display = typeof getTaskDisplayStatus === 'function'
+    ? getTaskDisplayStatus(milestone)
+    : milestone.status;
+  if (display === 'done' || milestone.status === 'done') return 'done';
+  if (display === 'paused' || milestone.status === 'paused') return 'current';
+  if (display === 'doing' || milestone.status === 'doing') return 'current';
+  if (current && current.id === milestone.id) return 'current';
+  const progress = Number(milestone.progress);
+  if ((Number.isFinite(progress) && progress > 0)
+    || milestone.actualStartDate
+    || (typeof calcProgress === 'function' && calcProgress(milestone.id) > 0)) {
+    return 'current';
+  }
+  return 'todo';
+}
+
+function formatMilestoneRailLabel(m, idx) {
+  const seq = String(m?.milestoneSeq || '').trim();
+  const title = String(m?.title || m?.id || `里程碑${(idx || 0) + 1}`).trim();
+  if (seq && title && !title.toUpperCase().startsWith(seq.toUpperCase())) return `${seq} ${title}`;
+  return title || seq || `里程碑${(idx || 0) + 1}`;
+}
+
+/** 保证详情页选中的里程碑/阶段与任务列表一致；优先真实里程碑 */
+function ensureDetailPhaseKey(project) {
+  const milestones = getProjectMilestones(project);
+  const stages = getProjectPhaseStages(project);
+
+  if (milestones.length) {
+    let mid = String(state.detailMilestoneId || '').trim();
+    if (!mid || mid === '__unassigned__' || !milestones.some(m => m.id === mid)) {
+      const { current } = getCurrentAndNextMilestones(project);
+      mid = (current || milestones[0]).id;
+      state.detailMilestoneId = mid;
+    }
+    const m = milestones.find(x => x.id === mid);
+    const stage = resolveStageForMilestone(project, m);
+    state.detailPhaseKey = stage
+      ? stage.key
+      : String(m?.phaseKey || m?.milestoneSeq || mid).trim();
+    return state.detailPhaseKey;
+  }
+
   if (!stages.length) return '';
   let key = String(state.detailPhaseKey || '').trim();
   if (key && stages.some(s => s.key === key)) return key;
   const current = stages.find(s => getPhaseStatus(project, s) === 'current');
   key = (current || stages[0]).key;
   state.detailPhaseKey = key;
+  state.detailMilestoneId = '';
   return key;
+}
+
+function selectProjectMilestone(milestoneId) {
+  const mid = String(milestoneId || '').trim();
+  state.projectDetailTab = 'work';
+  if (normalizeProjectWorkView(state.projectPlanView) === 'gantt') {
+    state.projectPlanView = 'table';
+  }
+  const pid = (state.form && state.form.projectId) || state.currentProjectId;
+  const project = projects.find(p => p.id === pid);
+  if (!project || !mid) {
+    render();
+    return;
+  }
+  const m = getProjectMilestones(project).find(x => x.id === mid);
+  if (!m) {
+    render();
+    return;
+  }
+  state.detailMilestoneId = m.id;
+  const stage = resolveStageForMilestone(project, m);
+  state.detailPhaseKey = stage
+    ? stage.key
+    : String(m.phaseKey || m.milestoneSeq || m.id).trim();
+  render();
 }
 
 function selectProjectPhase(phaseKey) {
@@ -250,6 +332,7 @@ function selectProjectPhase(phaseKey) {
   if (project) {
     const stage = getProjectPhaseStages(project).find(s => s.key === state.detailPhaseKey);
     const ms = getProjectMilestones(project).filter(m => milestoneMatchesPhase(m, stage));
+    // 无匹配时清空，避免回落到「第一个里程碑」导致切换阶段任务不变
     state.detailMilestoneId = ms[0] ? ms[0].id : '';
   }
   render();
@@ -325,43 +408,48 @@ function renderProjectRegisterModal() {
   const def = HHG_REGISTER_DEFS[registerId];
   if (!def) return '';
   const rows = Array.isArray(state.form.registerRows) ? state.form.registerRows : [];
+  const fieldControl = (f, i, row) => {
+    if (f.type === 'select') {
+      return `<select class="input hhg-reg-field-ctrl" onchange="updateProjectRegisterCell(${i}, '${f.key}', this.value)">
+        ${(f.options || []).map(o => `<option value="${escapeHtml(o)}" ${String(row[f.key]) === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+      </select>`;
+    }
+    const inputType = f.type === 'date' ? 'date' : 'text';
+    return `<input class="input hhg-reg-field-ctrl" type="${inputType}" value="${escapeHtml(row[f.key] || '')}" oninput="updateProjectRegisterCell(${i}, '${f.key}', this.value)" placeholder="${escapeHtml(f.label)}">`;
+  };
   return `
     <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
-      <div class="modal" style="width:min(920px,96vw);max-height:85vh;display:flex;flex-direction:column;">
-        <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-          <h3 style="margin:0;font-size:16px;"><i class="fas fa-table" style="color:var(--brand);margin-right:8px;"></i>${escapeHtml(def.title)}</h3>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="closeModal()"><i class="fas fa-times"></i></button>
+      <div class="modal-box hhg-register-modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <h3 class="modal-title"><i class="fas fa-address-book" style="color:var(--brand);margin-right:8px;"></i>${escapeHtml(def.title)}</h3>
+          <button type="button" onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:18px;"><i class="fas fa-times"></i></button>
         </div>
-        <div class="modal-body" style="overflow:auto;flex:1;">
-          <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">系统内表格为主数据，可随时增删改；保存后同步到项目。</p>
-          <div style="overflow:auto;">
-            <table class="hhg-register-table">
-              <thead>
-                <tr>
-                  ${def.fields.map(f => `<th>${escapeHtml(f.label)}</th>`).join('')}
-                  <th style="width:52px;"></th>
-                </tr>
-              </thead>
-              <tbody>
-                ${rows.map((row, i) => `
-                  <tr>
-                    ${def.fields.map(f => {
-                      if (f.type === 'select') {
-                        return `<td><select class="input" style="width:100%;min-width:72px;" onchange="updateProjectRegisterCell(${i}, '${f.key}', this.value)">
-                          ${(f.options || []).map(o => `<option value="${escapeHtml(o)}" ${String(row[f.key]) === o ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
-                        </select></td>`;
-                      }
-                      return `<td><input class="input" style="width:100%;min-width:88px;" value="${escapeHtml(row[f.key] || '')}" oninput="updateProjectRegisterCell(${i}, '${f.key}', this.value)"></td>`;
-                    }).join('')}
-                    <td><button type="button" class="btn btn-ghost btn-sm" onclick="removeProjectRegisterRow(${i})">删</button></td>
-                  </tr>
-                `).join('') || `<tr><td colspan="${def.fields.length + 1}" style="text-align:center;color:var(--text-muted);padding:16px;">暂无数据，请增行</td></tr>`}
-              </tbody>
-            </table>
+        <div class="modal-body">
+          <p class="hhg-register-hint">按条目维护；空行保存时自动忽略。可随时增删改。</p>
+          <div class="hhg-register-list">
+            ${rows.length ? rows.map((row, i) => `
+              <div class="hhg-register-card">
+                <div class="hhg-register-card-head">
+                  <span class="hhg-register-card-idx">#${i + 1}</span>
+                  <button type="button" class="btn btn-ghost btn-sm" title="删除本条" onclick="removeProjectRegisterRow(${i})" style="color:#DC2626;"><i class="fas fa-trash-alt"></i></button>
+                </div>
+                <div class="hhg-register-fields">
+                  ${def.fields.map(f => `
+                    <label class="hhg-register-field${f.type === 'date' || f.type === 'select' ? ' is-narrow' : ''}">
+                      <span class="hhg-register-field-label">${escapeHtml(f.label)}</span>
+                      ${fieldControl(f, i, row)}
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('') : `
+              <div class="hhg-register-empty">暂无条目，点击下方「增行」开始填写</div>
+            `}
           </div>
         </div>
-        <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;">
+        <div class="modal-footer">
           <button type="button" class="btn" onclick="addProjectRegisterRow()"><i class="fas fa-plus"></i> 增行</button>
+          <div style="flex:1;"></div>
           <button type="button" class="btn btn-ghost" onclick="closeModal()">取消</button>
           <button type="button" class="btn btn-primary" onclick="saveProjectRegisterModal()"><i class="fas fa-save"></i> 保存</button>
         </div>
@@ -455,8 +543,24 @@ function renderSlotDocRow(project, stage, slot, doc, canManage) {
   `;
 }
 
+function togglePhaseDocSlots(phaseKey) {
+  const key = String(phaseKey || '').trim();
+  if (!key) return;
+  if (!state.phaseDocSlotsExpanded || typeof state.phaseDocSlotsExpanded !== 'object') {
+    state.phaseDocSlotsExpanded = {};
+  }
+  state.phaseDocSlotsExpanded[key] = !state.phaseDocSlotsExpanded[key];
+  render();
+}
+
+function isPhaseDocSlotsExpanded(phaseKey) {
+  const key = String(phaseKey || '').trim();
+  return !!(state.phaseDocSlotsExpanded && state.phaseDocSlotsExpanded[key]);
+}
+
 function renderPhaseDocSlots(project, stage, canManage) {
   const slots = stage.slots || [];
+  const expanded = isPhaseDocSlotsExpanded(stage.key);
   if (!slots.length) {
     return `
       <section class="panel hhg-phase-panel">
@@ -467,45 +571,57 @@ function renderPhaseDocSlots(project, stage, canManage) {
       </section>
     `;
   }
+  const filled = slots.reduce((n, slot) => n + findDocsForSlot(project, stage.key, slot.key).length, 0);
+  const requiredMissing = slots.filter(slot => slot.required && !findDocsForSlot(project, stage.key, slot.key).length).length;
+  const summary = [
+    `${slots.length} 个槽位`,
+    filled ? `已挂 ${filled}` : '尚未挂载',
+    requiredMissing ? `${requiredMissing} 个必交未交` : '',
+  ].filter(Boolean).join(' · ');
   return `
-    <section class="panel hhg-phase-panel">
+    <section class="panel hhg-phase-panel hhg-phase-panel--collapsible">
       <div class="panel-body" style="padding:14px 16px;">
-        <div class="hhg-phase-panel-head">
-          <h3><i class="fas fa-folder-open"></i>阶段文档槽</h3>
-          <span style="font-size:12px;color:var(--text-muted);">每槽可挂多个文件 / 钉钉文档</span>
-        </div>
-        <div class="hhg-slot-list">
-          ${slots.map(slot => {
-            const docs = findDocsForSlot(project, stage.key, slot.key);
-            const badge = slotDocsBadge(docs);
-            const ico = slot.ext === 'pdf' ? 'fa-file-pdf' : slot.ext === 'xlsx' ? 'fa-file-excel' : slot.ext === 'md' ? 'fa-file-code' : 'fa-file-word';
-            const emptyHint = slot.required ? '必交 · 尚未上传' : '建议 · 可上传多个';
-            const addActions = canManage ? `
-              <label class="btn btn-sm" style="cursor:pointer;margin:0;">
-                <i class="fas fa-upload"></i> 上传
-                <input type="file" multiple hidden onchange="uploadProjectPhaseSlot('${project.id}','${stage.key}','${slot.key}',event)">
-              </label>
-              <button type="button" class="btn btn-sm" onclick="linkProjectPhaseSlotWiki('${project.id}','${stage.key}','${slot.key}')"><i class="fas fa-link"></i> 挂钉钉</button>
-            ` : '';
-            return `
-              <div class="hhg-slot hhg-slot--multi">
-                <div class="hhg-slot-head">
-                  <div class="hhg-slot-ico"><i class="fas ${ico}"></i></div>
-                  <div class="hhg-slot-body">
-                    <div class="hhg-slot-title">${escapeHtml(slot.title)}${slot.required ? ' <span style="color:var(--danger);">*</span>' : ''} ${badge}</div>
-                    <div class="hhg-slot-meta">${docs.length ? `已挂 ${docs.length} 个` : emptyHint}</div>
+        <button type="button" class="hhg-phase-panel-toggle" onclick="togglePhaseDocSlots('${escapeHtml(stage.key)}')" aria-expanded="${expanded ? 'true' : 'false'}">
+          <div class="hhg-phase-panel-head" style="margin:0;width:100%;">
+            <h3><i class="fas fa-folder-open"></i>阶段文档槽</h3>
+            <span style="font-size:12px;color:var(--text-muted);">${escapeHtml(summary)}</span>
+            <span class="hhg-phase-panel-chevron"><i class="fas fa-chevron-${expanded ? 'up' : 'down'}"></i></span>
+          </div>
+        </button>
+        ${expanded ? `
+          <div class="hhg-slot-list" style="margin-top:12px;">
+            ${slots.map(slot => {
+              const docs = findDocsForSlot(project, stage.key, slot.key);
+              const badge = slotDocsBadge(docs);
+              const ico = slot.ext === 'pdf' ? 'fa-file-pdf' : slot.ext === 'xlsx' ? 'fa-file-excel' : slot.ext === 'md' ? 'fa-file-code' : 'fa-file-word';
+              const emptyHint = slot.required ? '必交 · 尚未上传' : '建议 · 可上传多个';
+              const addActions = canManage ? `
+                <label class="btn btn-sm" style="cursor:pointer;margin:0;">
+                  <i class="fas fa-upload"></i> 上传
+                  <input type="file" multiple hidden onchange="uploadProjectPhaseSlot('${project.id}','${stage.key}','${slot.key}',event)">
+                </label>
+                <button type="button" class="btn btn-sm" onclick="linkProjectPhaseSlotWiki('${project.id}','${stage.key}','${slot.key}')"><i class="fas fa-link"></i> 挂钉钉</button>
+              ` : '';
+              return `
+                <div class="hhg-slot hhg-slot--multi">
+                  <div class="hhg-slot-head">
+                    <div class="hhg-slot-ico"><i class="fas ${ico}"></i></div>
+                    <div class="hhg-slot-body">
+                      <div class="hhg-slot-title">${escapeHtml(slot.title)}${slot.required ? ' <span style="color:var(--danger);">*</span>' : ''} ${badge}</div>
+                      <div class="hhg-slot-meta">${docs.length ? `已挂 ${docs.length} 个` : emptyHint}</div>
+                    </div>
+                    <div class="hhg-slot-actions">${addActions}</div>
                   </div>
-                  <div class="hhg-slot-actions">${addActions}</div>
+                  ${docs.length ? `
+                    <div class="hhg-slot-files">
+                      ${docs.map(d => renderSlotDocRow(project, stage, slot, d, canManage)).join('')}
+                    </div>
+                  ` : ''}
                 </div>
-                ${docs.length ? `
-                  <div class="hhg-slot-files">
-                    ${docs.map(d => renderSlotDocRow(project, stage, slot, d, canManage)).join('')}
-                  </div>
-                ` : ''}
-              </div>
-            `;
-          }).join('')}
-        </div>
+              `;
+            }).join('')}
+          </div>
+        ` : ''}
       </div>
     </section>
   `;
@@ -515,6 +631,10 @@ async function uploadProjectPhaseSlot(projectId, phaseKey, slotKey, event) {
   const files = Array.from(event?.target?.files || []);
   if (event?.target) event.target.value = '';
   if (!files.length) return;
+  if (!state.phaseDocSlotsExpanded || typeof state.phaseDocSlotsExpanded !== 'object') {
+    state.phaseDocSlotsExpanded = {};
+  }
+  state.phaseDocSlotsExpanded[phaseKey] = true;
   try {
     for (const file of files) {
       const item = await uploadFileToEntity('project', projectId, file, file.name, 'attachment');
@@ -551,8 +671,12 @@ function unlinkProjectPhaseSlotDoc(projectId, refKey) {
 
 function linkProjectPhaseSlotWiki(projectId, phaseKey, slotKey) {
   state._phaseSlotLink = { projectId, phaseKey, slotKey };
-  if (typeof openWikiDocPicker === 'function') {
-    openWikiDocPicker('project', projectId, { linkPurpose: `phase:${phaseKey}:${slotKey}` });
+  if (!state.phaseDocSlotsExpanded || typeof state.phaseDocSlotsExpanded !== 'object') {
+    state.phaseDocSlotsExpanded = {};
+  }
+  state.phaseDocSlotsExpanded[phaseKey] = true;
+  if (typeof showWikiDocPicker === 'function') {
+    showWikiDocPicker('project', projectId, { linkPurpose: `phase:${phaseKey}:${slotKey}` });
   } else {
     alert('钉钉文档选择器不可用');
   }
@@ -566,11 +690,51 @@ function applyPhaseSlotMetaFromPurpose(doc, purpose) {
 }
 
 function renderPhaseRail(project) {
+  const canManage = canManageProject(project) && !isProjectArchived(project);
+  const railHead = `
+    <div class="hhg-phase-rail-title">
+      <span>里程碑阶段</span>
+      ${canManage ? `
+        <button type="button" class="btn btn-ghost btn-sm hhg-phase-rail-add" onclick="showNewMilestoneModal('${project.id}')" title="新增里程碑">
+          <i class="fas fa-plus"></i>
+        </button>
+      ` : ''}
+    </div>
+  `;
+  const milestones = getProjectMilestones(project);
+  if (milestones.length) {
+    ensureDetailPhaseKey(project);
+    const activeId = String(state.detailMilestoneId || '');
+    const { current, allDone } = getCurrentAndNextMilestones(project);
+    return `
+      <div class="hhg-phase-rail">
+        ${railHead}
+        ${milestones.map((m, idx) => {
+          const st = getMilestoneRailStatus(m, current, allDone);
+          const active = m.id === activeId;
+          const dotCls = st === 'done' ? 'is-done' : st === 'current' ? 'is-current' : 'is-todo';
+          const sub = st === 'done' ? '已完成' : st === 'current' ? '进行中' : '未开始';
+          const seq = String(m.milestoneSeq || '').trim();
+          const num = seq.replace(/^M/i, '') || String(idx + 1);
+          return `
+            <button type="button" class="hhg-phase-item${active ? ' active' : ''}" onclick="selectProjectMilestone('${escapeHtml(m.id)}')">
+              <span class="hhg-phase-dot ${dotCls}">${st === 'done' ? '<i class="fas fa-check"></i>' : escapeHtml(num)}</span>
+              <span class="hhg-phase-text">
+                <span class="hhg-phase-label">${escapeHtml(formatMilestoneRailLabel(m, idx))}</span>
+                <span class="hhg-phase-sub">${sub}</span>
+              </span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
   const stages = getProjectPhaseStages(project);
   const activeKey = ensureDetailPhaseKey(project);
   return `
     <div class="hhg-phase-rail">
-      <div class="hhg-phase-rail-title">里程碑阶段</div>
+      ${railHead}
       ${stages.map(s => {
         const st = getPhaseStatus(project, s);
         const active = s.key === activeKey;
@@ -593,8 +757,8 @@ function renderPhaseRail(project) {
 
 function renderProjectPhaseWorkSplit(project, canManage) {
   const stages = getProjectPhaseStages(project);
-  const activeKey = ensureDetailPhaseKey(project);
-  const stage = stages.find(s => s.key === activeKey) || stages[0];
+  const milestones = getProjectMilestones(project);
+  ensureDetailPhaseKey(project);
   const view = normalizeProjectWorkView(state.projectPlanView);
   if (view === 'gantt') {
     return `
@@ -607,22 +771,31 @@ function renderProjectPhaseWorkSplit(project, canManage) {
     `;
   }
 
-  if (stage) {
-    const ms = getProjectMilestones(project).filter(m => milestoneMatchesPhase(m, stage));
-    if (ms.length === 1) state.detailMilestoneId = ms[0].id;
-    else if (ms.length && !ms.some(m => m.id === state.detailMilestoneId)) {
-      state.detailMilestoneId = ms[0].id;
-    } else if (!ms.length) {
-      state.detailMilestoneId = '';
-    }
+  let stage = null;
+  let activeMilestone = null;
+
+  if (milestones.length) {
+    activeMilestone = milestones.find(m => m.id === state.detailMilestoneId) || milestones[0];
+    state.detailMilestoneId = activeMilestone.id;
+    stage = resolveStageForMilestone(project, activeMilestone)
+      || stages.find(s => s.key === state.detailPhaseKey)
+      || null;
+    if (stage) state.detailPhaseKey = stage.key;
+  } else {
+    const activeKey = state.detailPhaseKey;
+    stage = stages.find(s => s.key === activeKey) || stages[0];
+    state.detailMilestoneId = '';
   }
 
-  const statusBadge = (() => {
-    const st = stage ? getPhaseStatus(project, stage) : 'todo';
-    if (st === 'done') return '<span class="badge" style="background:var(--success-soft);color:var(--success);">已完成</span>';
-    if (st === 'current') return '<span class="badge" style="background:var(--info-soft);color:var(--info);">进行中</span>';
-    return '<span class="badge" style="background:var(--bg-muted);color:var(--text-muted);">未开始</span>';
-  })();
+  const wbsSection = milestones.length
+    ? (view === 'table'
+      ? renderProjectMilestoneTabsSection(project, { hideTabs: true, milestoneId: state.detailMilestoneId })
+      : `<div class="project-work-board-wrap">${renderProjectWorkToolbar(project)}${renderProjectDeliveryBoard(project, { hideTabs: true, milestoneId: state.detailMilestoneId })}</div>`)
+    : `<div class="panel hhg-phase-panel" style="margin-top:4px;"><div class="panel-body">${renderEmptyState({
+      icon: 'fa-flag',
+      title: '本阶段暂无对应里程碑',
+      hint: canManage ? '请先添加与本阶段对应的里程碑，或在模板中配置标准阶段' : '暂无任务',
+    })}</div></div>`;
 
   return `
     <div class="project-detail-tab-panel">
@@ -632,15 +805,6 @@ function renderProjectPhaseWorkSplit(project, canManage) {
           ${renderProjectFocusMini(project)}
         </aside>
         <div class="project-work-main">
-          <section class="panel hhg-phase-panel" style="margin-bottom:12px;">
-            <div class="panel-body" style="padding:14px 16px;">
-              <div class="hhg-phase-panel-head">
-                <h3><i class="fas fa-flag-checkered"></i>${escapeHtml(stage ? stage.label : '阶段')}</h3>
-                ${statusBadge}
-              </div>
-              <div style="font-size:12px;color:var(--text-muted);">${escapeHtml(stage?.hint || '')}</div>
-            </div>
-          </section>
           ${stage ? renderPhaseRegisterCards(project, stage) : ''}
           ${stage ? renderPhaseDocSlots(project, stage, canManage) : ''}
           <section class="panel hhg-phase-panel" style="margin-top:4px;margin-bottom:8px;">
@@ -651,9 +815,7 @@ function renderProjectPhaseWorkSplit(project, canManage) {
             </div>
           </section>
           <div>
-            ${view === 'table'
-              ? renderProjectMilestoneTabsSection(project, { hideTabs: true })
-              : `<div class="project-work-board-wrap">${renderProjectWorkToolbar(project)}${renderProjectDeliveryBoard(project, { hideTabs: true })}</div>`}
+            ${wbsSection}
           </div>
         </div>
       </div>

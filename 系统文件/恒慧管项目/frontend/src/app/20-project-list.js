@@ -104,11 +104,18 @@ function formatMilestoneCardDate(milestone) {
 }
 
 function getProjectCardPhaseLabel(project) {
-  const focus = getProjectFocusFields(project);
-  if (focus.currentPhase) return focus.currentPhase;
   const { current, allDone } = getCurrentAndNextMilestones(project);
   if (allDone) return '全部里程碑已完成';
-  if (current) return current.title || '进行中';
+  if (current) {
+    const seq = String(current.milestoneSeq || '').trim();
+    const title = String(current.title || '').trim();
+    if (seq && title && !title.toUpperCase().startsWith(seq.toUpperCase())) {
+      return `${seq} ${title}`;
+    }
+    return title || seq || '进行中';
+  }
+  const focus = getProjectFocusFields(project);
+  if (focus.currentPhase) return focus.currentPhase;
   return '暂无阶段信息';
 }
 

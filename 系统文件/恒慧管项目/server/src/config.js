@@ -36,12 +36,17 @@ module.exports = {
     appSecret: process.env.DINGTALK_APP_SECRET || '',
     agentId: process.env.DINGTALK_AGENT_ID || '',
     miniAppId: process.env.DINGTALK_MINI_APP_ID || '',
+    /**
+     * 企业内部应用机器人编码（人与机器人单聊）。
+     * 未设时默认用 AppKey（多数企业内部应用机器人的 robotCode = AppKey）。
+     */
+    robotCode: (process.env.DINGTALK_ROBOT_CODE || process.env.DINGTALK_APP_KEY || '').trim(),
     // 通讯录同步起始部门（逗号分隔 dept_id）；留空则自动读取钉钉授权范围
     syncRootDeptIds: (process.env.DINGTALK_SYNC_ROOT_DEPT_IDS || '')
       .split(',')
       .map(s => parseInt(s.trim(), 10))
       .filter(n => Number.isFinite(n)),
-    /** 知识库选择器：可选，仅展示名称包含以下关键词的知识库（逗号分隔）；留空则不过滤 */
+    /** 知识库选择器：可选，仅展示名称包含以下关键词的团队知识库（逗号分隔）；留空则展示当前用户自己可见的全部 */
     wikiWorkspaceKeywords: (process.env.DINGTALK_WIKI_WORKSPACE_KEYWORDS || '')
       .split(',')
       .map(s => s.trim())

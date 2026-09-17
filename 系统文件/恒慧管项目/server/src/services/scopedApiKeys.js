@@ -25,6 +25,8 @@ const {
 const config = require('../config');
 const { sendWorkNotification } = require('./dingtalk');
 const { createInboxFromPush } = require('./appNotifications');
+const { canViewAllProjects } = require('../utils/projectAccess');
+const { resolveCap } = require('./permissions');
 
 const KEY_PREFIX = 'hhg_sk_';
 const CAP_READ = 'read';
@@ -209,12 +211,30 @@ function buildGuideUrls() {
   };
 }
 
-function buildDeliveryContent({ userName, secret, capability }) {
+function describeScopedAccess(user, capability) {
+  const viewAll = canViewAllProjects(user);
+  const manageAll = resolveCap(user, 'projects.manage') === 'all';
+  const canCreate = resolveCap(user, 'projects.create') === 'on';
+  const readLine = viewAll
+    ? '可读：全公司项目与任务（与您在恒慧管内的「项目查看」权限一致）'
+    : '可读：与您相关的项目与任务（负责/成员/相关任务）';
+  if (capability === CAP_READ) {
+    return `${readLine}；本 Key 为只读，不可写入。`;
+  }
+  const writeLine = manageAll
+    ? '可写：您有权管理的全部项目及可编辑任务'
+    : '可写：您担任负责人/创建人的项目，以及您可编辑的任务';
+  const createLine = canCreate ? '可新建项目' : '不可新建项目';
+  return `${readLine}；${writeLine}；${createLine}；可增删改临时事项；不可删除项目；越权返回 403。`;
+}
+
+function buildDeliveryContent({ userName, secret, capability, boundUser }) {
   const urls = buildGuideUrls();
   const capLabel = capability === CAP_READ ? '只读' : '读写';
+  const scopeLine = describeScopedAccess(boundUser || {}, capability);
   return [
     `【恒慧管·作用域 Key】`,
-    `您好 ${userName || ''}，管理员为您签发了个人接口密钥（${capLabel}）。`,
+    `您好 ${userName || ''}，已为您签发个人接口密钥（${capLabel}）。`,
     ``,
     `服务地址：${urls.baseUrl}`,
     `作用域 Key（请妥善保管，勿转发）：`,
@@ -222,16 +242,17 @@ function buildDeliveryContent({ userName, secret, capability }) {
     ``,
     `请求头：X-Api-Key: <上面的 Key>`,
     `查询：GET ${urls.workbuddyQuery}`,
-    capability === CAP_READ ? '' : `写入：见 ${urls.externalCatalog}`,
+    `其它查询 type：projects / tasks / summary / all；limit 默认 50、最大 200`,
+    capability === CAP_READ ? '' : `写入：见 ${urls.externalCatalog}（建议先跑通只读再开写）`,
     `说明文档：${urls.guideUrl}`,
     ``,
-    `权限范围：仅您相关/可管理的项目与任务；越权将返回 403。`,
+    `权限范围：${scopeLine}`,
     `如非本人操作请忽略，并联系管理员吊销。`,
   ].filter((line, i, arr) => !(line === '' && arr[i - 1] === '')).join('\n');
 }
 
 /**
- * 签发（或使用传入 secret）并通过钉钉+站内信发给绑定人
+ * 签发后按对方 userid 发钉钉工作通知 + 站内信（无需选会话）。
  */
 async function issueAndSendToUser(opts = {}) {
   const boundUserId = String(opts.boundUserId || '').trim();
@@ -257,14 +278,23 @@ async function issueAndSendToUser(opts = {}) {
     userName: user.name,
     secret: issued.secret,
     capability: issued.record.capability,
+    boundUser: user,
   });
 
-  const pushResult = await sendWorkNotification({
-    dingTalkUserIds: [dingId],
-    title,
-    content,
-    withLink: true,
-  });
+  let pushResult;
+  let sendWarning = '';
+  try {
+    pushResult = await sendWorkNotification({
+      dingTalkUserIds: [dingId],
+      title,
+      content,
+      withLink: true,
+    });
+  } catch (e) {
+    sendWarning = e.message || '钉钉工作通知发送失败';
+    console.warn('[scopedApiKeys] work notification failed:', sendWarning);
+    pushResult = { success: false, channel: 'work_notification', error: sendWarning };
+  }
 
   try {
     createInboxFromPush({
@@ -278,7 +308,7 @@ async function issueAndSendToUser(opts = {}) {
   }
 
   const rec = getApiKeys().find(k => k.id === issued.record.id);
-  if (rec) {
+  if (rec && !sendWarning) {
     rec.lastSentAt = new Date().toISOString();
     persistStore();
   }
@@ -288,6 +318,9 @@ async function issueAndSendToUser(opts = {}) {
     secret: issued.secret,
     guide: buildGuideUrls(),
     dingTalk: pushResult,
+    sent: !sendWarning,
+    sendWarning: sendWarning || undefined,
+    deliveryContent: content,
   };
 }
 

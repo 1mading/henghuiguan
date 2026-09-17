@@ -2534,7 +2534,7 @@ function renderStaffTableRows(list, highlightSet, roleClass, roleName, emptyHint
             ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="editStaff('${u.id}')" title="编辑"><i class="fas fa-edit"></i></button>` : '<span style="color:#9CA3AF;font-size:12px;">—</span>'}
             ${isFullAccess(currentUser.role) && !inactive && !isContact ? `
               <button class="btn btn-ghost btn-sm" onclick="issueScopedApiKey('${u.id}')" title="生成作用域 Key"><i class="fas fa-key"></i></button>
-              <button class="btn btn-ghost btn-sm" style="color:var(--brand);" onclick="sendScopedApiKeyPackage('${u.id}')" title="发送：说明文档 + Key + 接口"><i class="fas fa-paper-plane"></i></button>
+              <button class="btn btn-ghost btn-sm" style="color:var(--brand);" onclick="sendScopedApiKeyPackage('${u.id}')" title="工作通知发送：说明文档 + Key + 接口"><i class="fas fa-paper-plane"></i></button>
             ` : ''}
             ${canToggleStaffActive(u) ? (
               inactive

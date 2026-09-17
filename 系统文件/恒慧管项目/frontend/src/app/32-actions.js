@@ -74,6 +74,7 @@ function closeModal() {
   hideTaskCommentMentionDropdown();
   closeImageLightbox();
   state.collabDropdownOpen = null;
+  if (typeof teardownPersonSsPortal === 'function') teardownPersonSsPortal();
   const wikiReturn = state.showModal === 'wikiDocPicker' ? state._wikiPickerReturn : null;
   if (!(wikiReturn && wikiReturn.kind === 'delivery')) {
     state.editingDeliveryTaskId = null;
@@ -84,6 +85,7 @@ function closeModal() {
   // 关闭前不要用可能已是 0 的主区滚动覆盖记忆；保留 open 时记下的位置
   if (wikiReturn) {
     if (wikiReturn.kind === 'delivery') restoreWikiPickerDeliveryReturn(wikiReturn);
+    else if (wikiReturn.kind === 'context') restoreWikiPickerContextReturn(wikiReturn);
     else restoreWikiPickerReturnForm();
     render();
     return;
@@ -109,12 +111,16 @@ function closeModal() {
     return;
   }
   state.taskViewStack = [];
-  const projectId = state.prevProjectId || state.form.projectId;
+  const projectId = state.prevProjectId
+    || state.form.projectId
+    || state.currentProjectId
+    || (state.form.wikiEntityType === 'project' ? state.form.wikiEntityId : '');
   state.prevProjectId = null;
   const keepMain = Number(state.uiScrollMain) || 0;
   const keepWindow = Number(state.uiScrollWindow) || 0;
   state.showModal = null;
   if (projectId && state.page === 'projectDetail') {
+    state.currentProjectId = projectId;
     state.form = { projectId };
   } else {
     state.form = {};
@@ -690,9 +696,13 @@ function renderQuickCreateModal() {
           </div>
           <div class="form-group">
             <label class="form-label">负责人 <span class="form-required">*</span></label>
-            <select class="select" style="width:100%;" onchange="state.form.assignee=this.value">
-              ${getTaskAssigneeCandidates().map(u => `<option value="${u.name}" ${(state.form.assignee || currentUser.name) === u.name ? 'selected' : ''}>${formatUserOptionLabel(u)}</option>`).join('')}
-            </select>
+            ${renderPersonSingleSelect({
+              key: 'quickAssignee',
+              formField: 'assignee',
+              value: state.form.assignee || currentUser.name,
+              getCandidates: getTaskAssigneeCandidates,
+              placeholder: '从人员档案选择',
+            })}
           </div>
           <div class="form-group">
             <label class="form-label">计划开始时间</label>
@@ -829,6 +839,8 @@ async function saveQuickCreate() {
             await submitWikiDocLink('task', newTask.id, {
               nodeId: entry.nodeId,
               workspaceId: entry.workspaceId,
+              url: entry.url,
+              name: entry.name,
             }, { silent: true });
           } else {
             const file = entry.file;
@@ -1009,7 +1021,6 @@ function getBuiltinProjectTemplatesFallback() {
           gates: [],
           registers: [],
           slots: [
-            { key: 'vendor_minutes', title: '厂商交流纪要', ext: 'docx', required: false },
             { key: 'vendor_proposal', title: '厂商方案', ext: 'pdf', required: false },
             { key: 'meeting_md', title: '会议纪要', ext: 'md', required: false },
           ],

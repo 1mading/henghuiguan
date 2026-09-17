@@ -64,7 +64,7 @@ function buildWikiAttachmentItem(node, docUrl, userName, idPrefix, extra) {
     url: node.url || docUrl,
     workspaceId: node.workspaceId || '',
     nodeId: node.nodeId || '',
-    docType: node.type || '',
+    docType: node.category || node.type || '',
     uploadedBy: userName,
     uploadedAt: new Date().toISOString(),
   };
@@ -72,11 +72,14 @@ function buildWikiAttachmentItem(node, docUrl, userName, idPrefix, extra) {
   return item;
 }
 
-function wikiAlreadyLinked(items, nodeId) {
-  if (!nodeId) return false;
-  return (items || []).some(item =>
-    item?.source === 'dingtalk_wiki' && item.nodeId === nodeId
-  );
+function wikiAlreadyLinked(items, nodeId, docUrl) {
+  const url = String(docUrl || '').trim();
+  return (items || []).some(item => {
+    if (item?.source !== 'dingtalk_wiki') return false;
+    if (nodeId && item.nodeId === nodeId) return true;
+    if (url && item.url && String(item.url).trim() === url) return true;
+    return false;
+  });
 }
 
 function countStoredFileReferences(store, fileId) {
@@ -144,7 +147,7 @@ function attachWikiDocToEntity(store, req, entityType, entityId, node, docUrl, e
     if (!canEditProjectDocs(req.user, project)) {
       return { status: 403, body: { success: false, message: '无权上传项目文档' } };
     }
-    if (wikiAlreadyLinked(project.documents, node.nodeId)) {
+    if (wikiAlreadyLinked(project.documents, node.nodeId, node.url || docUrl)) {
       return { status: 409, body: { success: false, message: '该钉钉文档已添加' } };
     }
     const item = buildWikiAttachmentItem(node, docUrl, req.user.name, 'DOC');
@@ -171,9 +174,9 @@ function attachWikiDocToEntity(store, req, entityType, entityId, node, docUrl, e
     if (!canEditTaskAttachments(req.user, task, store.projects)) {
       return { status: 403, body: { success: false, message: '无权上传任务附件' } };
     }
-    if (wikiAlreadyLinked(task.attachments, node.nodeId)) {
+    if (wikiAlreadyLinked(task.attachments, node.nodeId, node.url || docUrl)) {
       const existing = (task.attachments || []).find(item =>
-        item?.source === 'dingtalk_wiki' && item.nodeId === node.nodeId
+        wikiAlreadyLinked([item], node.nodeId, node.url || docUrl)
       );
       if (purpose === 'evidence' && existing && existing.purpose !== 'evidence') {
         existing.purpose = 'evidence';

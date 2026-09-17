@@ -17,6 +17,7 @@ let state = {
   projectDetailMoreOpen: false,
   projectPlanView: 'table', // table | gantt | list（任务页内，默认列表）
   detailPhaseKey: '', // 阶段执行：当前 M0–M7
+  phaseDocSlotsExpanded: {}, // { [phaseKey]: true } 阶段文档槽展开态，默认折叠
   detailMilestoneId: '', // 任务页：当前里程碑轨 id（__unassigned__=未归属）
   detailTaskScope: 'all', // all | mine
   detailTaskStatusFilter: 'all', // all | doing | todo | done

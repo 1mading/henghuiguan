@@ -113,7 +113,21 @@ function formatDingTalkApiError(path, data) {
   const applyUrl = msg.match(/https:\/\/open-dev\.dingtalk\.com[^\s\],]+/)?.[0] || '';
   const base = `钉钉 ${path} 失败: ${msg} (${code})`;
 
+  if (msg.includes('qyapi_sendmsg_o2o') || path.includes('send_to_single_conversation')) {
+    let hint = '请在钉钉开放平台 → 应用 → 权限管理，搜索并开通「企业内个人之间发送单聊消息 / qyapi_sendmsg_o2o」，保存后重新发布，等待几分钟再生效。';
+    if (applyUrl) hint += `\n\n一键申请：\n${applyUrl}`;
+    return base + '\n\n' + hint;
+  }
+  if (msg.includes('qyapi_robot_sendmsg') || path.includes('oToMessages')) {
+    let hint = '请开通「企业内机器人发送消息 / qyapi_robot_sendmsg」，并确认应用已启用机器人后重新发布。';
+    if (applyUrl) hint += `\n\n一键申请：\n${applyUrl}`;
+    return base + '\n\n' + hint;
+  }
   if (code === 60011 || code === 88 || msg.includes('60011') || msg.includes('qyapi_get_department')) {
+    // 88 常为权限总码，优先看 submsg；无特定权限时再给通讯录提示
+    if (msg.includes('qyapi_') && applyUrl) {
+      return base + '\n\n一键申请：\n' + applyUrl;
+    }
     let hint = '请在钉钉开放平台 → 应用 → 权限管理，搜索并开通「通讯录部门成员读」相关权限，保存后重新发布应用，等待 1～5 分钟再同步。';
     if (applyUrl) hint += `\n\n一键申请链接：\n${applyUrl}`;
     return base + '\n\n' + hint;
@@ -211,14 +225,27 @@ async function getUserIdByAuthCode(authCode) {
 }
 
 /**
- * 工作通知跳转：在钉钉工作台内打开 H5，避免普通 https 被当外部网页用浏览器打开。
- * 企业内部应用 app_id = 0_{agentId}
+ * 工作通知跳转：在钉钉内打开 H5。
+ * - https：优先用页面 URL（钉钉内嵌打开，需已配安全域名/应用首页）
+ * - 其它：再拼 dingtalk://openapp（内网 http IP 在手机上通常打不开）
  */
 function buildWorkAppJumpUrl(pageUrl) {
   const corpId = String(config.dingtalk.corpId || '').trim();
   const agentId = String(config.dingtalk.agentId || '').trim();
-  const redirect = String(pageUrl || '').trim();
-  if (!corpId || !agentId || !redirect) return '';
+  let redirect = String(pageUrl || '').trim();
+  if (!redirect) return '';
+
+  // 钉钉客户端内打开 H5 常用参数
+  if (!/[?&]ddtab=/.test(redirect)) {
+    redirect += (redirect.includes('?') ? '&' : '?') + 'ddtab=true';
+  }
+
+  // HTTPS 直接作按钮链接，兼容性通常好于 openapp+内网 IP
+  if (/^https:\/\//i.test(redirect)) {
+    return redirect;
+  }
+
+  if (!corpId || !agentId) return redirect;
   const appId = `0_${agentId}`;
   return (
     'dingtalk://dingtalkclient/action/openapp'
@@ -233,7 +260,7 @@ function buildWorkAppJumpUrl(pageUrl) {
 function resolveWorkNotificationPageUrl(url) {
   const custom = String(url || '').trim();
   if (custom) return custom;
-  if (config.publicBaseUrl) return `${config.publicBaseUrl}/app`;
+  if (config.publicBaseUrl) return `${config.publicBaseUrl.replace(/\/+$/, '')}/app`;
   return '';
 }
 
@@ -299,6 +326,166 @@ async function sendConversationMessage({ senderUserId, cid, content }) {
   };
 }
 
+/**
+ * 企业内个人 ↔ 个人单聊（像平时发消息一样，按 userid 直达，无需选会话）。
+ * 接口：topapi/message/send_to_single_conversation
+ */
+async function sendPersonPrivateChat({ senderUserId, receiverUserId, title, content }) {
+  const sender = String(senderUserId || '').trim();
+  const receiver = String(receiverUserId || '').trim();
+  if (!sender || sender === 'demo') {
+    throw new Error('发送者未绑定钉钉 userid');
+  }
+  if (!receiver || receiver === 'demo') {
+    throw new Error('接收者未绑定钉钉 userid');
+  }
+  const safeTitle = String(title || '【恒慧管】').slice(0, 64);
+  const safeContent = String(content || '').trim();
+  if (!safeContent) {
+    throw new Error('消息内容不能为空');
+  }
+
+  if (!isConfigured()) {
+    return {
+      success: true,
+      mock: true,
+      channel: 'person_oto',
+      message: '钉钉未配置，演示模式已记录个人私聊发送',
+      sender,
+      receiver,
+      title: safeTitle,
+    };
+  }
+
+  const accessToken = await getAccessToken();
+  // markdown 目前仅支持 text；把标题拼进正文，避免丢信息
+  const mdText = safeContent.startsWith(safeTitle)
+    ? safeContent
+    : `### ${safeTitle}\n\n${safeContent}`;
+  const truncated = mdText.length > 4500 ? `${mdText.slice(0, 4500)}\n…(已截断)` : mdText;
+
+  const res = await fetch(
+    `https://oapi.dingtalk.com/topapi/message/send_to_single_conversation?access_token=${encodeURIComponent(accessToken)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender_userid: sender,
+        receiver_userid: receiver,
+        msg: {
+          msgtype: 'markdown',
+          markdown: {
+            title: safeTitle,
+            text: truncated,
+          },
+        },
+      }),
+    },
+  );
+
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(`钉钉个人私聊发送失败: HTTP ${res.status}，响应非 JSON`);
+  }
+  if (data.errcode !== 0) {
+    throw new Error(formatDingTalkApiError('message/send_to_single_conversation', data));
+  }
+
+  return {
+    success: true,
+    channel: 'person_oto',
+    msgId: data.msg_id || '',
+    sender,
+    receiver,
+    title: safeTitle,
+  };
+}
+
+/**
+ * 人与机器人单聊（出现在钉钉「消息」列表，不是工作通知）。
+ * 需开通「企业内机器人发送消息」权限；robotCode 默认取 AppKey。
+ */
+async function sendRobotPrivateChat({ dingTalkUserIds, title, content }) {
+  const ids = [...new Set((dingTalkUserIds || []).map(String).filter(id => id && id !== 'demo'))];
+  if (!ids.length) {
+    throw new Error('无有效钉钉接收人（请先在人员档案绑定 userid）');
+  }
+
+  const robotCode = String(config.dingtalk.robotCode || config.dingtalk.appKey || '').trim();
+  const safeTitle = String(title || '【恒慧管】').slice(0, 64);
+  const safeContent = String(content || '').trim();
+  if (!safeContent) {
+    throw new Error('消息内容不能为空');
+  }
+
+  if (!isConfigured()) {
+    return {
+      success: true,
+      mock: true,
+      channel: 'robot_oto',
+      message: '钉钉未配置，演示模式已记录私聊发送',
+      dingTalkUserIds: ids,
+      title: safeTitle,
+    };
+  }
+  if (!robotCode) {
+    throw new Error('未配置机器人编码：请在 .env 设置 DINGTALK_ROBOT_CODE（或确保已配置 DINGTALK_APP_KEY）');
+  }
+
+  const accessToken = await getAccessToken();
+  // sampleMarkdown：title + text；text 用纯文本即可（Key 中含特殊字符时更稳）
+  const msgParam = JSON.stringify({
+    title: safeTitle,
+    text: safeContent.length > 4500 ? `${safeContent.slice(0, 4500)}\n…(已截断)` : safeContent,
+  });
+
+  const res = await fetch('https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-acs-dingtalk-access-token': accessToken,
+    },
+    body: JSON.stringify({
+      robotCode,
+      userIds: ids.slice(0, 20),
+      msgKey: 'sampleMarkdown',
+      msgParam,
+    }),
+  });
+
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(`钉钉私聊发送失败: HTTP ${res.status}，响应非 JSON`);
+  }
+
+  if (!res.ok || data.code || data.errcode) {
+    const code = data.code || data.errcode;
+    const msg = data.message || data.errmsg || res.statusText || '未知错误';
+    let hint = '';
+    if (String(msg).includes('permission') || String(code).includes('Forbidden') || res.status === 403) {
+      hint = '。请在钉钉开放平台为本应用开通「企业内机器人发送消息」权限，并确认已启用应用机器人后重新发布。';
+    }
+    throw new Error(`钉钉私聊发送失败: ${msg} (${code})${hint}`);
+  }
+
+  const invalid = Array.isArray(data.invalidStaffIdList) ? data.invalidStaffIdList : [];
+  if (invalid.length) {
+    throw new Error(`钉钉私聊发送部分失败：无效 userid ${invalid.join(', ')}`);
+  }
+
+  return {
+    success: true,
+    channel: 'robot_oto',
+    processQueryKey: data.processQueryKey || '',
+    dingTalkUserIds: ids,
+    title: safeTitle,
+  };
+}
+
 async function sendWorkNotification({ dingTalkUserIds, title, content, url, withLink = true }) {
   const ids = [...new Set((dingTalkUserIds || []).map(String).filter(id => id && id !== 'demo'))];
   if (!ids.length) {
@@ -324,6 +511,9 @@ async function sendWorkNotification({ dingTalkUserIds, title, content, url, with
   const accessToken = await getAccessToken();
   const pageUrl = resolveWorkNotificationPageUrl(url);
   const jumpUrl = withLink === false ? '' : buildWorkAppJumpUrl(pageUrl);
+  if (withLink !== false && pageUrl && /^http:\/\//i.test(pageUrl)) {
+    console.warn('[钉钉推送] PUBLIC_BASE_URL 为 http（多为内网 IP），手机端「打开恒慧管」常失败；请改为钉钉应用首页同款 HTTPS，例如 https://henghuiguan.handagroup.com');
+  }
   const safeTitle = String(title || '【恒慧管】通知').slice(0, 64);
   const safeContent = String(content || '').trim();
 
@@ -666,13 +856,40 @@ function normalizeDingTalkDocUrl(raw) {
 
 function isDingTalkDocUrl(url) {
   try {
-    const host = new URL(url).hostname.toLowerCase();
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (host.includes('shanji.dingtalk.com') || path.includes('/transcribes/')) return true;
     return host.includes('alidocs.dingtalk.com') ||
       host.includes('ding-doc.dingtalk.com') ||
-      host.includes('docs.dingtalk.com');
+      host.includes('docs.dingtalk.com') ||
+      host === 'n.dingtalk.com';
   } catch {
     return false;
   }
+}
+
+function isFlashNoteUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    return host.includes('shanji.dingtalk.com') || path.includes('/transcribes/');
+  } catch {
+    return false;
+  }
+}
+
+function guessDingTalkLinkName(url, fallbackName) {
+  const named = String(fallbackName || '').trim();
+  if (named) return named;
+  return isFlashNoteUrl(url) ? '钉钉闪记' : '钉钉文档';
+}
+
+function urlWikiNodeId(url) {
+  const crypto = require('crypto');
+  const digest = crypto.createHash('sha1').update(String(url || '')).digest('hex').slice(0, 16);
+  return `url:${digest}`;
 }
 
 async function dingTalkWikiPost(path, query, body) {
@@ -925,65 +1142,83 @@ async function refreshStaffWikiWorkspaceIndex(force = false) {
 }
 
 async function listWikiWorkspacesForStaffArchive(currentUser) {
+  /** 选择器仅展示当前登录用户自己可见的知识库（不再汇总人员档案全员） */
   const personalWorkspaces = [];
   const teamWorkspaces = [];
   let mineError = null;
   let bindError = null;
+  let scannedUsers = 0;
+  let failedUsers = 0;
 
-  const index = await refreshStaffWikiWorkspaceIndex();
-
-  if (currentUser) {
-    try {
-      const unionId = await resolveOperatorUnionId(currentUser);
-
-      try {
-        const mine = await getMineWikiWorkspace(unionId);
-        if (mine) {
-          const item = {
-            ...mine,
-            name: mine.name || '我的文档',
-            type: 'PERSONAL',
-            accessibleVia: currentUser.name,
-            isOwn: true,
-          };
-          personalWorkspaces.push(item);
-          registerWorkspaceInStaffIndex(index, item, unionId, currentUser);
-        } else {
-          mineError = '未获取到「我的文档」，请确认钉钉账号中已有个人文档';
-        }
-      } catch (e) {
-        mineError = e.message || '加载「我的文档」失败';
-      }
-
-      const ownTeamList = await listWikiWorkspaces(unionId, { keywords: [] });
-      for (const ws of ownTeamList) {
-        if (String(ws.type || '').toUpperCase() === 'PERSONAL') {
-          if (!personalWorkspaces.some(p => p.workspaceId === ws.workspaceId)) {
-            const item = { ...ws, name: ws.name || '我的文档', accessibleVia: currentUser.name, isOwn: true };
-            personalWorkspaces.push(item);
-            registerWorkspaceInStaffIndex(index, item, unionId, currentUser);
-          }
-          continue;
-        }
-        if (!teamWorkspaces.some(t => t.workspaceId === ws.workspaceId)) {
-          const item = { ...ws, accessibleVia: currentUser.name, isOwn: true };
-          teamWorkspaces.push(item);
-          registerWorkspaceInStaffIndex(index, item, unionId, currentUser);
-        }
-      }
-    } catch (e) {
-      bindError = e.message || '当前账号未绑定钉钉 userid/unionId';
-    }
+  if (!currentUser) {
+    return {
+      personalWorkspaces,
+      teamWorkspaces,
+      workspaces: [],
+      mineError,
+      bindError,
+      scannedUsers,
+      failedUsers,
+    };
   }
 
-  for (const ws of index.workspaces) {
-    if (String(ws.type || '').toUpperCase() === 'PERSONAL') continue;
-    if (!teamWorkspaces.some(t => t.workspaceId === ws.workspaceId)) {
-      teamWorkspaces.push({
-        ...ws,
-        isOwn: ws.accessibleVia === currentUser?.name,
+  try {
+    const unionId = await resolveOperatorUnionId(currentUser);
+    scannedUsers = 1;
+
+    try {
+      const mine = await getMineWikiWorkspace(unionId);
+      if (mine) {
+        personalWorkspaces.push({
+          ...mine,
+          name: mine.name || '我的文档',
+          type: 'PERSONAL',
+          accessibleVia: currentUser.name,
+          isOwn: true,
+        });
+      } else {
+        mineError = '未获取到「我的文档」，请确认钉钉账号中已有个人文档';
+      }
+    } catch (e) {
+      mineError = e.message || '加载「我的文档」失败';
+    }
+
+    const ownTeamList = await listWikiWorkspaces(unionId, { keywords: [] });
+    for (const ws of ownTeamList) {
+      if (String(ws.type || '').toUpperCase() === 'PERSONAL') {
+        if (!personalWorkspaces.some(p => p.workspaceId === ws.workspaceId)) {
+          personalWorkspaces.push({
+            ...ws,
+            name: ws.name || '我的文档',
+            accessibleVia: currentUser.name,
+            isOwn: true,
+          });
+        }
+        continue;
+      }
+      if (!teamWorkspaces.some(t => t.workspaceId === ws.workspaceId)) {
+        teamWorkspaces.push({
+          ...ws,
+          accessibleVia: currentUser.name,
+          isOwn: true,
+        });
+      }
+    }
+
+    // 写入算子映射，供后续浏览节点 / 关联文档使用（不触发全员扫描）
+    if (!staffWikiCache.operatorByWorkspaceId) {
+      staffWikiCache.operatorByWorkspaceId = new Map();
+    }
+    for (const ws of [...personalWorkspaces, ...teamWorkspaces]) {
+      staffWikiCache.operatorByWorkspaceId.set(ws.workspaceId, {
+        unionId,
+        userName: currentUser.name,
+        userId: currentUser.id,
       });
     }
+  } catch (e) {
+    bindError = e.message || '当前账号未绑定钉钉 userid/unionId';
+    failedUsers = 1;
   }
 
   personalWorkspaces.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
@@ -995,39 +1230,42 @@ async function listWikiWorkspacesForStaffArchive(currentUser) {
     workspaces: [...personalWorkspaces, ...teamWorkspaces],
     mineError,
     bindError,
-    scannedUsers: index.scannedUsers,
-    failedUsers: index.failedUsers,
+    scannedUsers,
+    failedUsers,
   };
 }
 
 async function resolveWikiOperatorForWorkspace(workspaceId, fallbackUser) {
   if (fallbackUser) {
     try {
-      await ensureCurrentUserWorkspacesMerged(fallbackUser);
       const unionId = await resolveOperatorUnionId(fallbackUser);
       const list = await listWikiWorkspacesForOperator(unionId, { keywords: [] });
       if (!workspaceId || list.some(ws => ws.workspaceId === workspaceId)) {
+        if (workspaceId) {
+          if (!staffWikiCache.operatorByWorkspaceId) {
+            staffWikiCache.operatorByWorkspaceId = new Map();
+          }
+          staffWikiCache.operatorByWorkspaceId.set(workspaceId, {
+            unionId,
+            userName: fallbackUser.name,
+            userId: fallbackUser.id,
+          });
+        }
         return unionId;
       }
     } catch {
-      // try staff index below
+      // fall through
     }
   }
   if (!workspaceId) {
     if (!fallbackUser) throw new Error('缺少知识库信息');
     return resolveOperatorUnionId(fallbackUser);
   }
-  const index = await refreshStaffWikiWorkspaceIndex();
-  const hit = index.operatorByWorkspaceId.get(workspaceId);
-  if (hit) return hit.unionId;
-  if (fallbackUser) {
-    try {
-      return await resolveOperatorUnionId(fallbackUser);
-    } catch {
-      // fall through
-    }
+  const hit = staffWikiCache.operatorByWorkspaceId?.get(workspaceId);
+  if (hit?.unionId && fallbackUser && (hit.userId === fallbackUser.id || hit.userName === fallbackUser.name)) {
+    return hit.unionId;
   }
-  throw new Error('该知识库不在可见范围内，请确认已绑定钉钉 unionId 或重新同步通讯录');
+  throw new Error('该知识库不在您的可见范围内，请确认已绑定钉钉 unionId 或重新同步通讯录');
 }
 
 async function assertWikiWorkspaceAccessible(workspaceId, currentUser, options = {}) {
@@ -1038,60 +1276,43 @@ async function assertWikiWorkspaceAccessible(workspaceId, currentUser, options =
     }
     return;
   }
-  if (currentUser) await ensureCurrentUserWorkspacesMerged(currentUser);
-  const index = await refreshStaffWikiWorkspaceIndex();
-  if (index.operatorByWorkspaceId.has(workspaceId)) return;
+  if (!currentUser) {
+    throw new Error('该文档不在可见范围内。请先登录后再添加');
+  }
 
-  if (currentUser && options.operatorUnionIdUsed) {
-    const unionId = await resolveOperatorUnionId(currentUser).catch(() => null);
-    if (unionId && unionId === options.operatorUnionIdUsed) {
-      try {
-        const mine = await getMineWikiWorkspace(unionId);
-        if (mine?.workspaceId === workspaceId) {
-          registerWorkspaceInStaffIndex(index, mine, unionId, currentUser);
-          return;
-        }
-      } catch {
-        // fall through
+  try {
+    const unionId = await resolveOperatorUnionId(currentUser);
+    if (staffWikiCache.operatorByWorkspaceId?.has(workspaceId)) {
+      const hit = staffWikiCache.operatorByWorkspaceId.get(workspaceId);
+      if (hit?.unionId === unionId || hit?.userId === currentUser.id) return;
+    }
+    const list = await listWikiWorkspacesForOperator(unionId, { keywords: [] });
+    if (list.some(ws => ws.workspaceId === workspaceId)) {
+      if (!staffWikiCache.operatorByWorkspaceId) {
+        staffWikiCache.operatorByWorkspaceId = new Map();
       }
-      index.operatorByWorkspaceId.set(workspaceId, {
+      staffWikiCache.operatorByWorkspaceId.set(workspaceId, {
         unionId,
         userName: currentUser.name,
         userId: currentUser.id,
       });
       return;
     }
+  } catch {
+    // fall through
   }
 
-  throw new Error('该文档不在可见范围内。请在左侧选择「我的文档」或团队知识库后再添加');
+  throw new Error('该文档不在您的知识库可见范围内。请在左侧选择「我的文档」或本人有权限的团队知识库后再添加');
 }
 
 async function resolveWikiOperatorForNode(nodeId, workspaceId, currentUser) {
   if (workspaceId) {
-    try {
-      return await resolveWikiOperatorForWorkspace(workspaceId, currentUser);
-    } catch {
-      // try scan below
-    }
+    return resolveWikiOperatorForWorkspace(workspaceId, currentUser);
   }
-  try {
-    return await resolveOperatorUnionId(currentUser);
-  } catch {
-    // try scan
+  if (currentUser) {
+    return resolveOperatorUnionId(currentUser);
   }
-  const index = await refreshStaffWikiWorkspaceIndex();
-  if (workspaceId && index.operatorByWorkspaceId.has(workspaceId)) {
-    return index.operatorByWorkspaceId.get(workspaceId).unionId;
-  }
-  for (const [, op] of index.operatorByWorkspaceId) {
-    try {
-      const node = await getWikiNodeById(nodeId, op.unionId);
-      if (node) return op.unionId;
-    } catch {
-      // continue
-    }
-  }
-  throw new Error('无法访问该文档，请确认人员档案中有人对该知识库有权限');
+  throw new Error('无法访问该文档，请确认当前账号已绑定钉钉并有该知识库权限');
 }
 
 async function listWikiChildNodes(parentNodeId, operatorUnionId) {
@@ -1148,48 +1369,43 @@ async function resolveWikiNodeForAttach(body, currentUser) {
   }
 
   if (!docUrl) {
-    throw new Error('请从左侧选择「我的文档」或团队知识库，再选择具体文档');
+    throw new Error('请从左侧选择文档，或粘贴闪记 / 钉钉文档链接');
   }
   if (!isDingTalkDocUrl(docUrl)) {
-    throw new Error('链接格式不正确，请粘贴 alidocs.dingtalk.com 或 ding-doc.dingtalk.com 的文档链接');
+    throw new Error('链接格式不正确，请粘贴闪记（shanji.dingtalk.com）或钉钉文档（alidocs.dingtalk.com）链接');
   }
 
-  await ensureCurrentUserWorkspacesMerged(currentUser);
-  const index = await refreshStaffWikiWorkspaceIndex();
-  let node = null;
-  let resolvedOperatorUnionId = null;
   let lastError = null;
-  const tryOperators = [];
   try {
-    tryOperators.push(await resolveOperatorUnionId(currentUser));
+    const operatorUnionId = await resolveOperatorUnionId(currentUser);
+    const hit = await resolveWikiNodeByUrl(docUrl, operatorUnionId);
+    if (hit) {
+      if (String(hit.type || '').toUpperCase() === 'FOLDER') {
+        throw new Error('暂不支持添加文件夹，请选择具体文档');
+      }
+      const mapped = mapWikiNodeForClient(hit);
+      return { node: mapped, docUrl: mapped.url || docUrl };
+    }
   } catch (e) {
     lastError = e;
+    if (e && /文件夹/.test(e.message || '')) throw e;
   }
-  for (const [, op] of index.operatorByWorkspaceId) {
-    if (!tryOperators.includes(op.unionId)) tryOperators.push(op.unionId);
+
+  if (lastError && /未绑定钉钉/.test(lastError.message || '')) {
+    throw lastError;
   }
-  for (const operatorUnionId of tryOperators) {
-    try {
-      const hit = await resolveWikiNodeByUrl(docUrl, operatorUnionId);
-      if (hit) {
-        node = hit;
-        resolvedOperatorUnionId = operatorUnionId;
-        break;
-      }
-    } catch (e) {
-      lastError = e;
-    }
-  }
-  if (!node) {
-    throw lastError || new Error('无法解析该文档，请从左侧目录中选择具体文档');
-  }
-  if (String(node.type || '').toUpperCase() === 'FOLDER') {
-    throw new Error('暂不支持添加文件夹，请选择具体文档');
-  }
-  await assertWikiWorkspaceAccessible(node.workspaceId, currentUser, {
-    operatorUnionIdUsed: resolvedOperatorUnionId,
-  });
-  return { node: mapWikiNodeForClient(node), docUrl };
+
+  return {
+    node: {
+      nodeId: urlWikiNodeId(docUrl),
+      workspaceId: '',
+      name: guessDingTalkLinkName(docUrl, body?.name),
+      type: 'FILE',
+      url: docUrl,
+      category: isFlashNoteUrl(docUrl) ? 'FLASHNOTE' : 'LINK',
+    },
+    docUrl,
+  };
 }
 
 async function resolveOperatorUnionId(user) {
@@ -2087,6 +2303,8 @@ module.exports = {
   getUserIdByAuthCode,
   buildWorkAppJumpUrl,
   sendConversationMessage,
+  sendPersonPrivateChat,
+  sendRobotPrivateChat,
   sendWorkNotification,
   syncUsersFromDingTalk,
   replaceUsersFromDingTalk,
@@ -2095,6 +2313,7 @@ module.exports = {
   diagnoseDingTalkSync,
   normalizeDingTalkDocUrl,
   isDingTalkDocUrl,
+  isFlashNoteUrl,
   resolveOperatorUnionId,
   resolveWikiNodeByUrl,
   resolveWikiNodeForAttach,

@@ -377,19 +377,188 @@ function getArcvMemberCandidates() {
   return getArcvArchiveCandidates();
 }
 
-function renderArcvPersonSelect(fieldKey, currentValue, disabled) {
-  const candidates = getArcvArchiveCandidates();
-  const cur = String(currentValue || '').trim();
-  const inList = candidates.some(u => u.name === cur);
-  const syncR = fieldKey === 'roleR'
-    ? `state.form.roleR=this.value;state.form.assignee=this.value`
-    : `state.form.${fieldKey}=this.value`;
+/** 人员单选（可搜索）配置缓存，供局部刷新 */
+const _personSsConfig = Object.create(null);
+
+function personSsSearchKey(key) {
+  return `personSsSearch_${key}`;
+}
+
+function resolvePersonSsCandidates(opts) {
+  if (typeof opts.getCandidates === 'function') return opts.getCandidates() || [];
+  if (Array.isArray(opts.candidates)) return opts.candidates;
+  return getTaskAssigneeCandidates();
+}
+
+function getPersonSsCurrentValue(opts) {
+  const field = opts.formField;
+  if (field && state.form && state.form[field] != null) return String(state.form[field]);
+  return String(opts.value ?? '');
+}
+
+function personSsOptionValue(u, valueMode) {
+  return valueMode === 'id' ? String(u.id || '') : String(u.name || '');
+}
+
+function personSsOptionLabel(u, valueMode) {
+  if (valueMode === 'id') {
+    const tag = u.role === 'gm' ? '（总经理）' : '';
+    return `${u.name}${tag} - ${u.position || roleDisplayName(u.role)}`;
+  }
+  return formatUserOptionLabel(u);
+}
+
+function findPersonSsUser(candidates, value, valueMode) {
+  const v = String(value || '');
+  if (!v) return null;
+  if (valueMode === 'id') return candidates.find(u => String(u.id) === v) || null;
+  return candidates.find(u => u.name === v) || null;
+}
+
+/**
+ * 从人员档案选取单人（支持搜索过滤）。
+ * 使用原生 select：钉钉 WebView / 弹窗 overflow 下自定义下拉多次失败，原生控件最稳。
+ * opts: { key, formField, value, getCandidates|candidates, valueMode:'name'|'id',
+ *         allowEmpty, emptyLabel, placeholder, disabled, afterKey }
+ */
+function renderPersonSingleSelect(opts) {
+  const key = opts.key;
+  _personSsConfig[key] = opts;
+  const valueMode = opts.valueMode === 'id' ? 'id' : 'name';
+  const disabled = !!opts.disabled;
+  const allowEmpty = !!opts.allowEmpty;
+  const emptyLabel = opts.emptyLabel || '请选择';
+  const cur = getPersonSsCurrentValue(opts);
+  let allCandidates = [];
+  try {
+    allCandidates = resolvePersonSsCandidates(opts);
+  } catch (err) {
+    console.error('[person-ss] candidates', key, err);
+    allCandidates = [];
+  }
+  const searchQ = state.form?.[personSsSearchKey(key)] || '';
+  const candidates = filterCollabMsCandidates(allCandidates, searchQ);
+  const selectedUser = findPersonSsUser(allCandidates, cur, valueMode);
+  const orphan = !!(cur && !selectedUser);
+
+  const options = [];
+  if (allowEmpty) {
+    options.push(`<option value="" ${!cur ? 'selected' : ''}>${escapeHtml(emptyLabel)}</option>`);
+  } else if (!cur) {
+    options.push('<option value="" selected disabled>请选择人员</option>');
+  }
+  if (orphan) {
+    options.push(`<option value="${escapeHtml(cur)}" selected>${escapeHtml(cur)}（档案外）</option>`);
+  }
+  candidates.forEach(u => {
+    const ov = personSsOptionValue(u, valueMode);
+    const selected = ov === cur;
+    options.push(
+      `<option value="${escapeHtml(ov)}" ${selected ? 'selected' : ''}>${escapeHtml(personSsOptionLabel(u, valueMode))}</option>`
+    );
+  });
+  if (!candidates.length && !orphan) {
+    options.push('<option value="" disabled>无匹配人员</option>');
+  }
+
   return `
-    <select class="select" style="width:100%;" onchange="${syncR}" ${disabled ? 'disabled' : ''}>
-      <option value="">请选择</option>
-      ${cur && !inList ? `<option value="${escapeHtml(cur)}" selected>${escapeHtml(cur)}（档案外）</option>` : ''}
-      ${candidates.map(u => `<option value="${escapeHtml(u.name)}" ${u.name === cur ? 'selected' : ''}>${formatUserOptionLabel(u)}</option>`).join('')}
-    </select>`;
+    <div data-person-ss-host="${escapeHtml(key)}" class="person-ss-native">
+      <input class="input person-ss-filter" type="search" autocomplete="off"
+        placeholder="搜索姓名、部门后点下方选择"
+        value="${escapeHtml(searchQ)}"
+        ${disabled ? 'disabled' : ''}
+        oninput="setPersonSingleSearch(${JSON.stringify(key)}, this.value)"
+        onclick="event.stopPropagation()">
+      <select class="select person-ss-select" style="width:100%;margin-top:6px;"
+        ${disabled ? 'disabled' : ''}
+        onchange="selectPersonSingle(${JSON.stringify(key)}, this.value)">
+        ${options.join('')}
+      </select>
+    </div>`;
+}
+
+function teardownPersonSsPortal() {
+  const el = document.getElementById('personSsPortal');
+  if (el) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+  }
+}
+
+/** 兼容旧调用：原生 select 无需 portal */
+function syncPersonSsUi() {
+  teardownPersonSsPortal();
+  if (state.collabDropdownOpen && _personSsConfig[state.collabDropdownOpen]) {
+    state.collabDropdownOpen = null;
+  }
+}
+
+function setPersonSingleSearch(key, q) {
+  if (!state.form) state.form = {};
+  state.form[personSsSearchKey(key)] = q;
+  const el = document.activeElement;
+  const start = el && el.classList && el.classList.contains('person-ss-filter') ? el.selectionStart : null;
+  const end = el && el.classList && el.classList.contains('person-ss-filter') ? el.selectionEnd : null;
+  refreshPersonSingleSelect(key);
+  requestAnimationFrame(() => {
+    const next = document.querySelector(`[data-person-ss-host="${key}"] .person-ss-filter`);
+    if (!next) return;
+    next.focus();
+    if (typeof start === 'number') {
+      try { next.setSelectionRange(start, end ?? start); } catch (_) { /* ignore */ }
+    }
+  });
+}
+
+function runPersonSsAfter(afterKey, value) {
+  if (afterKey === 'syncRoleRAssignee') {
+    state.form.assignee = value;
+  } else if (afterKey === 'projectManager') {
+    state.form.teamMembers = sanitizeProjectTeamMembers(value, getProjectTeamMembersForm());
+    refreshProjectTeamMultiSelect();
+  }
+}
+
+function selectPersonSingle(key, value) {
+  const opts = _personSsConfig[key];
+  if (!opts) return;
+  if (!state.form) state.form = {};
+  state.form[opts.formField] = value;
+  state.form[personSsSearchKey(key)] = '';
+  runPersonSsAfter(opts.afterKey, value);
+  refreshPersonSingleSelect(key);
+}
+
+function refreshPersonSingleSelect(key) {
+  const host = document.querySelector(`[data-person-ss-host="${key}"]`);
+  const opts = _personSsConfig[key];
+  if (!host || !opts) {
+    render();
+    return;
+  }
+  const scrollPos = captureUiScrollPositions();
+  const tmp = document.createElement('div');
+  tmp.innerHTML = renderPersonSingleSelect(opts);
+  const next = tmp.firstElementChild;
+  if (next) host.replaceWith(next);
+  restoreUiScrollPositions(scrollPos);
+}
+
+function renderArcvPersonSelect(fieldKey, currentValue, disabled) {
+  if (state.form && state.form[fieldKey] == null && currentValue) {
+    state.form[fieldKey] = currentValue;
+  }
+  return renderPersonSingleSelect({
+    key: `arcv_${fieldKey}`,
+    formField: fieldKey,
+    value: currentValue || '',
+    getCandidates: getArcvArchiveCandidates,
+    allowEmpty: true,
+    emptyLabel: '请选择',
+    placeholder: '从人员档案选择',
+    disabled: !!disabled,
+    afterKey: fieldKey === 'roleR' ? 'syncRoleRAssignee' : '',
+  });
 }
 
 function parseRoleCNames(raw) {
@@ -410,8 +579,13 @@ function syncRoleCFormFromNames() {
 }
 
 function toggleRoleCDropdown() {
-  if (state.collabDropdownOpen === 'roleC') state.collabDropdownOpen = null;
-  else state.collabDropdownOpen = 'roleC';
+  if (state.collabDropdownOpen === 'roleC') {
+    state.collabDropdownOpen = null;
+    if (state.form) state.form.roleCSearch = '';
+  } else {
+    state.collabDropdownOpen = 'roleC';
+    if (state.form) state.form.roleCSearch = '';
+  }
   refreshRoleCMultiSelect();
 }
 
@@ -434,7 +608,11 @@ function removeRoleCName(name) {
 
 function setRoleCSearch(q) {
   state.form.roleCSearch = q;
+  const el = document.activeElement;
+  const start = el && el.classList && el.classList.contains('collab-ms-search') ? el.selectionStart : null;
+  const end = el && el.classList && el.classList.contains('collab-ms-search') ? el.selectionEnd : null;
   refreshRoleCMultiSelect();
+  focusCollabMsSearch('[data-rolec-ms-host] .collab-ms-search, .collab-ms-panel .collab-ms-search', start, end);
 }
 
 function refreshRoleCMultiSelect() {
@@ -478,9 +656,11 @@ function renderRoleCMultiSelect(selectedNames, disabled) {
       </button>
       ${isOpen ? `
         <div class="collab-ms-panel" onclick="event.stopPropagation()">
-          <input class="input" style="width:100%;margin-bottom:8px;font-size:12px;" placeholder="搜索姓名、部门..."
-            value="${escapeHtml(state.form.roleCSearch || '')}"
-            oninput="setRoleCSearch(this.value)" onclick="event.stopPropagation()">
+          <div class="collab-ms-search-wrap">
+            <input class="input collab-ms-search" type="search" autocomplete="off" placeholder="搜索姓名、部门..."
+              value="${escapeHtml(state.form.roleCSearch || '')}"
+              oninput="setRoleCSearch(this.value)" onclick="event.stopPropagation()">
+          </div>
           ${orphan.map(name => `
             <label class="collab-ms-option selected">
               <input type="checkbox" checked onchange='toggleRoleCName(${JSON.stringify(name)})'>
@@ -510,22 +690,9 @@ function renderRoleCMultiSelect(selectedNames, disabled) {
   `;
 }
 
-/** 项目负责人：信息中心全员 + 本部门全员（含执行人员）+ 各部门经理/总经理/管理员 */
+/** 项目负责人：全量在职人员档案（与任务负责人一致，支持搜索选取） */
 function getProjectManagerCandidates() {
-  const pool = businessUsers();
-  if (currentUser.role === 'staff') {
-    return sortUsersForSelect(uniqueUsersById(
-      pool.filter(u => u.id === currentUser.id || u.dept === INFO_CENTER_DEPT)
-    ));
-  }
-  return sortUsersForSelect(uniqueUsersById(
-    pool.filter(u =>
-      u.dept === INFO_CENTER_DEPT ||
-      u.dept === currentUser.dept ||
-      u.role === 'manager' ||
-      isFullAccess(u.role)
-    )
-  ));
+  return getTaskAssigneeCandidates();
 }
 
 function sanitizeProjectTeamMembers(manager, teamMembers) {
@@ -541,11 +708,48 @@ function getProjectTeamCandidates(managerName) {
   return getTaskAssigneeCandidates().filter(u => u.name !== managerName);
 }
 
+function filterCollabMsCandidates(candidates, query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return candidates || [];
+  return (candidates || []).filter(u =>
+    String(u.name || '').toLowerCase().includes(q) ||
+    String(u.dept || '').toLowerCase().includes(q) ||
+    String(u.position || '').toLowerCase().includes(q) ||
+    String(roleDisplayName(u.role) || '').toLowerCase().includes(q)
+  );
+}
+
+function focusCollabMsSearch(selector, caretStart, caretEnd) {
+  requestAnimationFrame(() => {
+    const next = document.querySelector(selector);
+    if (!next) return;
+    next.focus();
+    if (typeof caretStart === 'number') {
+      try { next.setSelectionRange(caretStart, caretEnd ?? caretStart); } catch (_) { /* ignore */ }
+    }
+  });
+}
+
 function toggleProjectTeamDropdown() {
   const formKey = 'projectTeamMembers';
-  if (state.collabDropdownOpen === formKey) state.collabDropdownOpen = null;
-  else state.collabDropdownOpen = formKey;
+  if (state.collabDropdownOpen === formKey) {
+    state.collabDropdownOpen = null;
+    if (state.form) state.form.teamMemberSearch = '';
+  } else {
+    state.collabDropdownOpen = formKey;
+    if (state.form) state.form.teamMemberSearch = '';
+  }
   refreshProjectTeamMultiSelect();
+}
+
+function setProjectTeamSearch(q) {
+  if (!state.form) state.form = {};
+  state.form.teamMemberSearch = q;
+  const el = document.activeElement;
+  const start = el && el.classList && el.classList.contains('collab-ms-search') ? el.selectionStart : null;
+  const end = el && el.classList && el.classList.contains('collab-ms-search') ? el.selectionEnd : null;
+  refreshProjectTeamMultiSelect();
+  focusCollabMsSearch('[data-project-team-ms-host] .collab-ms-search', start, end);
 }
 
 function toggleProjectTeamMember(name) {
@@ -582,13 +786,15 @@ function renderProjectTeamMultiSelect(selectedNames, managerName, disabled) {
   const selected = selectedNames || [];
   const selectedSet = new Set(selected);
   const isOpen = state.collabDropdownOpen === formKey;
-  const candidates = getProjectTeamCandidates(managerName || currentUser.name);
+  const allCandidates = getProjectTeamCandidates(managerName || currentUser.name);
+  const searchQ = state.form?.teamMemberSearch || '';
+  const candidates = filterCollabMsCandidates(allCandidates, searchQ);
 
   const triggerLabel = selected.length === 0
     ? '请选择（可多选）'
     : (selected.length <= 2 ? selected.join('、') : `已选 ${selected.length} 人`);
 
-  if (!candidates.length) {
+  if (!allCandidates.length) {
     return '<div style="padding:10px;color:#9CA3AF;font-size:12px;border:1px solid var(--border);border-radius:8px;">无可选人员</div>';
   }
 
@@ -602,13 +808,19 @@ function renderProjectTeamMultiSelect(selectedNames, managerName, disabled) {
       </button>
       ${isOpen ? `
         <div class="collab-ms-panel" onclick="event.stopPropagation()">
-          ${candidates.map(u => `
+          <div class="collab-ms-search-wrap">
+            <input class="input collab-ms-search" type="search" autocomplete="off"
+              placeholder="搜索姓名、部门..."
+              value="${escapeHtml(searchQ)}"
+              oninput="setProjectTeamSearch(this.value)" onclick="event.stopPropagation()">
+          </div>
+          ${candidates.length ? candidates.map(u => `
             <label class="collab-ms-option${selectedSet.has(u.name) ? ' selected' : ''}">
               <input type="checkbox" ${selectedSet.has(u.name) ? 'checked' : ''}
                 onchange='toggleProjectTeamMember(${JSON.stringify(u.name)})'>
               <span>${formatUserOptionLabel(u)}</span>
             </label>
-          `).join('')}
+          `).join('') : '<div style="padding:10px;color:#9CA3AF;font-size:12px;">无匹配人员</div>'}
         </div>
       ` : ''}
       ${selected.length ? `
@@ -715,8 +927,9 @@ function normalizeMilestoneFlags() {
 
 /**
  * 里程碑状态由下属任务推导：
- * - 任一进行中 → 进行中
  * - 全部完成 → 已完成
+ * - 任一进行中 → 进行中
+ * - 有已完成/进度/实际开始（已推进）→ 进行中
  * - 否则有暂停 → 已暂停
  * - 否则 → 待开始
  */
@@ -725,6 +938,14 @@ function deriveMilestoneStatusFromTasks(milestoneId) {
   if (!descendants.length) return null;
   if (descendants.every(t => t.status === 'done')) return 'done';
   if (descendants.some(t => t.status === 'doing')) return 'doing';
+  // 已有完成任务或其它推进痕迹，不应再显示「待开始」
+  if (descendants.some(t => t.status === 'done')) return 'doing';
+  const milestone = tasks.find(t => t.id === milestoneId);
+  if (milestone) {
+    const progress = Number(milestone.progress);
+    if ((Number.isFinite(progress) && progress > 0) || milestone.actualStartDate) return 'doing';
+    if (typeof calcProgress === 'function' && calcProgress(milestoneId) > 0) return 'doing';
+  }
   if (descendants.some(t => t.status === 'paused')) return 'paused';
   return 'todo';
 }
@@ -885,16 +1106,44 @@ function initTaskFormCollaborators(task) {
 }
 
 function toggleCollabDropdown(formKey) {
-  if (state.collabDropdownOpen === formKey) state.collabDropdownOpen = null;
-  else state.collabDropdownOpen = formKey;
+  if (state.collabDropdownOpen === formKey) {
+    state.collabDropdownOpen = null;
+    if (state.form) state.form.collabMsSearch = '';
+  } else {
+    state.collabDropdownOpen = formKey;
+    if (state.form) state.form.collabMsSearch = '';
+  }
   refreshCollaboratorMultiSelects();
+}
+
+function setCollabMsSearch(q) {
+  if (!state.form) state.form = {};
+  state.form.collabMsSearch = q;
+  const el = document.activeElement;
+  const start = el && el.classList && el.classList.contains('collab-ms-search') ? el.selectionStart : null;
+  const end = el && el.classList && el.classList.contains('collab-ms-search') ? el.selectionEnd : null;
+  refreshCollaboratorMultiSelects();
+  const openKey = state.collabDropdownOpen;
+  const hostSel = openKey === 'informCollaborators'
+    ? '[data-collab-ms-host="inform"] .collab-ms-search'
+    : '[data-collab-ms-host="assist"] .collab-ms-search';
+  focusCollabMsSearch(hostSel, start, end);
 }
 
 function closeCollabDropdown() {
   if (!state.collabDropdownOpen) return;
-  const wasRoleC = state.collabDropdownOpen === 'roleC';
+  const was = state.collabDropdownOpen;
   state.collabDropdownOpen = null;
-  if (wasRoleC) refreshRoleCMultiSelect();
+  if (state.form) {
+    state.form.roleCSearch = '';
+    state.form.teamMemberSearch = '';
+    state.form.collabMsSearch = '';
+    if (_personSsConfig[was]) state.form[personSsSearchKey(was)] = '';
+  }
+  teardownPersonSsPortal();
+  if (was === 'roleC') refreshRoleCMultiSelect();
+  else if (was === 'projectTeamMembers') refreshProjectTeamMultiSelect();
+  else if (_personSsConfig[was]) refreshPersonSingleSelect(was);
   else refreshCollaboratorMultiSelects();
 }
 
@@ -956,14 +1205,16 @@ function renderCollaboratorMultiSelect(type, selectedNames, assigneeName, exclud
   const selectedSet = new Set(selected);
   const exclude = new Set(excludeNames || []);
   const isOpen = state.collabDropdownOpen === formKey;
-  const candidates = getTaskCollaboratorCandidates()
+  const allCandidates = getTaskCollaboratorCandidates()
     .filter(u => u.name !== assigneeName && !exclude.has(u.name));
+  const searchQ = isOpen ? (state.form?.collabMsSearch || '') : '';
+  const candidates = filterCollabMsCandidates(allCandidates, searchQ);
 
   const triggerLabel = selected.length === 0
     ? '请选择（可多选）'
     : (selected.length <= 2 ? selected.join('、') : `已选 ${selected.length} 人`);
 
-  if (!candidates.length) {
+  if (!allCandidates.length) {
     return '<div style="padding:10px;color:#9CA3AF;font-size:12px;border:1px solid var(--border);border-radius:8px;">无可选人员</div>';
   }
 
@@ -977,13 +1228,19 @@ function renderCollaboratorMultiSelect(type, selectedNames, assigneeName, exclud
       </button>
       ${isOpen ? `
         <div class="collab-ms-panel" onclick="event.stopPropagation()">
-          ${candidates.map(u => `
+          <div class="collab-ms-search-wrap">
+            <input class="input collab-ms-search" type="search" autocomplete="off"
+              placeholder="搜索姓名、部门..."
+              value="${escapeHtml(searchQ)}"
+              oninput="setCollabMsSearch(this.value)" onclick="event.stopPropagation()">
+          </div>
+          ${candidates.length ? candidates.map(u => `
             <label class="collab-ms-option${selectedSet.has(u.name) ? ' selected' : ''}">
               <input type="checkbox" ${selectedSet.has(u.name) ? 'checked' : ''}
                 onchange='toggleFormCollaborator("${formKey}", ${JSON.stringify(u.name)})'>
               <span>${formatUserOptionLabel(u)}</span>
             </label>
-          `).join('')}
+          `).join('') : '<div style="padding:10px;color:#9CA3AF;font-size:12px;">无匹配人员</div>'}
         </div>
       ` : ''}
       ${selected.length ? `

@@ -1115,10 +1115,12 @@ const LiveRefresh = {
     return this.tasksFingerprint() + '||' + this.projectsFingerprint() + '||' + this.changeLogsFingerprint();
   },
 
-  /** 允许在任务详情只读查看时拉取；编辑弹窗中跳过以免冲掉表单 */
+  /** 允许在任务详情只读查看时拉取；编辑弹窗/计划书编辑/选人时跳过以免冲掉表单 */
   canPullTasks() {
     const modal = state.showModal;
     if (state.taskEditInline || state.inlineDeliveryEditId) return false;
+    if (state.editingProjectPlan || state.editingProjectFocus) return false;
+    if (state.collabDropdownOpen) return false;
     if (modal && modal !== 'taskDetail') return false;
     if (DataService._syncing) return false;
     if (DataService._saveTimer) return false;

@@ -580,7 +580,7 @@ function renderProjectDeliveryBoard(project, opts) {
     </button>
   `;
 
-  const activeId = getWorkMilestoneTabId(project);
+  const activeId = getWorkMilestoneTabId(project, opts);
   const cards = [];
   const editingId = state.inlineDeliveryEditId;
   const containsEdit = (milestone, descendants) => {
@@ -898,17 +898,33 @@ function saveTaskDeliveryFields(taskId) {
 
 function setWorkMilestoneTab(milestoneId) {
   state.detailMilestoneId = milestoneId || '';
+  const pid = (state.form && state.form.projectId) || state.currentProjectId;
+  const project = projects.find(p => p.id === pid);
+  if (project && state.detailMilestoneId && state.detailMilestoneId !== '__unassigned__') {
+    const m = getProjectMilestones(project).find(x => x.id === state.detailMilestoneId);
+    if (m && typeof resolveStageForMilestone === 'function') {
+      const stage = resolveStageForMilestone(project, m);
+      state.detailPhaseKey = stage
+        ? stage.key
+        : String(m.phaseKey || m.milestoneSeq || m.id).trim();
+    }
+  }
   render();
 }
 
-function getWorkMilestoneTabId(project) {
+function getWorkMilestoneTabId(project, opts) {
   if (!project) return '';
   const milestones = getProjectMilestones(project);
   const workTasks = getProjectWorkTasksFlat(project);
   const unassigned = workTasks.filter(t => !getOwningMilestone(t));
-  const id = state.detailMilestoneId || '';
+  const forced = opts && Object.prototype.hasOwnProperty.call(opts, 'milestoneId')
+    ? String(opts.milestoneId || '')
+    : null;
+  const id = forced !== null ? forced : String(state.detailMilestoneId || '');
   if (id === '__unassigned__' && unassigned.length) return id;
   if (id && milestones.some(m => m.id === id)) return id;
+  // 显式传入空 id（阶段无对应里程碑）时不回落到第一个，避免切换阶段任务不变
+  if (forced !== null) return id === '__unassigned__' ? '' : id;
   if (milestones.length) return milestones[0].id;
   if (unassigned.length) return '__unassigned__';
   return '';
@@ -1092,7 +1108,7 @@ function renderProjectMilestoneTabsSection(project, opts) {
   const hideTabs = !!(opts && opts.hideTabs);
   const milestones = getProjectMilestones(project);
   const canManage = canManageProject(project) && !isProjectArchived(project);
-  const activeId = getWorkMilestoneTabId(project);
+  const activeId = getWorkMilestoneTabId(project, opts);
   const workTasks = getProjectWorkTasksFlat(project);
   const milestone = activeId && activeId !== '__unassigned__'
     ? milestones.find(m => m.id === activeId)
@@ -1106,6 +1122,19 @@ function renderProjectMilestoneTabsSection(project, opts) {
           icon: 'fa-flag',
           title: '暂无里程碑',
           hint: canManage ? '点击左侧「+」新增里程碑' : '负责人可添加里程碑',
+        })}
+      </section>
+    `;
+  }
+
+  // 阶段视图指定了里程碑 id 但找不到时，展示空态，不偷用其它里程碑的任务
+  if (opts && Object.prototype.hasOwnProperty.call(opts, 'milestoneId') && opts.milestoneId && !milestone && opts.milestoneId !== '__unassigned__') {
+    return `
+      <section class="ms-work-section">
+        ${renderEmptyState({
+          icon: 'fa-flag',
+          title: '未找到对应里程碑',
+          hint: '请从左侧重新选择里程碑',
         })}
       </section>
     `;
@@ -1137,9 +1166,27 @@ function renderProjectMilestoneTabsSection(project, opts) {
             <span class="status-tag status-${displayStatus}" style="font-size:10px;">${escapeHtml(st.label)}</span>
           </div>
           <div class="ms-work-panel-actions">
+            ${canEditTask(milestone) ? `
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openTaskDeliveryEdit('${milestone.id}')"><i class="fas fa-clipboard-check"></i> 填写</button>
+            ` : ''}
             ${canManage ? `
+              <button type="button" class="btn btn-ghost btn-sm" onclick="editTask('${milestone.id}')"><i class="fas fa-edit"></i> 编辑</button>
               <button type="button" class="btn btn-primary btn-sm" onclick="showNewSubTaskModal('${milestone.id}')"><i class="fas fa-plus"></i> 添加任务</button>
             ` : ''}
+          </div>
+        </div>
+        <div class="ms-work-panel-meta ms-work-panel-meta--slim">
+          <span>排期 ${escapeHtml(start)} ~ ${escapeHtml(due)}</span>
+          <span>进度 ${progress}%</span>
+          <span>任务 ${taskList.length}</span>
+        </div>
+        <div class="ms-work-panel-seven ms-work-panel-seven--slim">
+          <div class="seven-grid-chips is-inline">
+            ${health.cells.map(cell => renderSevenGridChip(cell, {
+              mini: true,
+              onclick: `jumpToMilestoneSevenGrid('${milestone.id}','${cell.key}')`,
+            })).join('')}
+            <span class="seven-grid-inline-tip">本里程碑 ${health.filled}/${health.total}</span>
           </div>
         </div>
       `;
@@ -1186,6 +1233,23 @@ function renderProjectMilestoneTabsSection(project, opts) {
         ${milestone.status !== 'done' ? `<div class="ms-work-panel-hint"><i class="fas fa-info-circle"></i>${escapeHtml(hint)}</div>` : ''}
       `;
     }
+  } else if (activeId === '__unassigned__') {
+    taskList = workTasks.filter(t => !getOwningMilestone(t));
+    panelHead = `
+      <div class="ms-work-panel-head ms-work-panel-head--slim">
+        <div class="ms-work-panel-title"><strong>未归属任务</strong></div>
+      </div>
+    `;
+  } else if (opts && Object.prototype.hasOwnProperty.call(opts, 'milestoneId')) {
+    return `
+      <section class="ms-work-section">
+        ${renderEmptyState({
+          icon: 'fa-check-square',
+          title: '本阶段暂无任务',
+          hint: canManage ? '可先添加里程碑，再在里程碑下拆解任务' : '暂无任务',
+        })}
+      </section>
+    `;
   } else {
     taskList = workTasks.filter(t => !getOwningMilestone(t));
     panelHead = `

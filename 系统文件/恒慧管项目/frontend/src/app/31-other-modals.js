@@ -143,9 +143,14 @@ function renderTaskEditModal() {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
               <div class="form-group">
                 <label class="form-label">负责人</label>
-                <select class="select" style="width:100%;" onchange="state.form.assignee=this.value" ${!canEdit ? 'disabled' : ''}>
-                  ${getTaskAssigneeCandidates().map(u => `<option value="${u.name}" ${task.assignee === u.name ? 'selected' : ''}>${formatUserOptionLabel(u)}</option>`).join('')}
-                </select>
+                ${renderPersonSingleSelect({
+                  key: 'taskAssignee',
+                  formField: 'assignee',
+                  value: task.assignee || state.form.assignee || currentUser.name,
+                  getCandidates: getTaskAssigneeCandidates,
+                  placeholder: '从人员档案选择',
+                  disabled: !canEdit,
+                })}
               </div>
               <div class="form-group">
                 <label class="form-label">优先级</label>
@@ -335,10 +340,15 @@ function renderProjectEditModal() {
               </div>
               <div class="form-group">
                 <label class="form-label">项目负责人</label>
-                <select class="select" style="width:100%;" onchange="state.form.manager=this.value;state.form.teamMembers=sanitizeProjectTeamMembers(this.value,getProjectTeamMembersForm());refreshProjectTeamMultiSelect();">
-                  ${getProjectManagerCandidates().map(u => `<option value="${u.name}" ${project.manager === u.name ? 'selected' : ''}>${formatUserOptionLabel(u)}</option>`).join('')}
-                </select>
-                <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">可选本部门全员、信息中心全员，或各部门经理</div>
+                ${renderPersonSingleSelect({
+                  key: 'projectEditManager',
+                  formField: 'manager',
+                  value: state.form.manager || project.manager || '',
+                  getCandidates: getProjectManagerCandidates,
+                  placeholder: '从人员档案选择',
+                  afterKey: 'projectManager',
+                })}
+                <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">从人员档案搜索选择</div>
               </div>
             </div>
           </div>
@@ -389,7 +399,11 @@ function editProject(projectId) {
     alert('仅项目负责人或创建人可编辑');
     return;
   }
-  state.form = { projectId: project.id };
+  state.form = {
+    projectId: project.id,
+    manager: project.manager || '',
+    teamMembers: [...(project.teamMembers || [])],
+  };
   state.page = 'projectDetail';
   state.projectDetailTab = 'overview';
   state.editingProjectPlan = true;
@@ -660,10 +674,15 @@ function renderProjectCreateModal() {
             </div>
             <div class="form-group">
               <label class="form-label">项目负责人</label>
-              <select class="select" style="width:100%;" onchange="state.form.manager=this.value;state.form.teamMembers=sanitizeProjectTeamMembers(this.value,getProjectTeamMembersForm());refreshProjectTeamMultiSelect();">
-                ${getProjectManagerCandidates().map(u => `<option value="${u.name}" ${project.manager === u.name ? 'selected' : ''}>${formatUserOptionLabel(u)}</option>`).join('')}
-              </select>
-              <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">可选本部门全员、信息中心全员，或各部门经理</div>
+              ${renderPersonSingleSelect({
+                key: 'projectCreateManager',
+                formField: 'manager',
+                value: state.form.manager || project.manager || '',
+                getCandidates: getProjectManagerCandidates,
+                placeholder: '从人员档案选择',
+                afterKey: 'projectManager',
+              })}
+              <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">从人员档案搜索选择</div>
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -747,14 +766,16 @@ function renderStaffEditModal() {
           ${sectionTitle('汇报关系')}
           <div class="form-group">
             <label class="form-label">上级领导</label>
-            <select class="select" style="width:100%;" onchange="state.form.leaderId=this.value">
-              <option value="">无（部门负责人）</option>
-              ${getLeaderCandidatesForStaff({ ...user, id: user.id || state.form.userId }).map(u => {
-                const selected = (state.form.leaderId || user.leaderId) === u.id;
-                const tag = u.role === 'gm' ? '（总经理）' : '';
-                return `<option value="${u.id}" ${selected ? 'selected' : ''}>${escapeHtml(u.name)}${tag} - ${escapeHtml(u.position || roleDisplayName(u.role))}</option>`;
-              }).join('')}
-            </select>
+            ${renderPersonSingleSelect({
+              key: 'staffLeader',
+              formField: 'leaderId',
+              value: state.form.leaderId || user.leaderId || '',
+              valueMode: 'id',
+              getCandidates: () => getLeaderCandidatesForStaff({ ...user, id: user.id || state.form.userId }),
+              allowEmpty: true,
+              emptyLabel: '无（部门负责人）',
+              placeholder: '从人员档案选择上级',
+            })}
           </div>
           ${isEdit && isFullAccess(currentUser.role) ? `
           <div class="form-group">
@@ -880,7 +901,7 @@ function renderScopedKeyIssueModal() {
           <button type="button" class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
         </div>
         <div class="modal-body" style="display:grid;gap:14px;">
-          <p style="font-size:13px;color:#6B7280;margin:0;">绑定人员：<strong>${escapeHtml(form.scopedKeyUserName || '')}</strong>。将吊销该人员已有有效 Key。</p>
+          <p style="font-size:13px;color:#6B7280;margin:0;">绑定人员：<strong>${escapeHtml(form.scopedKeyUserName || '')}</strong>。将吊销该人员已有有效 Key。${isSend ? '将按对方 userid 发送钉钉工作通知（无需选会话）。' : ''}</p>
           <div>
             <label class="form-label">能力</label>
             <div style="display:flex;gap:16px;font-size:13px;">
@@ -952,12 +973,16 @@ async function confirmScopedKeyIssue() {
       scopedKeyGuide: payload.guide || {},
       scopedKeyUserName: form.scopedKeyUserName,
       scopedKeyUserId: userId,
-      scopedKeySent: isSend,
+      scopedKeySent: isSend && payload.sent !== false,
+      scopedKeySendWarning: payload.sendWarning || '',
     };
     state.showModal = 'scopedKeyResult';
     state.scopedKeyStatusLoaded = false;
     await loadScopedKeyStatus(true);
     render();
+    if (isSend && payload.sendWarning) {
+      alert(`Key 已生成，但工作通知未发出：\n${payload.sendWarning}\n\n请复制明文后手动发给对方。`);
+    }
   } catch (e) {
     alert(e.message || (isSend ? '发送失败' : '签发失败'));
   }
@@ -1034,8 +1059,9 @@ function renderScopedKeyResultModal() {
           <button type="button" class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
         </div>
         <div class="modal-body">
-          <p style="font-size:13px;color:#6B7280;margin-bottom:12px;">绑定人员：<strong>${escapeHtml(name)}</strong>。明文仅此一次，请复制或确认对方已收到钉钉。</p>
-          ${sent ? '<p style="font-size:12px;color:#047857;margin-bottom:12px;"><i class="fas fa-check-circle"></i> 已通过钉钉/站内信发送说明文档链接、Key 与接口地址。</p>' : ''}
+          <p style="font-size:13px;color:#6B7280;margin-bottom:12px;">绑定人员：<strong>${escapeHtml(name)}</strong>。明文仅此一次，请复制或确认对方已收到。</p>
+          ${sent ? '<p style="font-size:12px;color:#047857;margin-bottom:12px;"><i class="fas fa-check-circle"></i> 已通过钉钉工作通知发送说明文档、Key 与接口地址。</p>' : ''}
+          ${state.form?.scopedKeySendWarning ? `<p style="font-size:12px;color:#B45309;margin-bottom:12px;"><i class="fas fa-exclamation-triangle"></i> 工作通知未发出：${escapeHtml(state.form.scopedKeySendWarning)}</p>` : ''}
           <div style="background:var(--bg-muted);border:1px solid var(--border);border-radius:8px;padding:12px;word-break:break-all;font-family:monospace;font-size:12px;">${escapeHtml(secret)}</div>
           <div style="margin-top:12px;font-size:12px;color:#6B7280;line-height:1.6;">
             <div>服务地址：${escapeHtml(guide.baseUrl || '-')}</div>
@@ -1167,10 +1193,18 @@ function renderTransferModal() {
         <div class="modal-body">
           <div class="form-group">
             <label class="form-label">转办给 <span class="form-required">*</span></label>
-            <select class="select" style="width:100%;" onchange="state.form.transferTo=this.value">
-              <option value="">请选择人员</option>
-              ${activeUsers().filter(u => !isContactProfile(u) && u.name !== tasks.find(t => t.id === state.form.taskId)?.assignee).map(u => `<option value="${u.name}">${u.name} (${u.dept})</option>`).join('')}
-            </select>
+            ${renderPersonSingleSelect({
+              key: 'transferTo',
+              formField: 'transferTo',
+              value: state.form.transferTo || '',
+              getCandidates: () => {
+                const assignee = tasks.find(t => t.id === state.form.taskId)?.assignee;
+                return getTaskAssigneeCandidates().filter(u => u.name !== assignee);
+              },
+              allowEmpty: true,
+              emptyLabel: '请选择人员',
+              placeholder: '从人员档案选择',
+            })}
           </div>
           <div class="form-group">
             <label class="form-label">转办原因 <span class="form-required">*</span></label>

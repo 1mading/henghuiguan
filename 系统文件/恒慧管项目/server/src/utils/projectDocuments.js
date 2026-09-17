@@ -7,6 +7,7 @@ function taskAttachmentAlreadySynced(project, item) {
   return (project.documents || []).some(doc =>
     (item.fileId && doc.fileId === item.fileId) ||
     (item.nodeId && doc.source === 'dingtalk_wiki' && doc.nodeId === item.nodeId) ||
+    (item.url && doc.source === 'dingtalk_wiki' && doc.url === item.url) ||
     (item.id && doc.syncedFromAttachmentId === item.id)
   );
 }
@@ -28,6 +29,7 @@ function documentMergeKey(doc) {
   if (!doc) return '';
   if (doc.fileId) return `file:${doc.fileId}`;
   if (doc.source === 'dingtalk_wiki' && doc.nodeId) return `wiki:${doc.nodeId}`;
+  if (doc.source === 'dingtalk_wiki' && doc.url) return `wikiurl:${doc.url}`;
   if (doc.syncedFromAttachmentId) return `sync:${doc.syncedFromAttachmentId}`;
   return doc.id ? `id:${doc.id}` : '';
 }

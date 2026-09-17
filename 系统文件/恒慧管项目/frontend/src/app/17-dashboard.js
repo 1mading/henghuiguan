@@ -154,21 +154,16 @@ function shouldHideWorkbenchTodoUnderUnstartedFirstLevel(task) {
   return (firstLevel.status || 'todo') === 'todo';
 }
 
-/** 项目阶段里程碑（根级 isMilestone），按标题/创建时间排序 */
+/** 项目阶段里程碑：与详情轨同源（getProjectMilestones，按 milestoneSeq） */
 function getOrderedProjectMilestones(project) {
+  if (typeof getProjectMilestones === 'function') return getProjectMilestones(project);
   if (!project) return [];
   const list = tasks.filter(t =>
     t.projectId === project.id &&
     t.status !== 'abolished' &&
     isMilestoneTask(t)
   );
-  const roots = getProjectRootTasks(list).filter(isMilestoneTask);
-  return roots.slice().sort((a, b) => {
-    const ta = String(a.title || '');
-    const tb = String(b.title || '');
-    if (ta !== tb) return ta.localeCompare(tb, 'zh');
-    return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
-  });
+  return getProjectRootTasks(list).filter(isMilestoneTask);
 }
 
 /** 当前（首个未完成）与下一个阶段里程碑；当前尚未开始时不展示下一个 */

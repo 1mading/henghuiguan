@@ -75,7 +75,14 @@ function renderProjectPlanPanel(project, canManage) {
     <div class="project-plan-grid">
       <div class="form-group" style="margin:0;" id="plan-anchor-manager">
         <label class="form-label">负责人</label>
-        <input class="input" id="projectPlanManager" style="width:100%;" value="${escapeHtml(project.manager || '')}" placeholder="项目负责人">
+        ${renderPersonSingleSelect({
+          key: 'projectPlanManager',
+          formField: 'manager',
+          value: state.form.manager || project.manager || '',
+          getCandidates: getProjectManagerCandidates,
+          placeholder: '从人员档案选择',
+          afterKey: 'projectManager',
+        })}
       </div>
       <div class="form-group" style="margin:0;">
         <label class="form-label">所属部门</label>
@@ -84,7 +91,7 @@ function renderProjectPlanPanel(project, canManage) {
     </div>
     <div class="form-group" style="margin:0;">
       <label class="form-label">项目成员</label>
-      <div data-project-team-ms-host>${renderProjectTeamMultiSelect(state.form.teamMembers || project.teamMembers || [], project.manager || currentUser.name, false)}</div>
+      <div data-project-team-ms-host>${renderProjectTeamMultiSelect(state.form.teamMembers || project.teamMembers || [], state.form.manager || project.manager || currentUser.name, false)}</div>
     </div>
     <div class="form-group" style="margin:0;">
       <label class="form-label">项目目标</label>
@@ -104,10 +111,16 @@ function renderProjectPlanPanel(project, canManage) {
         <textarea class="project-focus-textarea" id="projectPlanOutOfScope" placeholder="明确本期不做（防范围蔓延，写成可引用的句子）">${escapeHtml(project.outOfScope || '')}</textarea>
       </div>
     </div>
-    <div class="form-group" style="margin:0;" id="plan-anchor-endDate">
-      <label class="form-label">最终完成时间</label>
-      <input class="input" type="date" id="projectPlanEndDate" style="width:100%;" value="${escapeHtml(project.endDate || '')}">
-      ${project.originalEndDate ? `<div style="font-size:12px;color:#9CA3AF;margin-top:4px;">原定：${escapeHtml(project.originalEndDate)}</div>` : ''}
+    <div class="project-plan-grid">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">开始日期</label>
+        <input class="input" type="date" id="projectPlanStartDate" style="width:100%;" value="${escapeHtml(project.startDate || '')}">
+      </div>
+      <div class="form-group" style="margin:0;" id="plan-anchor-endDate">
+        <label class="form-label">最终完成时间</label>
+        <input class="input" type="date" id="projectPlanEndDate" style="width:100%;" value="${escapeHtml(project.endDate || '')}">
+        ${project.originalEndDate ? `<div style="font-size:12px;color:#9CA3AF;margin-top:4px;">原定：${escapeHtml(project.originalEndDate)}</div>` : ''}
+      </div>
     </div>
     <div class="form-group" style="margin:0;">
       <label class="form-label">变更原因（改最终完成日时建议填写）</label>
@@ -125,6 +138,7 @@ function renderProjectPlanPanel(project, canManage) {
       ${item('范围（做什么）', project.scope)}
       ${item('不做范围', project.outOfScope)}
       ${item('当前状态', `${pst.label}${project.currentPhase ? ' · ' + project.currentPhase : ''}`)}
+      ${item('开始日期', project.startDate || '')}
       ${item('最终完成时间', project.endDate || '')}
       ${project.originalEndDate ? item('原定最终完成', project.originalEndDate) : ''}
       ${project.changeReason ? item('变更原因', project.changeReason, true) : ''}
@@ -160,14 +174,18 @@ function renderProjectPlanPanel(project, canManage) {
 }
 
 function startEditProjectPlan() {
-  const project = projects.find(p => p.id === state.form?.projectId);
-  if (project) {
-    state.form = {
-      ...(state.form || {}),
-      projectId: project.id,
-      teamMembers: [...(project.teamMembers || [])],
-    };
+  const projectId = state.form?.projectId || state.currentProjectId || '';
+  const project = projects.find(p => p.id === projectId);
+  if (!project || !canManageProject(project) || isProjectArchived(project)) {
+    alert('仅项目负责人或创建人可编辑');
+    return;
   }
+  state.form = {
+    ...(state.form || {}),
+    projectId: project.id,
+    manager: project.manager || '',
+    teamMembers: [...(project.teamMembers || [])],
+  };
   state.projectDetailTab = 'overview';
   state.editingProjectPlan = true;
   state.editingProjectFocus = false;
@@ -196,7 +214,7 @@ function saveProjectPlan(projectId) {
   }
   const oldManager = project.manager;
   project.name = name;
-  project.manager = (document.getElementById('projectPlanManager')?.value || '').trim() || project.manager;
+  project.manager = String(state.form.manager || '').trim() || project.manager;
   project.dept = (document.getElementById('projectPlanDept')?.value || '').trim() || project.dept;
   project.teamMembers = sanitizeProjectTeamMembers(
     project.manager,
@@ -206,6 +224,8 @@ function saveProjectPlan(projectId) {
   project.value = (document.getElementById('projectPlanValue')?.value || '').trim();
   project.scope = (document.getElementById('projectPlanScope')?.value || '').trim();
   project.outOfScope = (document.getElementById('projectPlanOutOfScope')?.value || '').trim();
+  const startDate = (document.getElementById('projectPlanStartDate')?.value || '').trim();
+  if (startDate) project.startDate = startDate;
   const endDate = (document.getElementById('projectPlanEndDate')?.value || '').trim();
   const changeReason = (document.getElementById('projectPlanChangeReason')?.value || '').trim();
   const oldEnd = project.endDate || '';
@@ -273,11 +293,67 @@ function showProjectHandoverModal(projectId) {
     alert('仅项目负责人或创建人可交接');
     return;
   }
-  const to = prompt('请输入交接给谁的姓名（须与人员档案一致）', '');
-  if (to == null) return;
-  const toName = String(to).trim();
-  if (!toName) return;
-  const note = prompt('交接备注（可选）', '') || '';
+  state.form = {
+    projectId,
+    transferTo: '',
+    transferReason: '',
+    handoverFrom: project.manager || '',
+  };
+  state.showModal = 'projectHandover';
+  render();
+}
+
+function renderProjectHandoverModal() {
+  const project = projects.find(p => p.id === state.form.projectId);
+  const fromName = state.form.handoverFrom || project?.manager || '';
+  return `
+    <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      <div class="modal-box" style="max-width:450px;" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <h3 class="modal-title"><i class="fas fa-handshake" style="margin-right:8px;color:#2563EB;"></i>项目交接</h3>
+          <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:18px;"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <div style="font-size:13px;color:#6B7280;margin-bottom:14px;">当前负责人：${escapeHtml(fromName || '（空）')}</div>
+          <div class="form-group">
+            <label class="form-label">交接给 <span class="form-required">*</span></label>
+            ${renderPersonSingleSelect({
+              key: 'projectHandoverTo',
+              formField: 'transferTo',
+              value: state.form.transferTo || '',
+              getCandidates: () => getTaskAssigneeCandidates().filter(u => u.name !== fromName),
+              allowEmpty: true,
+              emptyLabel: '请选择人员',
+              placeholder: '从人员档案选择',
+            })}
+          </div>
+          <div class="form-group">
+            <label class="form-label">交接备注</label>
+            <textarea class="textarea" style="width:100%;height:80px;" oninput="state.form.transferReason=this.value" placeholder="可选">${escapeHtml(state.form.transferReason || '')}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+          <button class="btn btn-primary" onclick="confirmProjectHandover()"><i class="fas fa-handshake"></i>确认交接</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function confirmProjectHandover() {
+  const projectId = state.form.projectId;
+  const project = projects.find(p => p.id === projectId);
+  if (!project || !canManageProject(project)) {
+    alert('仅项目负责人或创建人可交接');
+    return;
+  }
+  const toName = String(state.form.transferTo || '').trim();
+  if (!toName) {
+    alert('请从人员档案选择交接人');
+    return;
+  }
+  const note = String(state.form.transferReason || '').trim();
   const fromName = project.manager || '';
   if (toName === fromName) {
     alert('交接人与当前负责人相同');
@@ -288,7 +364,7 @@ function showProjectHandoverModal(projectId) {
     from: fromName,
     to: toName,
     at: new Date().toISOString(),
-    note: String(note).trim(),
+    note,
     by: currentUser.name,
   });
   if (fromName && !isSamePersonName(fromName, toName)) {
@@ -305,6 +381,7 @@ function showProjectHandoverModal(projectId) {
     project: project.name,
   });
   normalizeProjectRecord(project);
+  closeModal();
   save({ immediateSync: true });
   render();
 }
@@ -463,11 +540,27 @@ function renderIssueEditModal() {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
               <label class="form-label">跟进人</label>
-              <input class="form-input" value="${escapeHtml(form.assignee || '')}" oninput="state.form.assignee=this.value">
+              ${renderPersonSingleSelect({
+                key: 'issueAssignee',
+                formField: 'assignee',
+                value: form.assignee || '',
+                getCandidates: getTaskAssigneeCandidates,
+                allowEmpty: true,
+                emptyLabel: '请选择',
+                placeholder: '从人员档案选择',
+              })}
             </div>
             <div>
               <label class="form-label">需要谁支持</label>
-              <input class="form-input" value="${escapeHtml(form.supporter || '')}" oninput="state.form.supporter=this.value">
+              ${renderPersonSingleSelect({
+                key: 'issueSupporter',
+                formField: 'supporter',
+                value: form.supporter || '',
+                getCandidates: getTaskAssigneeCandidates,
+                allowEmpty: true,
+                emptyLabel: '请选择',
+                placeholder: '从人员档案选择',
+              })}
             </div>
           </div>
           <div>
@@ -895,8 +988,22 @@ function renderProjectWorkSplit(project) {
 }
 
 function renderProjectFocusMini(project) {
-  const { currentPhase, nextPlan, blocker } = getProjectFocusFields(project);
-  const phaseText = currentPhase || '暂无当前阶段';
+  const { nextPlan, blocker } = getProjectFocusFields(project);
+  const { current, allDone } = typeof getCurrentAndNextMilestones === 'function'
+    ? getCurrentAndNextMilestones(project)
+    : { current: null, allDone: false };
+  let phaseText = '暂无当前阶段';
+  if (allDone) phaseText = '全部里程碑已完成';
+  else if (current) {
+    const seq = String(current.milestoneSeq || '').trim();
+    const title = String(current.title || '').trim();
+    phaseText = (seq && title && !title.toUpperCase().startsWith(seq.toUpperCase()))
+      ? `${seq} ${title}`
+      : (title || seq || '进行中');
+  } else {
+    const focusPhase = String(project?.currentPhase || '').trim();
+    if (focusPhase) phaseText = focusPhase;
+  }
   const nextText = nextPlan || '暂无下一步';
   const blockerText = String(blocker || '').trim();
   return `
@@ -1045,7 +1152,11 @@ function renderProjectHeroMembers(project, memberNames) {
 }
 
 function renderProjectDetail() {
-  const project = projects.find(p => p.id === state.form.projectId);
+  const projectId = state.form?.projectId || state.currentProjectId || '';
+  if (projectId && state.form?.projectId !== projectId) {
+    state.form = { ...(state.form || {}), projectId };
+  }
+  const project = projects.find(p => p.id === projectId);
   if (!project || !canViewProject(project)) {
     if (project && !canViewProject(project)) alert('无权查看该项目');
     return renderProjects();
@@ -1091,6 +1202,11 @@ function renderProjectDetail() {
               <div class="project-hero-title-line">
                 <h2 class="project-hero-title" style="margin:0;">${escapeHtml(project.name || '')}</h2>
                 ${renderProjectStatusBadge(project)}
+                ${canManage && !state.editingProjectPlan ? `
+                  <button type="button" class="btn btn-ghost btn-sm project-hero-edit-btn" onclick="startEditProjectPlan()" title="编辑项目信息">
+                    <i class="fas fa-pen"></i> 编辑
+                  </button>
+                ` : ''}
               </div>
               <div class="project-hero-desc">${escapeHtml(project.objective || project.desc || '暂无目标/描述')}</div>
               <div class="project-hero-meta">

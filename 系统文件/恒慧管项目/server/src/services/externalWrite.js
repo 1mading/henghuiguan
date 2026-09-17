@@ -294,12 +294,21 @@ function createDefaultPhaseMilestones(project, creator, templateId) {
 }
 
 function createProject(body = {}, opts = {}) {
-  denyScoped(opts.actor, '新建项目');
+  const actor = opts.actor || null;
+  if (actor) {
+    const { resolveCap } = require('./permissions');
+    if (resolveCap(actor, 'projects.create') !== 'on') {
+      throw httpError(403, '当前身份无权新建项目');
+    }
+  }
   const name = String(body.name || body.title || '').trim();
   if (!name) throw httpError(400, '项目名称 name 不能为空');
 
-  const manager = resolvePersonName(body.manager) || resolvePersonName(body.creator) || '外部系统';
-  const creator = resolvePersonName(body.creator) || manager;
+  const manager = resolvePersonName(body.manager)
+    || (actor && actor.name)
+    || resolvePersonName(body.creator)
+    || '外部系统';
+  const creator = resolvePersonName(body.creator) || (actor && actor.name) || manager;
   const id = String(body.id || '').trim() || genId('PRJ');
   if (findProject(id)) throw httpError(409, `项目已存在: ${id}`);
 
@@ -538,8 +547,10 @@ function createTask(body = {}, opts = {}) {
   const projectId = body.projectId != null ? String(body.projectId).trim() : '';
   if (projectId && !findProject(projectId)) throw httpError(400, `所属项目不存在: ${projectId}`);
   if (opts.actor) {
-    if (!projectId) throw httpError(403, '作用域 Key 创建任务时必须指定可管理的 projectId');
-    assertScopedCanWriteProject(opts.actor, findProject(projectId));
+    if (projectId) {
+      assertScopedCanWriteProject(opts.actor, findProject(projectId));
+    }
+    // 无 projectId：视为临时事项，允许作用域 Key 创建（负责人默认自己）
   }
 
   const parentId = body.parentId != null && body.parentId !== '' ? String(body.parentId).trim() : null;
@@ -649,6 +660,9 @@ function updateTask(id, body = {}, opts = {}) {
   if (body.projectId != null) {
     const projectId = String(body.projectId).trim();
     if (projectId && !findProject(projectId)) throw httpError(400, `所属项目不存在: ${projectId}`);
+    if (opts.actor && projectId) {
+      assertScopedCanWriteProject(opts.actor, findProject(projectId));
+    }
     next.projectId = projectId;
   }
   if (body.parentId !== undefined) {
@@ -1061,8 +1075,14 @@ function batchWrite(body = {}, opts = {}) {
 
 function getCatalog() {
   return {
-    auth: 'Header X-Api-Key（环境变量 API_KEY）',
+    auth: 'Header X-Api-Key（全局 API_KEY，或读写作用域 Key）',
     base: '/api/external',
+    scopedKeyNotes: {
+      createProject: '允许（须绑定人有 projects.create）',
+      deleteProject: '禁止',
+      tempTasks: '允许无 projectId 的临时事项增删改（按绑定人任务权限）',
+      projectTasks: '须指定可管理的 projectId',
+    },
     projectFields: {
       objective: '项目目标',
       value: '项目价值',
@@ -1097,7 +1117,7 @@ function getCatalog() {
       acceptanceCriteria: '验收标准',
       outOfScope: '本里程碑不做范围',
       completionEvidence: '完成证据（页面已不再填写）',
-      verification: '验收记录（最终文件：登录态 /api/files/upload uploadPurpose=evidence；钉钉文档 /api/files/link-dingtalk-doc linkPurpose=evidence）',
+      verification: '验收记录（最终文件：登录态 /api/files/upload uploadPurpose=evidence；钉钉文档/闪记 /api/files/link-dingtalk-doc nodeId 或 url，linkPurpose=evidence）',
       feedback: '业务反馈',
       leftover: '遗留问题',
       depsRisks: '依赖/风险',

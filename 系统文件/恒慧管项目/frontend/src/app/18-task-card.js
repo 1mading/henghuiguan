@@ -1073,7 +1073,23 @@ async function showWikiDocPicker(entityType, entityId, opts) {
       form: { projectId: state.currentProjectId || (state.form && state.form.projectId) || '' },
     };
   } else {
-    state._wikiPickerReturn = null;
+    const projectId = (state.page === 'projectDetail'
+      ? (state.form?.projectId || state.currentProjectId || (entityType === 'project' ? entityId : ''))
+      : (entityType === 'project' ? entityId : (state.form?.projectId || state.currentProjectId || ''))) || '';
+    state._wikiPickerReturn = {
+      kind: 'context',
+      page: state.page,
+      projectDetailTab: state.projectDetailTab,
+      projectPlanView: state.projectPlanView,
+      detailPhaseKey: state.detailPhaseKey,
+      detailMilestoneId: state.detailMilestoneId,
+      currentProjectId: projectId || state.currentProjectId || '',
+      form: {
+        ...(state.form && typeof state.form === 'object' ? state.form : {}),
+        ...(projectId ? { projectId } : {}),
+      },
+    };
+    if (projectId) state.currentProjectId = projectId;
   }
   Object.keys(wikiNodeLookup).forEach(k => { delete wikiNodeLookup[k]; });
   state.form = {
@@ -1092,6 +1108,7 @@ async function showWikiDocPicker(entityType, entityId, opts) {
     wikiMineError: '',
     wikiBindError: '',
     wikiSearch: '',
+    wikiPasteUrl: '',
     wikiLinkPurpose: (opts && opts.linkPurpose) || '',
   };
   state.showModal = 'wikiDocPicker';
@@ -1349,10 +1366,19 @@ function renderWikiDocPickerModal() {
               </div>
             </div>
           </div>
-          <div style="margin-top:12px;padding:10px 12px;background:var(--bg-muted);border-radius:8px;border:1px solid var(--border);font-size:12px;color:#6B7280;line-height:1.6;">
-            ${selectedNode
-              ? `已选：<strong style="color:var(--text);">${escapeHtml(selectedNode.name || '未命名')}</strong>`
-              : '请在左侧选择「我的文档」或团队知识库，再在右侧目录中选择具体文档；双击文档可直接确认添加（文件夹不可添加）'}
+          <div style="margin-top:12px;padding:10px 12px;background:var(--bg-muted);border-radius:8px;border:1px solid var(--border);">
+            <div style="font-size:12px;color:#6B7280;line-height:1.6;margin-bottom:8px;">
+              ${selectedNode
+                ? `已选：<strong style="color:var(--text);">${escapeHtml(selectedNode.name || '未命名')}</strong>`
+                : '可从左侧目录选择文档，或直接粘贴<strong>闪记 / 钉钉文档链接</strong>添加'}
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="text" placeholder="粘贴闪记或钉钉文档链接…" value="${escapeHtml(state.form.wikiPasteUrl || '')}"
+                oninput="state.form.wikiPasteUrl=this.value"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();confirmWikiDocPickerByUrl();}"
+                style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg-panel);">
+              <button type="button" class="btn btn-sm" onclick="confirmWikiDocPickerByUrl()"><i class="fas fa-link"></i> 用链接添加</button>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -1382,6 +1408,25 @@ function restoreWikiPickerDeliveryReturn(ret) {
   return true;
 }
 
+function restoreWikiPickerContextReturn(ret) {
+  const r = ret || state._wikiPickerReturn;
+  state._wikiPickerReturn = null;
+  if (!r || r.kind !== 'context') return false;
+  if (r.page) state.page = r.page;
+  if (r.projectDetailTab) state.projectDetailTab = r.projectDetailTab;
+  if (r.projectPlanView) state.projectPlanView = r.projectPlanView;
+  if (r.detailPhaseKey) state.detailPhaseKey = r.detailPhaseKey;
+  if (r.detailMilestoneId !== undefined) state.detailMilestoneId = r.detailMilestoneId;
+  const projectId = r.form?.projectId || r.currentProjectId || '';
+  if (projectId) state.currentProjectId = projectId;
+  else if (r.currentProjectId) state.currentProjectId = r.currentProjectId;
+  state.form = projectId
+    ? { projectId }
+    : (r.form && typeof r.form === 'object' ? { ...r.form } : {});
+  state.showModal = null;
+  return true;
+}
+
 function restoreWikiPickerReturnForm() {
   const ret = state._wikiPickerReturn;
   state._wikiPickerReturn = null;
@@ -1396,18 +1441,78 @@ function restoreWikiPickerReturnForm() {
 }
 
 async function confirmWikiDocPicker() {
-  const node = state.form.wikiSelectedNode;
-  if (!node) {
-    alert('请选择要添加的文档');
+  const pasteUrl = String(state.form.wikiPasteUrl || '').trim();
+  if (!state.form.wikiSelectedNode && pasteUrl) {
+    await confirmWikiDocPickerByUrl();
     return;
   }
+  const node = state.form.wikiSelectedNode;
+  if (!node) {
+    alert('请选择要添加的文档，或粘贴闪记 / 钉钉文档链接');
+    return;
+  }
+  await finishWikiDocPickerLink({
+    nodeId: node.nodeId,
+    workspaceId: node.workspaceId,
+    url: node.url || '',
+    name: node.name || '钉钉文档',
+    docType: node.type || '',
+  });
+}
+
+function isLikelyDingTalkDocUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (host.includes('shanji.dingtalk.com') || path.includes('/transcribes/')) return true;
+    return host.includes('alidocs.dingtalk.com') ||
+      host.includes('ding-doc.dingtalk.com') ||
+      host.includes('docs.dingtalk.com') ||
+      host === 'n.dingtalk.com';
+  } catch {
+    return false;
+  }
+}
+
+function guessClientDingTalkLinkName(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.toLowerCase().includes('shanji.dingtalk.com') || parsed.pathname.toLowerCase().includes('/transcribes/')) {
+      return '钉钉闪记';
+    }
+  } catch { /* ignore */ }
+  return '钉钉文档';
+}
+
+async function confirmWikiDocPickerByUrl() {
+  const pasteUrl = String(state.form.wikiPasteUrl || '').trim();
+  if (!pasteUrl) {
+    alert('请粘贴闪记或钉钉文档链接');
+    return;
+  }
+  if (!isLikelyDingTalkDocUrl(pasteUrl)) {
+    alert('请粘贴闪记（shanji.dingtalk.com）或钉钉文档链接');
+    return;
+  }
+  await finishWikiDocPickerLink({
+    url: pasteUrl,
+    name: guessClientDingTalkLinkName(pasteUrl),
+  });
+}
+
+async function finishWikiDocPickerLink(payload) {
   if (state.form.wikiPendingMode) {
     if (!restoreWikiPickerReturnForm()) {
       render();
       return;
     }
     const pending = ensureQuickCreatePendingAttachments();
-    if (pending.some(x => x.kind === 'dingtalk_wiki' && x.nodeId === node.nodeId)) {
+    const same = pending.some(x => x.kind === 'dingtalk_wiki' && (
+      (payload.nodeId && x.nodeId === payload.nodeId) ||
+      (payload.url && x.url === payload.url)
+    ));
+    if (same) {
       alert('该钉钉文档已添加');
       render();
       return;
@@ -1415,27 +1520,27 @@ async function confirmWikiDocPicker() {
     pending.push({
       localId: genId('PA'),
       kind: 'dingtalk_wiki',
-      nodeId: node.nodeId,
-      workspaceId: node.workspaceId || '',
-      name: node.name || '钉钉文档',
-      url: node.url || '',
-      docType: node.type || '',
+      nodeId: payload.nodeId || '',
+      workspaceId: payload.workspaceId || '',
+      name: payload.name || guessClientDingTalkLinkName(payload.url || ''),
+      url: payload.url || '',
+      docType: payload.docType || '',
     });
     render();
     return;
   }
   try {
-    const deliveryReturn = state._wikiPickerReturn && state._wikiPickerReturn.kind === 'delivery'
-      ? state._wikiPickerReturn
-      : null;
+    const pickerReturn = state._wikiPickerReturn;
+    const deliveryReturn = pickerReturn && pickerReturn.kind === 'delivery' ? pickerReturn : null;
+    const contextReturn = pickerReturn && pickerReturn.kind === 'context' ? pickerReturn : null;
     const linkPurpose = state.form.wikiLinkPurpose || '';
     await submitWikiDocLink(state.form.wikiEntityType, state.form.wikiEntityId, {
-      nodeId: node.nodeId,
-      workspaceId: node.workspaceId,
+      ...payload,
       linkPurpose,
-    }, { skipClose: !!deliveryReturn });
+    }, { skipClose: !!(deliveryReturn || contextReturn) });
     state.showModal = null;
     if (deliveryReturn) restoreWikiPickerDeliveryReturn(deliveryReturn);
+    else if (contextReturn) restoreWikiPickerContextReturn(contextReturn);
     else state._wikiPickerReturn = null;
     render();
   } catch (e) {

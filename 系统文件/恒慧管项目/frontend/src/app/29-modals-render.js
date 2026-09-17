@@ -22,6 +22,7 @@ function renderModal() {
     case 'templateCreate': return renderProjectTemplateEditModal();
     case 'reject': return renderRejectModal();
     case 'transfer': return renderTransferModal();
+    case 'projectHandover': return renderProjectHandoverModal();
     case 'archive': return renderArchiveModal();
     case 'memberKanban': return renderMemberKanbanModal();
     case 'addDependency': return renderAddDependencyModal();

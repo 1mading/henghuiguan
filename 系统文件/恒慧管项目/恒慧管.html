@@ -3236,6 +3236,8 @@
      * 里程碑状态由下属任务推导：
      * - 任一进行中 → 进行中
      * - 全部完成 → 已完成
+     * - 任一进行中 → 进行中
+     * - 有已完成/进度/实际开始（已推进）→ 进行中
      * - 否则有暂停 → 已暂停
      * - 否则 → 待开始
      */
@@ -3244,6 +3246,13 @@
       if (!descendants.length) return null;
       if (descendants.every(t => t.status === 'done')) return 'done';
       if (descendants.some(t => t.status === 'doing')) return 'doing';
+      if (descendants.some(t => t.status === 'done')) return 'doing';
+      const milestone = tasks.find(t => t.id === milestoneId);
+      if (milestone) {
+        const progress = Number(milestone.progress);
+        if ((Number.isFinite(progress) && progress > 0) || milestone.actualStartDate) return 'doing';
+        if (typeof calcProgress === 'function' && calcProgress(milestoneId) > 0) return 'doing';
+      }
       if (descendants.some(t => t.status === 'paused')) return 'paused';
       return 'todo';
     }
